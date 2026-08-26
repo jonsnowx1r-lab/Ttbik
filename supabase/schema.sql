@@ -157,6 +157,22 @@ revoke all on function get_order_public_status(text) from public;
 grant execute on function get_order_public_status(text) to anon, authenticated;
 
 -- ============================================================================
+-- Base table privileges
+-- RLS policies alone are not enough: Postgres also requires the anon/
+-- authenticated roles to hold the underlying GRANT on each table, which
+-- Supabase normally adds automatically for new tables UNLESS "Automatically
+-- expose new tables" was disabled when the project was created (the more
+-- secure default). These grants make the RLS policies above actually
+-- reachable; RLS still restricts which *rows* are visible.
+-- ============================================================================
+
+grant usage on schema public to anon, authenticated;
+grant select on public.categories to anon, authenticated;
+grant select on public.services to anon, authenticated;
+grant insert on public.customers to anon, authenticated;
+grant insert on public.orders to anon, authenticated;
+
+-- ============================================================================
 -- Seed data — 4 free-to-run categories, ~3 services each
 -- ============================================================================
 
