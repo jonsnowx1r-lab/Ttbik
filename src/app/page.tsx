@@ -3,7 +3,7 @@ import { supabasePublic } from "@/lib/supabase";
 import type { Category, Service } from "@/types";
 import { formatUsd } from "@/lib/utils";
 import { getDeliveryKind } from "@/lib/deliveryKind";
-import CategoryBanner from "@/components/CategoryBanner";
+import CategoryBanner, { CategoryIcon } from "@/components/CategoryBanner";
 
 export const revalidate = 30;
 
@@ -46,7 +46,7 @@ export default async function HomePage() {
               href={`#${cat.slug}`}
               className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-700"
             >
-              <span>{cat.icon}</span> {cat.name_ar}
+              <CategoryIcon slug={cat.slug} className="h-4 w-4" /> {cat.name_ar}
             </a>
           ))}
         </div>
@@ -55,7 +55,7 @@ export default async function HomePage() {
       <section id="categories" className="mx-auto max-w-6xl space-y-16 px-4 py-14">
         {categories.map((cat) => (
           <div key={cat.id} id={cat.slug} className="scroll-mt-28">
-            <CategoryBanner slug={cat.slug} icon={cat.icon} />
+            <CategoryBanner slug={cat.slug} />
             <div className="mb-5 mt-4 flex items-center gap-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">{cat.name_ar}</h2>
