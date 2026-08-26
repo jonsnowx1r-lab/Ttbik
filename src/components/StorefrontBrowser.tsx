@@ -26,6 +26,17 @@ export default function StorefrontBrowser({
 
   const activeServices = services.filter((s) => s.category_id === active.id);
 
+  // Group by subcategory so a section can grow without becoming one long
+  // undifferentiated grid. Services without a subcategory fall into a
+  // single unlabeled group (rendered first, no heading).
+  const groups = new Map<string, Service[]>();
+  for (const s of activeServices) {
+    const key = s.subcategory ?? "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(s);
+  }
+  const orderedGroups = [...groups.entries()].sort(([a], [b]) => (a === "" ? -1 : a.localeCompare(b, "ar")));
+
   return (
     <section id="categories" className="mx-auto max-w-6xl px-4 pb-20">
       {/* Mobile: horizontal pill selector */}
@@ -72,31 +83,39 @@ export default function StorefrontBrowser({
             {active.description_ar && <p className="mt-1 text-sm text-slate-500">{active.description_ar}</p>}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {activeServices.map((s) => (
-              <Link
-                key={s.id}
-                href={`/service/${s.slug}`}
-                className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div>
-                  <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
-                    {getDeliveryKind(s).label}
-                  </span>
-                  <h3 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{s.name_ar}</h3>
-                  <p className="mt-2 text-sm text-slate-500">{s.short_desc_ar}</p>
+          {activeServices.length === 0 && (
+            <p className="text-sm text-slate-400">لا توجد خدمات في هذا القسم حالياً.</p>
+          )}
+
+          <div className="space-y-8">
+            {orderedGroups.map(([subcat, items]) => (
+              <div key={subcat || "_default"}>
+                {subcat && <h3 className="mb-3 text-sm font-bold text-slate-500">{subcat}</h3>}
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {items.map((s) => (
+                    <Link
+                      key={s.id}
+                      href={`/service/${s.slug}`}
+                      className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                      <div>
+                        <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                          {getDeliveryKind(s).label}
+                        </span>
+                        <h3 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{s.name_ar}</h3>
+                        <p className="mt-2 text-sm text-slate-500">{s.short_desc_ar}</p>
+                      </div>
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-lg font-extrabold text-brand-700">{formatUsd(s.price_usd)}</span>
+                        <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
+                          جرّب النسخة المحدودة
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-lg font-extrabold text-brand-700">{formatUsd(s.price_usd)}</span>
-                  <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                    جرّب النسخة المحدودة
-                  </span>
-                </div>
-              </Link>
+              </div>
             ))}
-            {activeServices.length === 0 && (
-              <p className="col-span-full text-sm text-slate-400">لا توجد خدمات في هذا القسم حالياً.</p>
-            )}
           </div>
         </div>
       </div>

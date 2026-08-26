@@ -8,6 +8,7 @@ import AiTextDemo from "@/components/demos/AiTextDemo";
 import BotSimulator from "@/components/demos/BotSimulator";
 import LandingBuilder from "@/components/demos/LandingBuilder";
 import CatalogBuilder from "@/components/demos/CatalogBuilder";
+import AdSlotPreview from "@/components/demos/AdSlotPreview";
 import { TOOL_LABELS, ToolMode } from "@/lib/prompts";
 import { getDeliveryKind } from "@/lib/deliveryKind";
 
@@ -50,6 +51,9 @@ export default async function ServicePage({ params }: { params: { slug: string }
             {service.demo_type === "bot_simulator" && <BotSimulator botName={service.name_ar} />}
             {service.demo_type === "landing_builder" && <LandingBuilder />}
             {service.demo_type === "catalog_builder" && <CatalogBuilder />}
+            {service.demo_type === "ad_slot_preview" && (
+              <AdSlotPreview channelName={service.slug === "channel-ad-slot" ? "@ttbik5" : "@your_channel"} />
+            )}
             {(service.demo_type === "ai_chat" || service.demo_type === "content_ai") &&
               service.tool_route &&
               TOOL_LABELS[service.tool_route as ToolMode] && (

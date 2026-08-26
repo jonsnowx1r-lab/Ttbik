@@ -1,0 +1,9 @@
+{
+  "name": "ad-slot-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Credit-based Telegram ad-slot bot — sell ad space in your channel(s) safely, no real deposit/withdrawal wallet",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "dependencies": {}
+}

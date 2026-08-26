@@ -1,4 +1,4 @@
-export type DemoType = "ai_chat" | "bot_simulator" | "landing_builder" | "content_ai" | "catalog_builder";
+export type DemoType = "ai_chat" | "bot_simulator" | "landing_builder" | "content_ai" | "catalog_builder" | "ad_slot_preview";
 export type DeliveryType = "link" | "text";
 export type PaymentMethod = "bank" | "usdt";
 export type OrderStatus = "pending" | "approved" | "rejected";
@@ -18,6 +18,7 @@ export interface Service {
   category_id: string;
   slug: string;
   name_ar: string;
+  subcategory: string | null;
   short_desc_ar: string | null;
   long_desc_ar: string | null;
   price_usd: number;

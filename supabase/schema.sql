@@ -31,10 +31,11 @@ create table if not exists services (
   slug              text unique not null,
   name_ar           text not null,
   name_en           text,
+  subcategory       text, -- optional grouping label shown as a sub-heading within the category
   short_desc_ar     text,
   long_desc_ar      text,
   price_usd         numeric(10,2) not null default 0,
-  demo_type         text not null check (demo_type in ('ai_chat','bot_simulator','landing_builder','content_ai','catalog_builder')),
+  demo_type         text not null check (demo_type in ('ai_chat','bot_simulator','landing_builder','content_ai','catalog_builder','ad_slot_preview')),
   delivery_type     text not null default 'text' check (delivery_type in ('link','text')),
   delivery_content  text, -- e.g. GitHub repo link, license key, Notion guide link
   tool_route        text, -- for demo_type in ('ai_chat','content_ai'): unlocks /tools/<tool_route>?order=<code> on approval
@@ -183,19 +184,25 @@ insert into categories (slug, name_ar, name_en, description_ar, icon, sort_order
   ('content-design', 'المحتوى والتصميم بالذكاء الاصطناعي', 'AI Content', 'كتابة محتوى تسويقي، أوصاف منتجات، ومنشورات سوشيال ميديا بالذكاء الاصطناعي.', '🎨', 4)
 on conflict (slug) do nothing;
 
-insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
-select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
+insert into services (category_id, slug, name_ar, subcategory, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+select c.id, s.slug, s.name_ar, s.subcategory, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
-  ('telegram-bots', 'auto-reply-bot', 'بوت الرد الآلي', 'بوت تليجرام يرد تلقائياً على استفسارات عملائك على مدار الساعة.',
+  ('telegram-bots', 'auto-reply-bot', 'بوت الرد الآلي', 'الرد والدعم', 'بوت تليجرام يرد تلقائياً على استفسارات عملائك على مدار الساعة.',
     'كود جاهز (Node.js) لبوت رد آلي احترافي، يدعم كلمات مفتاحية وردود مخصصة وقوائم أزرار، وقابل للتشغيل الفوري على أي استضافة سحابية.',
     7, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/auto-reply-bot', null, 1),
-  ('telegram-bots', 'order-manager-bot', 'بوت إدارة الطلبات', 'بوت لاستقبال طلبات العملاء والموافقة عليها بضغطة زر، بنفس فكرة هذه المنصة.',
-    'نسخة مصغرة وقابلة لإعادة الاستخدام من نظام الطلبات في هذه المنصة نفسها: استقبال طلب، إشعار فوري، أزرار موافقة/رفض.',
-    15, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/order-manager-bot', null, 2),
-  ('telegram-bots', 'faq-bot', 'بوت الأسئلة الشائعة', 'بوت يجيب تلقائياً على الأسئلة المتكررة لعملائك من قائمة تجهزها أنت.',
+  ('telegram-bots', 'faq-bot', 'بوت الأسئلة الشائعة', 'الرد والدعم', 'بوت يجيب تلقائياً على الأسئلة المتكررة لعملائك من قائمة تجهزها أنت.',
     'يقرأ قائمة أسئلة/أجوبة من ملف JSON بسيط ويجيب فوراً دون أي تدخل بشري.',
-    5, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/faq-bot', null, 3)
-) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+    5, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/faq-bot', null, 2),
+  ('telegram-bots', 'order-manager-bot', 'بوت إدارة الطلبات', 'الإدارة والطلبات', 'بوت لاستقبال طلبات العملاء والموافقة عليها بضغطة زر، بنفس فكرة هذه المنصة.',
+    'نسخة مصغرة وقابلة لإعادة الاستخدام من نظام الطلبات في هذه المنصة نفسها: استقبال طلب، إشعار فوري، أزرار موافقة/رفض.',
+    15, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/order-manager-bot', null, 3),
+  ('telegram-bots', 'ad-slot-bot', 'بوت بيع المساحات الإعلانية', 'الإعلانات والتسويق', 'بوت جاهز يبيع مساحات إعلانية في قناتك بنظام رصيد مسبق الدفع، آمن وبدون سحب أموال حقيقي.',
+    'كود جاهز (Node.js): العميل يشتري رصيداً إعلانياً، يرسل نص إعلانه، أنت توافق بضغطة زر، والبوت ينشره وينشر النتائج بنفسه. نظام رصيد وليس محفظة إيداع/سحب حقيقية — تجنّباً للمخاطر القانونية والتشابه مع عمليات النصب المنتشرة في بوتات الإعلانات.',
+    18, 'ad_slot_preview', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/ad-slot-bot', null, 4),
+  ('telegram-bots', 'channel-ad-slot', 'أعلن في قناتنا', 'الإعلانات والتسويق', 'اعرض إعلان مشروعك على مشتركي قناة سوق تولز على تليجرام.',
+    'نشر إعلانك في قناة @ttbik5 خلال 24 ساعة من الموافقة. أرسل نص إعلانك ورابطك عبر وسيلة التواصل التي تزوّدنا بها عند الطلب.',
+    8, 'ad_slot_preview', 'text', 'شكراً لطلبك! أرسل نص إعلانك ورابطك عبر وسيلة التواصل التي زوّدتنا بها، وسنقوم بنشره في القناة خلال 24 ساعة.', null, 5)
+) as s(cat_slug, slug, name_ar, subcategory, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;
 
