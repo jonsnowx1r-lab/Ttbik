@@ -1,0 +1,48 @@
+export type DemoType = "ai_chat" | "bot_simulator" | "landing_builder" | "content_ai";
+export type DeliveryType = "link" | "text";
+export type PaymentMethod = "iban" | "usdt";
+export type OrderStatus = "pending" | "approved" | "rejected";
+
+export interface Category {
+  id: string;
+  slug: string;
+  name_ar: string;
+  name_en: string | null;
+  description_ar: string | null;
+  icon: string;
+  sort_order: number;
+}
+
+export interface Service {
+  id: string;
+  category_id: string;
+  slug: string;
+  name_ar: string;
+  short_desc_ar: string | null;
+  long_desc_ar: string | null;
+  price_usd: number;
+  demo_type: DemoType;
+  delivery_type: DeliveryType;
+  delivery_content: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface Order {
+  id: string;
+  order_code: string;
+  service_id: string;
+  customer_name: string;
+  customer_contact: string;
+  payment_method: PaymentMethod;
+  transfer_reference: string;
+  amount_usd: number;
+  status: OrderStatus;
+  delivery_content: string | null;
+  admin_note: string | null;
+  telegram_chat_id: string | null;
+  telegram_message_id: string | null;
+  created_at: string;
+  decided_at: string | null;
+  services?: Pick<Service, "name_ar" | "slug">;
+}

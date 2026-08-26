@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "TTBIK — سوق الخدمات الرقمية المصغّرة",
+  description:
+    "منصة لبيع خدمات وأدوات رقمية جاهزة (بوتات، أدوات ذكاء اصطناعي، أتمتة) بأسعار رمزية وتسليم فوري.",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ar" dir="rtl">
+      <body className="min-h-screen font-sans text-slate-800 antialiased">
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+            <a href="/" className="flex items-center gap-2 text-lg font-extrabold text-brand-700">
+              <span>🧩</span> TTBIK
+            </a>
+            <nav className="flex items-center gap-4 text-sm text-slate-600">
+              <a href="/#categories" className="hover:text-brand-700">الأقسام</a>
+              <a href="/order/lookup" className="hover:text-brand-700">تتبع طلبي</a>
+            </nav>
+          </div>
+        </header>
+        <main>{children}</main>
+        <footer className="mt-16 border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-500">
+          <p>© {new Date().getFullYear()} TTBIK — جميع الخدمات تعمل على بنية تحتية مجانية بالكامل.</p>
+        </footer>
+      </body>
+    </html>
+  );
+}
