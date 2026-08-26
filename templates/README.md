@@ -12,6 +12,7 @@
 | [`landing-page-template`](./landing-page-template) | صفحة هبوط قابلة للتخصيص، ملف واحد |
 | [`automation-recipes`](./automation-recipes) | وصفات أتمتة بـ Google Apps Script (بديل Zapier مجاني) |
 | [`invoice-generator`](./invoice-generator) | مولد فواتير يعمل بالكامل في المتصفح |
+| [`whatsapp-catalog`](./whatsapp-catalog) | صفحة كتالوج منتجات مع طلب مباشر عبر واتساب |
 
 روابط التسليم في `supabase/schema.sql` تشير مباشرة لهذه المجلدات داخل هذا
 المستودع نفسه — لا حاجة لأي مستودع خارجي أو حساب إضافي.

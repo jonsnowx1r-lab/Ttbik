@@ -34,7 +34,7 @@ create table if not exists services (
   short_desc_ar     text,
   long_desc_ar      text,
   price_usd         numeric(10,2) not null default 0,
-  demo_type         text not null check (demo_type in ('ai_chat','bot_simulator','landing_builder','content_ai')),
+  demo_type         text not null check (demo_type in ('ai_chat','bot_simulator','landing_builder','content_ai','catalog_builder')),
   delivery_type     text not null default 'text' check (delivery_type in ('link','text')),
   delivery_content  text, -- e.g. GitHub repo link, license key, Notion guide link
   tool_route        text, -- for demo_type in ('ai_chat','content_ai'): unlocks /tools/<tool_route>?order=<code> on approval
@@ -202,15 +202,18 @@ on conflict (slug) do nothing;
 insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
-  ('ai-translation', 'smart-translator', 'المترجم الذكي', 'ترجمة فورية بين العربية وأكثر من 20 لغة باستخدام الذكاء الاصطناعي.',
-    'أداة ترجمة تعمل بنموذج Groq المجاني (Llama 3)، أسرع وأدق من الترجمة الحرفية التقليدية في السياقات التجارية. النسخة الكاملة بدون حد للأحرف.',
-    3, 'ai_chat', 'link', null, 'translate', 1),
-  ('ai-translation', 'text-summarizer', 'تلخيص النصوص', 'حوّل أي مقال أو تقرير طويل إلى ملخص من 5 أسطر خلال ثوانٍ.',
-    'مفيد للطلاب والموظفين لتلخيص المستندات والتقارير بسرعة. النسخة الكاملة بدون حد للأحرف.',
-    4, 'ai_chat', 'link', null, 'summarize', 2),
+  ('ai-translation', 'smart-translator', 'مترجم المستندات التجارية', 'ترجمة عقود وفواتير ورسائل عمل مع الحفاظ الكامل على التنسيق والمصطلحات الرسمية.',
+    'أداة ترجمة متخصصة بالمستندات التجارية تعمل بنموذج Groq المجاني (Llama 3)، تحافظ على بنية النص (فقرات، أرقام، بنود) بدل ترجمة حرفية عامة. النسخة الكاملة بدون حد للأحرف.',
+    5, 'ai_chat', 'link', null, 'translate', 1),
+  ('ai-translation', 'text-summarizer', 'محلل التقارير والمستندات', 'حوّل أي تقرير طويل إلى أهم نقاطه + توصية عملية واحدة جاهزة للتنفيذ.',
+    'مصمم لمديري الأعمال: لا يُخرج ملخصاً عاماً، بل نقاطاً رئيسية وتوصية محددة يمكن اتخاذ قرار بناءً عليها فوراً. النسخة الكاملة بدون حد للأحرف.',
+    6, 'ai_chat', 'link', null, 'summarize', 2),
   ('ai-translation', 'ai-chat-assistant', 'مساعد ذكي للرد على العملاء', 'مساعد محادثة ذكي يجيب على استفسارات عملائك بالعربية.',
     'صفحة أداة كاملة الوصول بدون حد للأحرف، يمكن مشاركة رابطها مع فريق الدعم لديك.',
-    10, 'ai_chat', 'link', null, 'assistant', 3)
+    10, 'ai_chat', 'link', null, 'assistant', 3),
+  ('ai-translation', 'review-analyzer', 'محلل آراء العملاء بالجملة', 'الصق عشرات تقييمات عملائك دفعة واحدة، واحصل فوراً على تصنيف كل رأي + رد جاهز بالعربية.',
+    'يوفر ساعات من القراءة والرد اليدوي على المراجعات: يحلل كل رأي على حدة (إيجابي/سلبي/محايد) ويقترح رداً مناسباً لكل واحد، بدل الاكتفاء بملخص عام. النسخة الكاملة بدون حد للأحرف.',
+    9, 'content_ai', 'link', null, 'review-analyzer', 4)
 ) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;
@@ -226,7 +229,10 @@ from (values
     9, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/automation-recipes', null, 2),
   ('automation-sites', 'invoice-generator', 'مولد الفواتير التلقائي', 'أداة تنشئ فواتير PDF احترافية لعملائك تلقائياً.',
     'يعمل بالكامل على المتصفح (Client-side) دون أي سيرفر أو تكلفة تشغيل.',
-    6, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/invoice-generator', null, 3)
+    6, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/invoice-generator', null, 3),
+  ('automation-sites', 'whatsapp-catalog', 'كتالوج واتساب لمنتجاتك', 'حوّل منتجاتك من صور متفرقة على حالة واتساب إلى صفحة كتالوج منظمة بزر طلب مباشر.',
+    'مصمم خصيصاً لأسلوب البيع السائد في السوق العربي عبر واتساب: كل منتج له زر يفتح محادثة واتساب جاهزة برسالة تحتوي اسم المنتج وسعره تلقائياً.',
+    10, 'catalog_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/whatsapp-catalog', null, 4)
 ) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;

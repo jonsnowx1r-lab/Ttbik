@@ -1,4 +1,4 @@
-export type DemoType = "ai_chat" | "bot_simulator" | "landing_builder" | "content_ai";
+export type DemoType = "ai_chat" | "bot_simulator" | "landing_builder" | "content_ai" | "catalog_builder";
 export type DeliveryType = "link" | "text";
 export type PaymentMethod = "bank" | "usdt";
 export type OrderStatus = "pending" | "approved" | "rejected";

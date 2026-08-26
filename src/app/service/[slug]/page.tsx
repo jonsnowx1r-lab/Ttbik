@@ -7,6 +7,7 @@ import OrderForm from "@/components/OrderForm";
 import AiTextDemo from "@/components/demos/AiTextDemo";
 import BotSimulator from "@/components/demos/BotSimulator";
 import LandingBuilder from "@/components/demos/LandingBuilder";
+import CatalogBuilder from "@/components/demos/CatalogBuilder";
 import { TOOL_LABELS, ToolMode } from "@/lib/prompts";
 
 export const revalidate = 30;
@@ -43,6 +44,7 @@ export default async function ServicePage({ params }: { params: { slug: string }
           <div className="mt-6">
             {service.demo_type === "bot_simulator" && <BotSimulator botName={service.name_ar} />}
             {service.demo_type === "landing_builder" && <LandingBuilder />}
+            {service.demo_type === "catalog_builder" && <CatalogBuilder />}
             {(service.demo_type === "ai_chat" || service.demo_type === "content_ai") &&
               service.tool_route &&
               TOOL_LABELS[service.tool_route as ToolMode] && (

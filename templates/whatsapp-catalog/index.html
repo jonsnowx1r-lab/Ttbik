@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>كتالوج المنتجات</title>
+<style>
+  :root { --brand: #16a34a; --text: #0f172a; --muted: #64748b; --bg: #f8fafc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
+  header { background: var(--brand); color: #fff; padding: 32px 16px; text-align: center; }
+  header h1 { margin: 0 0 6px; font-size: 1.6rem; }
+  header p { margin: 0; opacity: .9; font-size: .95rem; }
+
+  .grid { max-width: 960px; margin: 24px auto; padding: 0 16px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: #e2e8f0; }
+  .card .body { padding: 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .card h3 { margin: 0; font-size: 1rem; }
+  .card p.desc { margin: 0; font-size: .85rem; color: var(--muted); flex: 1; }
+  .card .price { font-weight: 800; color: var(--brand); font-size: 1.1rem; }
+  .card a.order-btn {
+    margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--brand); color: #fff; text-decoration: none; padding: 10px; border-radius: 10px; font-weight: 700; font-size: .9rem;
+  }
+
+  footer { text-align: center; padding: 24px; color: var(--muted); font-size: .8rem; }
+</style>
+</head>
+<body>
+  <header>
+    <h1 id="storeName">اسم متجرك</h1>
+    <p id="storeTagline">تصفّح منتجاتنا واطلب مباشرة عبر واتساب</p>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <footer>مدعوم بكتالوج واتساب — TTBIK</footer>
+
+  <script>
+    // ============================================================
+    // كل ما تحتاج تعديله هو هذا الإعداد فقط — لا حاجة لأي كود إضافي
+    // ============================================================
+    const CONFIG = {
+      storeName: "اسم متجرك",
+      tagline: "تصفّح منتجاتنا واطلب مباشرة عبر واتساب",
+      whatsappNumber: "9665XXXXXXXX", // بصيغة دولية بدون + أو أصفار في البداية
+      brandColor: "#16a34a",
+      products: [
+        {
+          name: "اسم المنتج الأول",
+          price: "99 ريال",
+          description: "وصف قصير للمنتج ومميزاته.",
+          image: "https://via.placeholder.com/400x400?text=%D8%B5%D9%88%D8%B1%D8%A9+%D8%A7%D9%84%D9%85%D9%86%D8%AA%D8%AC",
+        },
+        {
+          name: "اسم المنتج الثاني",
+          price: "149 ريال",
+          description: "وصف قصير للمنتج ومميزاته.",
+          image: "https://via.placeholder.com/400x400?text=%D8%B5%D9%88%D8%B1%D8%A9+%D8%A7%D9%84%D9%85%D9%86%D8%AA%D8%AC",
+        },
+      ],
+    };
+    // ============================================================
+
+    document.getElementById("storeName").textContent = CONFIG.storeName;
+    document.getElementById("storeTagline").textContent = CONFIG.tagline;
+    document.documentElement.style.setProperty("--brand", CONFIG.brandColor);
+    document.title = CONFIG.storeName;
+
+    const grid = document.getElementById("grid");
+    CONFIG.products.forEach((p) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const msg = encodeURIComponent(`مرحباً، أريد أطلب: ${p.name} (${p.price})`);
+      card.innerHTML = `
+        <img src="${p.image}" alt="${p.name}" loading="lazy" />
+        <div class="body">
+          <h3>${p.name}</h3>
+          <p class="desc">${p.description}</p>
+          <span class="price">${p.price}</span>
+          <a class="order-btn" href="https://wa.me/${CONFIG.whatsappNumber}?text=${msg}" target="_blank" rel="noopener">
+            🟢 اطلب عبر واتساب
+          </a>
+        </div>`;
+      grid.appendChild(card);
+    });
+  </script>
+</body>
+</html>
