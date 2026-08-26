@@ -14,15 +14,19 @@ export async function decideOrder(orderId: string, decision: Decision, note?: st
 
   const { data: order, error } = await db
     .from("orders")
-    .select("*, services(name_ar, slug, delivery_content)")
+    .select("*, services(name_ar, slug, delivery_content, tool_route)")
     .eq("id", orderId)
     .single();
 
   if (error || !order) throw new Error("الطلب غير موجود");
   if (order.status !== "pending") return order; // already decided, no-op
 
+  const toolLink = order.services?.tool_route
+    ? `${process.env.NEXT_PUBLIC_SITE_URL}/tools/${order.services.tool_route}?order=${order.order_code}`
+    : null;
+
   const deliveryContent =
-    decision === "approved" ? note?.trim() || order.services?.delivery_content || null : null;
+    decision === "approved" ? note?.trim() || toolLink || order.services?.delivery_content || null : null;
 
   const { data: updated, error: updateError } = await db
     .from("orders")

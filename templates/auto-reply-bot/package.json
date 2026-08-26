@@ -1,0 +1,11 @@
+{
+  "name": "auto-reply-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free Telegram auto-reply bot — keyword-based responses, zero hosting cost",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {}
+}

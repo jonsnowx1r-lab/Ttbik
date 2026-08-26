@@ -37,6 +37,7 @@ create table if not exists services (
   demo_type         text not null check (demo_type in ('ai_chat','bot_simulator','landing_builder','content_ai')),
   delivery_type     text not null default 'text' check (delivery_type in ('link','text')),
   delivery_content  text, -- e.g. GitHub repo link, license key, Notion guide link
+  tool_route        text, -- for demo_type in ('ai_chat','content_ai'): unlocks /tools/<tool_route>?order=<code> on approval
   is_active         boolean default true,
   sort_order        int default 0,
   created_at        timestamptz default now()
@@ -62,7 +63,7 @@ create table if not exists orders (
   customer_id         uuid references customers(id) on delete set null,
   customer_name       text not null,
   customer_contact    text not null,
-  payment_method      text not null check (payment_method in ('iban','usdt')),
+  payment_method      text not null check (payment_method in ('bank','usdt')),
   transfer_reference  text not null, -- اسم المُحوِّل / رقم العملية
   amount_usd          numeric(10,2) not null,
   status              text not null default 'pending' check (status in ('pending','approved','rejected')),
@@ -166,66 +167,66 @@ insert into categories (slug, name_ar, name_en, description_ar, icon, sort_order
   ('content-design', 'المحتوى والتصميم بالذكاء الاصطناعي', 'AI Content', 'كتابة محتوى تسويقي، أوصاف منتجات، ومنشورات سوشيال ميديا بالذكاء الاصطناعي.', '🎨', 4)
 on conflict (slug) do nothing;
 
-insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
-select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.sort_order
+insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('telegram-bots', 'auto-reply-bot', 'بوت الرد الآلي', 'بوت تليجرام يرد تلقائياً على استفسارات عملائك على مدار الساعة.',
     'كود جاهز (Node.js) لبوت رد آلي مبني على Telegram Bot API المجاني، يدعم كلمات مفتاحية وردود مخصصة وقوائم أزرار. يعمل مجاناً على أي استضافة Free Tier.',
-    7, 'bot_simulator', 'link', 'https://github.com/your-org/auto-reply-bot-template', 1),
+    7, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/auto-reply-bot', null, 1),
   ('telegram-bots', 'order-manager-bot', 'بوت إدارة الطلبات', 'بوت لاستقبال طلبات العملاء والموافقة عليها بضغطة زر، بنفس فكرة هذه المنصة.',
     'نسخة مصغرة وقابلة لإعادة الاستخدام من نظام الطلبات في هذه المنصة نفسها: استقبال طلب، إشعار فوري، أزرار موافقة/رفض.',
-    15, 'bot_simulator', 'link', 'https://github.com/your-org/order-manager-bot-template', 2),
+    15, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/order-manager-bot', null, 2),
   ('telegram-bots', 'faq-bot', 'بوت الأسئلة الشائعة', 'بوت يجيب تلقائياً على الأسئلة المتكررة لعملائك من قائمة تجهزها أنت.',
     'يقرأ قائمة أسئلة/أجوبة من ملف JSON بسيط ويجيب فوراً دون أي تدخل بشري.',
-    5, 'bot_simulator', 'link', 'https://github.com/your-org/faq-bot-template', 3)
-) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
+    5, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/faq-bot', null, 3)
+) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;
 
-insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
-select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.sort_order
+insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('ai-translation', 'smart-translator', 'المترجم الذكي', 'ترجمة فورية بين العربية وأكثر من 20 لغة باستخدام الذكاء الاصطناعي.',
-    'أداة ترجمة تعمل بنموذج Groq المجاني (Llama 3)، أسرع وأدق من الترجمة الحرفية التقليدية في السياقات التجارية.',
-    3, 'ai_chat', 'link', 'https://your-app.vercel.app/tools/translator?license=FULL', 1),
+    'أداة ترجمة تعمل بنموذج Groq المجاني (Llama 3)، أسرع وأدق من الترجمة الحرفية التقليدية في السياقات التجارية. النسخة الكاملة بدون حد للأحرف.',
+    3, 'ai_chat', 'link', null, 'translate', 1),
   ('ai-translation', 'text-summarizer', 'تلخيص النصوص', 'حوّل أي مقال أو تقرير طويل إلى ملخص من 5 أسطر خلال ثوانٍ.',
-    'مفيد للطلاب والموظفين لتلخيص المستندات والتقارير بسرعة.',
-    4, 'ai_chat', 'link', 'https://your-app.vercel.app/tools/summarizer?license=FULL', 2),
-  ('ai-translation', 'ai-chat-assistant', 'مساعد ذكي للرد على العملاء', 'مساعد محادثة ذكي يمكن تضمينه في موقعك للرد على استفسارات العملاء.',
-    'ودجت جاهز للتضمين (Embed) في أي موقع، مبني على Groq API المجاني.',
-    10, 'ai_chat', 'link', 'https://github.com/your-org/ai-chat-widget-template', 3)
-) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
+    'مفيد للطلاب والموظفين لتلخيص المستندات والتقارير بسرعة. النسخة الكاملة بدون حد للأحرف.',
+    4, 'ai_chat', 'link', null, 'summarize', 2),
+  ('ai-translation', 'ai-chat-assistant', 'مساعد ذكي للرد على العملاء', 'مساعد محادثة ذكي يجيب على استفسارات عملائك بالعربية.',
+    'صفحة أداة كاملة الوصول بدون حد للأحرف، يمكن مشاركة رابطها مع فريق الدعم لديك.',
+    10, 'ai_chat', 'link', null, 'assistant', 3)
+) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;
 
-insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
-select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.sort_order
+insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('automation-sites', 'landing-page-generator', 'منشئ صفحات الهبوط', 'أنشئ صفحة هبوط احترافية لمشروعك خلال دقائق بدون كتابة كود.',
-    'قالب Next.js جاهز للنشر المجاني على Vercel، يتيح تغيير النصوص والألوان والشعار بسهولة.',
-    12, 'landing_builder', 'link', 'https://github.com/your-org/landing-page-template', 1),
+    'قالب HTML/CSS/JS جاهز للنشر المجاني الفوري (GitHub Pages / Vercel / Netlify)، يتيح تغيير النصوص والألوان والشعار من مكان واحد.',
+    12, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/landing-page-template', null, 1),
   ('automation-sites', 'workflow-templates', 'قوالب أتمتة جاهزة', 'بديل مجاني لأدوات مثل Zapier: قوالب أتمتة جاهزة تعمل بخدمات مجانية.',
-    'مجموعة سيناريوهات أتمتة (مثل: ربط نموذج الموقع بجدول Google Sheets وتنبيه Telegram) دون أي اشتراك مدفوع.',
-    9, 'landing_builder', 'link', 'https://github.com/your-org/free-automation-recipes', 2),
+    'مجموعة سيناريوهات أتمتة موثّقة (Google Apps Script + Webhooks) تعمل دون أي اشتراك مدفوع.',
+    9, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/automation-recipes', null, 2),
   ('automation-sites', 'invoice-generator', 'مولد الفواتير التلقائي', 'أداة تنشئ فواتير PDF احترافية لعملائك تلقائياً.',
     'يعمل بالكامل على المتصفح (Client-side) دون أي سيرفر أو تكلفة تشغيل.',
-    6, 'landing_builder', 'link', 'https://github.com/your-org/invoice-generator-template', 3)
-) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
+    6, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/invoice-generator', null, 3)
+) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;
 
-insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
-select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.sort_order
+insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('content-design', 'social-caption-generator', 'مولد منشورات السوشيال ميديا', 'اكتب منشورات جذابة لإنستغرام وتيك توك وتويتر خلال ثوانٍ.',
-    'أداة تولّد نصوص منشورات بأساليب متعددة (مرح، احترافي، تسويقي) بالذكاء الاصطناعي المجاني.',
-    3, 'content_ai', 'link', 'https://your-app.vercel.app/tools/captions?license=FULL', 1),
+    'أداة تولّد نصوص منشورات بأساليب متعددة (مرح، احترافي، تسويقي) بالذكاء الاصطناعي المجاني. النسخة الكاملة بدون حد للأحرف.',
+    3, 'content_ai', 'link', null, 'caption', 1),
   ('content-design', 'blog-writer', 'كاتب المقالات الآلي', 'اكتب مسودة مقال متكامل بالعنوان والمقدمة والفقرات من كلمة مفتاحية واحدة.',
-    'يوفر ساعات من الكتابة اليدوية، ويصلح كنقطة بداية لمقالات SEO.',
-    8, 'content_ai', 'link', 'https://your-app.vercel.app/tools/blog-writer?license=FULL', 2),
+    'يوفر ساعات من الكتابة اليدوية، ويصلح كنقطة بداية لمقالات SEO. النسخة الكاملة بدون حد للأحرف.',
+    8, 'content_ai', 'link', null, 'blog', 2),
   ('content-design', 'product-description-writer', 'كاتب أوصاف المنتجات', 'أوصاف منتجات مقنعة لمتجرك الإلكتروني خلال ثوانٍ.',
-    'مثالي لأصحاب متاجر Shopify/Salla الذين يحتاجون أوصاف منتجات بكميات كبيرة.',
-    5, 'content_ai', 'link', 'https://your-app.vercel.app/tools/product-desc?license=FULL', 3)
-) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, sort_order)
+    'مثالي لأصحاب متاجر Shopify/Salla الذين يحتاجون أوصاف منتجات بكميات كبيرة. النسخة الكاملة بدون حد للأحرف.',
+    5, 'content_ai', 'link', null, 'product-desc', 3)
+) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
 join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;

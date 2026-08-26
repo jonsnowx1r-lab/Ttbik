@@ -68,7 +68,18 @@ export default function StatusPoller({ code, initial }: { code: string; initial:
       {order.status === "approved" && order.delivery_content && (
         <div className="rounded-xl bg-emerald-50 p-4">
           <p className="mb-1 text-sm font-semibold text-emerald-800">رابط/بيانات الوصول:</p>
-          <p className="break-all text-sm text-emerald-900">{order.delivery_content}</p>
+          {order.delivery_content.startsWith("http") ? (
+            <a
+              href={order.delivery_content}
+              target="_blank"
+              rel="noreferrer"
+              className="break-all text-sm font-semibold text-emerald-900 underline"
+            >
+              {order.delivery_content}
+            </a>
+          ) : (
+            <p className="break-all text-sm text-emerald-900">{order.delivery_content}</p>
+          )}
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 export type DemoType = "ai_chat" | "bot_simulator" | "landing_builder" | "content_ai";
 export type DeliveryType = "link" | "text";
-export type PaymentMethod = "iban" | "usdt";
+export type PaymentMethod = "bank" | "usdt";
 export type OrderStatus = "pending" | "approved" | "rejected";
 
 export interface Category {
@@ -24,6 +24,7 @@ export interface Service {
   demo_type: DemoType;
   delivery_type: DeliveryType;
   delivery_content: string | null;
+  tool_route: string | null;
   is_active: boolean;
   sort_order: number;
 }

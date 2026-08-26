@@ -1,0 +1,9 @@
+{
+  "name": "faq-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free Telegram FAQ bot — answers from a simple JSON list, zero hosting cost",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "dependencies": {}
+}

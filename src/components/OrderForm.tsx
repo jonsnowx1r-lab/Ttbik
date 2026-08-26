@@ -20,8 +20,14 @@ export default function OrderForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const iban = process.env.NEXT_PUBLIC_IBAN || "سيتم تزويده قريباً";
-  const ibanName = process.env.NEXT_PUBLIC_IBAN_BENEFICIARY || "";
+  const bank = {
+    holder: process.env.NEXT_PUBLIC_BANK_HOLDER || "سيتم تزويده قريباً",
+    account: process.env.NEXT_PUBLIC_BANK_ACCOUNT_NUMBER || "سيتم تزويده قريباً",
+    routing: process.env.NEXT_PUBLIC_BANK_ROUTING_NUMBER || "",
+    type: process.env.NEXT_PUBLIC_BANK_ACCOUNT_TYPE || "",
+    name: process.env.NEXT_PUBLIC_BANK_NAME || "",
+    address: process.env.NEXT_PUBLIC_BANK_ADDRESS || "",
+  };
   const usdt = process.env.NEXT_PUBLIC_USDT_ADDRESS || "سيتم تزويده قريباً";
   const usdtNetwork = process.env.NEXT_PUBLIC_USDT_NETWORK || "TRC20";
 
@@ -69,12 +75,12 @@ export default function OrderForm({
               USDT
             </button>
             <button
-              onClick={() => setMethod("iban")}
+              onClick={() => setMethod("bank")}
               className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                method === "iban" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300"
+                method === "bank" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300"
               }`}
             >
-              تحويل بنكي (IBAN)
+              تحويل بنكي (ACH/USD)
             </button>
           </div>
 
@@ -87,9 +93,41 @@ export default function OrderForm({
               </>
             ) : (
               <>
-                <p className="font-semibold text-slate-700">حوّل مبلغ {priceUsd}$ إلى رقم الآيبان التالي:</p>
-                <p className="mt-1 break-all font-mono text-brand-700">{iban}</p>
-                {ibanName && <p className="mt-1 text-slate-500">باسم: {ibanName}</p>}
+                <p className="mb-2 font-semibold text-slate-700">حوّل مبلغ {priceUsd}$ إلى الحساب البنكي التالي:</p>
+                <dl className="space-y-1">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">صاحب الحساب</dt>
+                    <dd className="font-mono text-brand-700">{bank.holder}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">رقم الحساب</dt>
+                    <dd className="font-mono text-brand-700">{bank.account}</dd>
+                  </div>
+                  {bank.routing && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">Routing Number</dt>
+                      <dd className="font-mono text-brand-700">{bank.routing}</dd>
+                    </div>
+                  )}
+                  {bank.type && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">نوع الحساب</dt>
+                      <dd className="text-slate-700">{bank.type}</dd>
+                    </div>
+                  )}
+                  {bank.name && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">اسم البنك</dt>
+                      <dd className="text-slate-700">{bank.name}</dd>
+                    </div>
+                  )}
+                  {bank.address && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">عنوان البنك</dt>
+                      <dd className="text-left text-slate-700">{bank.address}</dd>
+                    </div>
+                  )}
+                </dl>
               </>
             )}
           </div>

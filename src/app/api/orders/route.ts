@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   if (!serviceId || !customerName || !customerContact || !paymentMethod || !transferReference) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
-  if (!["iban", "usdt"].includes(paymentMethod)) {
+  if (!["bank", "usdt"].includes(paymentMethod)) {
     return NextResponse.json({ error: "طريقة دفع غير صالحة" }, { status: 400 });
   }
 

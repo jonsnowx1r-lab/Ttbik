@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>مولد الفواتير</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; margin: 0; padding: 24px; }
+  .wrap { max-width: 800px; margin: 0 auto; display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .wrap { grid-template-columns: 320px 1fr; } }
+
+  .panel { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .panel label { display: block; font-size: 12px; color: #64748b; margin: 10px 0 4px; }
+  .panel input, .panel textarea { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+  .panel button { margin-top: 16px; width: 100%; padding: 10px; background: #0284c7; color: #fff; border: 0; border-radius: 8px; font-weight: bold; cursor: pointer; }
+  #addItem { background: #16a34a; margin-top: 8px; }
+
+  .invoice { background: #fff; border-radius: 12px; padding: 40px; }
+  .invoice h1 { margin: 0 0 4px; }
+  .invoice .muted { color: #64748b; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+  th, td { border-bottom: 1px solid #e2e8f0; padding: 8px; text-align: right; font-size: 14px; }
+  .total { text-align: left; font-size: 20px; font-weight: 800; margin-top: 16px; color: #0284c7; }
+
+  @media print {
+    .panel { display: none; }
+    .wrap { display: block; }
+    body { background: #fff; padding: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h3>بيانات الفاتورة</h3>
+      <label>اسم عملك</label>
+      <input id="bizName" value="اسم مشروعك" oninput="render()" />
+      <label>اسم العميل</label>
+      <input id="clientName" value="اسم العميل" oninput="render()" />
+      <label>رقم الفاتورة</label>
+      <input id="invoiceNo" value="INV-001" oninput="render()" />
+
+      <div id="items"></div>
+      <button id="addItem" onclick="addItem()">+ إضافة بند</button>
+      <button onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
+    </div>
+
+    <div class="invoice" id="invoice">
+      <h1 id="outBiz"></h1>
+      <p class="muted">فاتورة إلى: <span id="outClient"></span></p>
+      <p class="muted">رقم الفاتورة: <span id="outNo"></span> — <span id="outDate"></span></p>
+      <table>
+        <thead><tr><th>البند</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+        <tbody id="outRows"></tbody>
+      </table>
+      <p class="total">الإجمالي الكلي: $<span id="outTotal">0.00</span></p>
+    </div>
+  </div>
+
+  <script>
+    let items = [{ name: "خدمة/منتج", qty: 1, price: 0 }];
+
+    function addItem() {
+      items.push({ name: "بند جديد", qty: 1, price: 0 });
+      renderItemInputs();
+      render();
+    }
+
+    function renderItemInputs() {
+      const el = document.getElementById("items");
+      el.innerHTML = items
+        .map(
+          (it, i) => `
+        <label>البند ${i + 1}</label>
+        <input value="${it.name}" oninput="items[${i}].name=this.value; render()" />
+        <div style="display:flex; gap:6px;">
+          <input type="number" value="${it.qty}" style="width:50%" oninput="items[${i}].qty=+this.value; render()" placeholder="الكمية" />
+          <input type="number" value="${it.price}" style="width:50%" oninput="items[${i}].price=+this.value; render()" placeholder="السعر" />
+        </div>`
+        )
+        .join("");
+    }
+
+    function render() {
+      document.getElementById("outBiz").textContent = document.getElementById("bizName").value;
+      document.getElementById("outClient").textContent = document.getElementById("clientName").value;
+      document.getElementById("outNo").textContent = document.getElementById("invoiceNo").value;
+      document.getElementById("outDate").textContent = new Date().toLocaleDateString("ar-EG");
+
+      let total = 0;
+      document.getElementById("outRows").innerHTML = items
+        .map((it) => {
+          const lineTotal = it.qty * it.price;
+          total += lineTotal;
+          return `<tr><td>${it.name}</td><td>${it.qty}</td><td>$${it.price.toFixed(2)}</td><td>$${lineTotal.toFixed(2)}</td></tr>`;
+        })
+        .join("");
+      document.getElementById("outTotal").textContent = total.toFixed(2);
+    }
+
+    renderItemInputs();
+    render();
+  </script>
+</body>
+</html>

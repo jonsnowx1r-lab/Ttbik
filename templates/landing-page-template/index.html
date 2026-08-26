@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>اسم مشروعك</title>
+<style>
+  :root {
+    --brand: #0284c7;
+    --text: #0f172a;
+    --muted: #64748b;
+    --bg: #f8fafc;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+  header.hero { background: var(--brand); color: #fff; padding: 90px 0; text-align: center; }
+  header.hero h1 { font-size: 2.4rem; margin: 0 0 12px; }
+  header.hero p { font-size: 1.1rem; opacity: 0.92; max-width: 560px; margin: 0 auto 28px; }
+  .btn { display: inline-block; background: #fff; color: var(--brand); font-weight: 700; padding: 14px 28px; border-radius: 999px; text-decoration: none; }
+
+  section.features { padding: 70px 0; }
+  section.features h2 { text-align: center; margin-bottom: 40px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; text-align: center; }
+  .card .icon { font-size: 2rem; margin-bottom: 10px; }
+  .card p { color: var(--muted); font-size: 0.95rem; }
+
+  section.pricing { padding: 70px 0; background: #fff; text-align: center; }
+  .price { font-size: 3rem; font-weight: 800; color: var(--brand); }
+
+  footer { padding: 30px 0; text-align: center; color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+  <header class="hero">
+    <div class="container">
+      <h1 data-field="name">اسم مشروعك</h1>
+      <p data-field="tagline">حلول رقمية تساعدك تنمو أسرع، بدون تعقيد وبدون تكلفة زائدة.</p>
+      <a class="btn" href="#pricing">ابدأ الآن</a>
+    </div>
+  </header>
+
+  <section class="features">
+    <div class="container">
+      <h2>لماذا نحن؟</h2>
+      <div class="grid">
+        <div class="card"><div class="icon">⚡</div><h3>سريع</h3><p>نتائج فورية بدون انتظار.</p></div>
+        <div class="card"><div class="icon">💰</div><h3>اقتصادي</h3><p>أسعار مناسبة لكل ميزانية.</p></div>
+        <div class="card"><div class="icon">🔒</div><h3>موثوق</h3><p>بياناتك وطلباتك بأمان تام.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <h2>الباقة الأساسية</h2>
+      <p class="price">$9<span style="font-size:1rem;color:var(--muted)">/شهرياً</span></p>
+      <a class="btn" style="background:var(--brand);color:#fff" href="#">اشترك الآن</a>
+    </div>
+  </section>
+
+  <footer>© <span id="year"></span> اسم مشروعك — جميع الحقوق محفوظة.</footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // ---- Easiest customization: edit the object below, no other code needed ----
+    const CONFIG = {
+      name: "اسم مشروعك",
+      tagline: "حلول رقمية تساعدك تنمو أسرع، بدون تعقيد وبدون تكلفة زائدة.",
+      brandColor: "#0284c7",
+    };
+
+    document.querySelectorAll('[data-field="name"]').forEach((el) => (el.textContent = CONFIG.name));
+    document.querySelectorAll('[data-field="tagline"]').forEach((el) => (el.textContent = CONFIG.tagline));
+    document.documentElement.style.setProperty("--brand", CONFIG.brandColor);
+    document.title = CONFIG.name;
+  </script>
+</body>
+</html>

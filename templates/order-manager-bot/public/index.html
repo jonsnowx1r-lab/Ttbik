@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>نموذج الطلب</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 420px; margin: 60px auto; padding: 0 16px; }
+  input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+  button { width: 100%; padding: 12px; background: #0284c7; color: #fff; border: 0; border-radius: 8px; font-weight: bold; cursor: pointer; }
+  #status { margin-top: 12px; font-size: 14px; }
+</style>
+</head>
+<body>
+  <h2>أرسل طلبك</h2>
+  <input id="name" placeholder="الاسم" />
+  <input id="contact" placeholder="طريقة التواصل" />
+  <textarea id="note" placeholder="تفاصيل الطلب" rows="3"></textarea>
+  <button onclick="submitOrder()">إرسال</button>
+  <p id="status"></p>
+
+  <script>
+    async function submitOrder() {
+      const name = document.getElementById("name").value;
+      const contact = document.getElementById("contact").value;
+      const note = document.getElementById("note").value;
+      const statusEl = document.getElementById("status");
+      statusEl.textContent = "جارٍ الإرسال...";
+      const res = await fetch("/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, contact, note }),
+      });
+      const data = await res.json();
+      statusEl.textContent = res.ok
+        ? `تم إرسال طلبك برقم #${data.id}، بانتظار المراجعة.`
+        : `خطأ: ${data.error}`;
+    }
+  </script>
+</body>
+</html>

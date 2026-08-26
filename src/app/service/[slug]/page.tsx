@@ -6,6 +6,7 @@ import OrderForm from "@/components/OrderForm";
 import AiTextDemo from "@/components/demos/AiTextDemo";
 import BotSimulator from "@/components/demos/BotSimulator";
 import LandingBuilder from "@/components/demos/LandingBuilder";
+import { TOOL_LABELS, ToolMode } from "@/lib/prompts";
 
 export const revalidate = 30;
 
@@ -14,15 +15,6 @@ async function getService(slug: string) {
   const { data } = await db.from("services").select("*").eq("slug", slug).single();
   return data as Service | null;
 }
-
-const AI_MODE_BY_SLUG: Record<string, any> = {
-  "smart-translator": { mode: "translate", placeholder: "اكتب نصاً لترجمته...", button: "ترجم الآن" },
-  "text-summarizer": { mode: "summarize", placeholder: "الصق النص المراد تلخيصه...", button: "لخّص الآن" },
-  "ai-chat-assistant": { mode: "assistant", placeholder: "اكتب سؤال أحد عملائك...", button: "أرسل للمساعد" },
-  "social-caption-generator": { mode: "caption", placeholder: "عن ماذا تريد أن يكون المنشور؟", button: "ولّد منشوراً" },
-  "blog-writer": { mode: "blog", placeholder: "اكتب الكلمة المفتاحية لمقالك...", button: "اكتب مسودة" },
-  "product-description-writer": { mode: "product-desc", placeholder: "اسم المنتج ومميزاته...", button: "اكتب الوصف" },
-};
 
 export default async function ServicePage({ params }: { params: { slug: string } }) {
   const service = await getService(params.slug);
@@ -40,11 +32,12 @@ export default async function ServicePage({ params }: { params: { slug: string }
             {service.demo_type === "bot_simulator" && <BotSimulator botName={service.name_ar} />}
             {service.demo_type === "landing_builder" && <LandingBuilder />}
             {(service.demo_type === "ai_chat" || service.demo_type === "content_ai") &&
-              AI_MODE_BY_SLUG[service.slug] && (
+              service.tool_route &&
+              TOOL_LABELS[service.tool_route as ToolMode] && (
                 <AiTextDemo
-                  mode={AI_MODE_BY_SLUG[service.slug].mode}
-                  placeholder={AI_MODE_BY_SLUG[service.slug].placeholder}
-                  buttonLabel={AI_MODE_BY_SLUG[service.slug].button}
+                  mode={service.tool_route as ToolMode}
+                  placeholder={TOOL_LABELS[service.tool_route as ToolMode].placeholder}
+                  buttonLabel={TOOL_LABELS[service.tool_route as ToolMode].button}
                 />
               )}
           </div>
