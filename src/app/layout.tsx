@@ -19,6 +19,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </a>
             <nav className="flex items-center gap-4 text-sm text-slate-600">
               <a href="/#categories" className="hover:text-brand-700">الأقسام</a>
+              <a href="/free-tools" className="font-semibold text-emerald-600 hover:text-emerald-700">
+                🎁 أدوات مجانية
+              </a>
               <a href="/order/lookup" className="hover:text-brand-700">تتبع طلبي</a>
             </nav>
           </div>
