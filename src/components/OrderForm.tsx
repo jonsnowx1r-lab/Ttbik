@@ -1,8 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PaymentMethod } from "@/types";
+
+interface PaymentInfo {
+  bank: {
+    holder: string;
+    account: string;
+    routing: string;
+    type: string;
+    name: string;
+    address: string;
+  };
+  usdt: { address: string; network: string };
+}
+
+function maskDigits(value: string): string {
+  if (!value || value.length <= 4) return value;
+  return "•".repeat(Math.max(value.length - 4, 4)) + value.slice(-4);
+}
 
 export default function OrderForm({
   serviceId,
@@ -20,16 +37,15 @@ export default function OrderForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const bank = {
-    holder: process.env.NEXT_PUBLIC_BANK_HOLDER || "سيتم تزويده قريباً",
-    account: process.env.NEXT_PUBLIC_BANK_ACCOUNT_NUMBER || "سيتم تزويده قريباً",
-    routing: process.env.NEXT_PUBLIC_BANK_ROUTING_NUMBER || "",
-    type: process.env.NEXT_PUBLIC_BANK_ACCOUNT_TYPE || "",
-    name: process.env.NEXT_PUBLIC_BANK_NAME || "",
-    address: process.env.NEXT_PUBLIC_BANK_ADDRESS || "",
-  };
-  const usdt = process.env.NEXT_PUBLIC_USDT_ADDRESS || "سيتم تزويده قريباً";
-  const usdtNetwork = process.env.NEXT_PUBLIC_USDT_NETWORK || "TRC20";
+  const [payment, setPayment] = useState<PaymentInfo | null>(null);
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/payment-info")
+      .then((res) => res.json())
+      .then(setPayment)
+      .catch(() => setPayment(null));
+  }, []);
 
   async function submit() {
     if (!name.trim() || !contact.trim() || !reference.trim()) {
@@ -59,6 +75,9 @@ export default function OrderForm({
     }
   }
 
+  const bank = payment?.bank;
+  const usdt = payment?.usdt;
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <h3 className="mb-3 font-bold text-slate-900">اطلب الآن — {priceUsd}$</h3>
@@ -85,11 +104,15 @@ export default function OrderForm({
           </div>
 
           <div className="rounded-xl bg-slate-50 p-4 text-sm">
-            {method === "usdt" ? (
+            {!payment ? (
+              <p className="text-slate-400">جارٍ تحميل بيانات الدفع...</p>
+            ) : method === "usdt" ? (
               <>
                 <p className="font-semibold text-slate-700">حوّل مبلغ {priceUsd}$ إلى عنوان USDT التالي:</p>
-                <p className="mt-1 break-all font-mono text-brand-700">{usdt}</p>
-                <p className="mt-1 text-slate-500">الشبكة: {usdtNetwork}</p>
+                <p className="mt-1 break-all font-mono text-brand-700">
+                  {usdt?.address || "سيتم تزويده قريباً"}
+                </p>
+                <p className="mt-1 text-slate-500">الشبكة: {usdt?.network}</p>
               </>
             ) : (
               <>
@@ -97,37 +120,49 @@ export default function OrderForm({
                 <dl className="space-y-1">
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">صاحب الحساب</dt>
-                    <dd className="font-mono text-brand-700">{bank.holder}</dd>
+                    <dd className="font-mono text-brand-700">{bank?.holder || "سيتم تزويده قريباً"}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">رقم الحساب</dt>
-                    <dd className="font-mono text-brand-700">{bank.account}</dd>
+                    <dd className="font-mono text-brand-700">
+                      {bank?.account ? (revealed ? bank.account : maskDigits(bank.account)) : "-"}
+                    </dd>
                   </div>
-                  {bank.routing && (
+                  {bank?.routing && (
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">Routing Number</dt>
-                      <dd className="font-mono text-brand-700">{bank.routing}</dd>
+                      <dd className="font-mono text-brand-700">
+                        {revealed ? bank.routing : maskDigits(bank.routing)}
+                      </dd>
                     </div>
                   )}
-                  {bank.type && (
+                  {bank?.type && (
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">نوع الحساب</dt>
                       <dd className="text-slate-700">{bank.type}</dd>
                     </div>
                   )}
-                  {bank.name && (
+                  {bank?.name && (
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">اسم البنك</dt>
                       <dd className="text-slate-700">{bank.name}</dd>
                     </div>
                   )}
-                  {bank.address && (
+                  {bank?.address && (
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">عنوان البنك</dt>
                       <dd className="text-left text-slate-700">{bank.address}</dd>
                     </div>
                   )}
                 </dl>
+                {!revealed && bank?.account && (
+                  <button
+                    onClick={() => setRevealed(true)}
+                    className="mt-3 text-xs font-semibold text-brand-700 underline"
+                  >
+                    👁️ إظهار الرقم كاملاً
+                  </button>
+                )}
               </>
             )}
           </div>
