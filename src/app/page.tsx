@@ -22,21 +22,41 @@ export default async function HomePage() {
 
   return (
     <div>
-      <section className="mx-auto max-w-6xl px-4 py-16 text-center">
+      <section className="mx-auto max-w-6xl px-4 pb-8 pt-16 text-center">
         <h1 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">
           خدمات وأدوات رقمية جاهزة، بتكلفة تشغيل <span className="text-brand-600">صفر دولار</span>
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-slate-600">
           جرّب كل أداة مباشرة قبل الشراء، ثم احصل على وصولك الكامل خلال دقائق عبر تحويل بسيط
-          (IBAN أو USDT) وموافقة إدارية سريعة.
+          (بنكي أو USDT) وموافقة إدارية سريعة.
         </p>
       </section>
 
-      <section id="categories" className="mx-auto max-w-6xl space-y-14 px-4 pb-20">
+      {/* Horizontal quick-jump pills */}
+      <nav
+        aria-label="الانتقال السريع للأقسام"
+        className="sticky top-[57px] z-20 border-y border-slate-200 bg-white/90 backdrop-blur"
+      >
+        <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3 [&::-webkit-scrollbar]:hidden">
+          {categories.map((cat) => (
+            <a
+              key={cat.id}
+              href={`#${cat.slug}`}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-700"
+            >
+              <span>{cat.icon}</span> {cat.name_ar}
+            </a>
+          ))}
+        </div>
+      </nav>
+
+      <section id="categories" className="mx-auto max-w-6xl space-y-16 px-4 py-14">
         {categories.map((cat) => (
-          <div key={cat.id}>
+          <div key={cat.id} id={cat.slug} className="scroll-mt-28">
             <div className="mb-5 flex items-center gap-3">
-              <span className="text-3xl">{cat.icon}</span>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-2xl">
+                {cat.icon}
+              </span>
               <div>
                 <h2 className="text-xl font-bold text-slate-900">{cat.name_ar}</h2>
                 {cat.description_ar && (
@@ -44,14 +64,16 @@ export default async function HomePage() {
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+            {/* Horizontal swipeable row on mobile, grid from sm breakpoint up */}
+            <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3">
               {services
                 .filter((s) => s.category_id === cat.id)
                 .map((s) => (
                   <Link
                     key={s.id}
                     href={`/service/${s.slug}`}
-                    className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    className="group flex w-[78vw] shrink-0 snap-start flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:w-auto sm:shrink"
                   >
                     <div>
                       <h3 className="font-bold text-slate-900 group-hover:text-brand-700">
