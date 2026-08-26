@@ -11,6 +11,8 @@ import CatalogBuilder from "@/components/demos/CatalogBuilder";
 import AdSlotPreview from "@/components/demos/AdSlotPreview";
 import { TOOL_LABELS, ToolMode } from "@/lib/prompts";
 import { getDeliveryKind } from "@/lib/deliveryKind";
+import { isOwnerServer } from "@/lib/isOwner";
+import Link from "next/link";
 
 export const revalidate = 30;
 
@@ -34,6 +36,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function ServicePage({ params }: { params: { slug: string } }) {
   const service = await getService(params.slug);
   if (!service) notFound();
+
+  const isOwner = isOwnerServer();
+  const ownerLink = service.tool_route ? `/tools/${service.tool_route}` : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -66,7 +71,33 @@ export default async function ServicePage({ params }: { params: { slug: string }
           </div>
         </div>
 
-        <div>
+        <div className="space-y-4">
+          {isOwner && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <p className="mb-2 text-xs font-bold text-emerald-700">🔑 وضع المالك — وصول مباشر بلا طلب</p>
+              {ownerLink ? (
+                <Link
+                  href={ownerLink}
+                  className="block w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-emerald-700"
+                >
+                  افتح الأداة الكاملة الآن
+                </Link>
+              ) : service.delivery_type === "link" && service.delivery_content ? (
+                <a
+                  href={service.delivery_content}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full break-all rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-emerald-700"
+                >
+                  فتح رابط التسليم
+                </a>
+              ) : service.delivery_content ? (
+                <p className="text-sm text-emerald-900">{service.delivery_content}</p>
+              ) : (
+                <p className="text-sm text-emerald-900">لا يوجد رابط تسليم ثابت لهذه الخدمة بعد.</p>
+              )}
+            </div>
+          )}
           <OrderForm serviceId={service.id} priceUsd={service.price_usd} />
         </div>
       </div>

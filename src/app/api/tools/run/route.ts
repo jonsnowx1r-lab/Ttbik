@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { TOOL_SYSTEM_PROMPTS, ToolMode } from "@/lib/prompts";
 import { callGroq } from "@/lib/groq";
+import { isOwnerRequest } from "@/lib/isOwner";
 
 // Per-order daily rate limit (generous — this is a paying customer, but we
 // still protect the shared free Groq quota from a leaked/shared link).
@@ -24,25 +25,33 @@ export async function POST(req: NextRequest) {
   const { orderCode, tool, input } = await req.json().catch(() => ({}));
 
   const systemPrompt = TOOL_SYSTEM_PROMPTS[tool as ToolMode];
-  if (!systemPrompt || typeof input !== "string" || !input.trim() || !orderCode) {
+  if (!systemPrompt || typeof input !== "string" || !input.trim()) {
     return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 });
   }
 
-  const db = supabaseAdmin();
-  const { data: order } = await db
-    .from("orders")
-    .select("status, services(tool_route)")
-    .eq("order_code", orderCode)
-    .single();
+  const owner = isOwnerRequest(req);
 
-  const services = order?.services as unknown as { tool_route: string | null } | null;
-  const unlocked = order?.status === "approved" && services?.tool_route === tool;
-  if (!unlocked) {
-    return NextResponse.json({ error: "رمز الطلب غير صالح أو لم تتم الموافقة عليه بعد" }, { status: 403 });
-  }
+  if (!owner) {
+    if (!orderCode) {
+      return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 });
+    }
 
-  if (rateLimited(orderCode)) {
-    return NextResponse.json({ error: "تم تجاوز الحد اليومي المسموح لهذا الاشتراك" }, { status: 429 });
+    const db = supabaseAdmin();
+    const { data: order } = await db
+      .from("orders")
+      .select("status, services(tool_route)")
+      .eq("order_code", orderCode)
+      .single();
+
+    const services = order?.services as unknown as { tool_route: string | null } | null;
+    const unlocked = order?.status === "approved" && services?.tool_route === tool;
+    if (!unlocked) {
+      return NextResponse.json({ error: "رمز الطلب غير صالح أو لم تتم الموافقة عليه بعد" }, { status: 403 });
+    }
+
+    if (rateLimited(orderCode)) {
+      return NextResponse.json({ error: "تم تجاوز الحد اليومي المسموح لهذا الاشتراك" }, { status: 429 });
+    }
   }
 
   try {

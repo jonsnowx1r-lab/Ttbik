@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Logo from "@/components/Logo";
+import { isOwnerServer } from "@/lib/isOwner";
 
 export const metadata: Metadata = {
   title: "سوق تولز — سوق الخدمات الرقمية المصغّرة",
@@ -9,9 +10,16 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const isOwner = isOwnerServer();
+
   return (
     <html lang="ar" dir="rtl">
       <body className="min-h-screen font-sans text-slate-800 antialiased">
+        {isOwner && (
+          <div className="bg-emerald-600 py-1.5 text-center text-xs font-bold text-white">
+            🔑 وضع المالك مفعّل — لديك وصول كامل لكل الخدمات والأدوات
+          </div>
+        )}
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
             <a href="/" className="flex items-center gap-2 text-lg font-extrabold text-brand-700">
@@ -23,6 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 🎁 أدوات مجانية
               </a>
               <a href="/order/lookup" className="hover:text-brand-700">تتبع طلبي</a>
+              <a href="/admin" className="hover:text-brand-700">
+                {isOwner ? "لوحة التحكم" : "دخول المالك"}
+              </a>
             </nav>
           </div>
         </header>
