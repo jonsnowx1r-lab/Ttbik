@@ -1,5 +1,5 @@
 -- ============================================================================
--- TTBIK Marketplace — Supabase SQL Schema
+-- SouqTools (سوق تولز) Marketplace — Supabase SQL Schema
 -- Free-tier Postgres (Supabase). Run this once in the SQL editor of your
 -- Supabase project (Project → SQL Editor → New query → paste → Run).
 -- ============================================================================

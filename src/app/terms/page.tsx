@@ -1,4 +1,4 @@
-export const metadata = { title: "الشروط وسياسة الاسترجاع | TTBIK" };
+export const metadata = { title: "الشروط وسياسة الاسترجاع | سوق تولز" };
 
 export default function TermsPage() {
   return (

@@ -1,4 +1,4 @@
-export const metadata = { title: "سياسة الخصوصية | TTBIK" };
+export const metadata = { title: "سياسة الخصوصية | سوق تولز" };
 
 export default function PrivacyPage() {
   return (

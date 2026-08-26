@@ -2,6 +2,8 @@ import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase";
 import type { Category, Service } from "@/types";
 import { formatUsd } from "@/lib/utils";
+import { getDeliveryKind } from "@/lib/deliveryKind";
+import CategoryBanner from "@/components/CategoryBanner";
 
 export const revalidate = 30;
 
@@ -53,10 +55,8 @@ export default async function HomePage() {
       <section id="categories" className="mx-auto max-w-6xl space-y-16 px-4 py-14">
         {categories.map((cat) => (
           <div key={cat.id} id={cat.slug} className="scroll-mt-28">
-            <div className="mb-5 flex items-center gap-3">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-2xl">
-                {cat.icon}
-              </span>
+            <CategoryBanner slug={cat.slug} icon={cat.icon} />
+            <div className="mb-5 mt-4 flex items-center gap-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">{cat.name_ar}</h2>
                 {cat.description_ar && (
@@ -76,7 +76,10 @@ export default async function HomePage() {
                     className="group flex w-[78vw] shrink-0 snap-start flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:w-auto sm:shrink"
                   >
                     <div>
-                      <h3 className="font-bold text-slate-900 group-hover:text-brand-700">
+                      <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                        {getDeliveryKind(s).label}
+                      </span>
+                      <h3 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">
                         {s.name_ar}
                       </h3>
                       <p className="mt-2 text-sm text-slate-500">{s.short_desc_ar}</p>

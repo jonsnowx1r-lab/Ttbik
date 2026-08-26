@@ -9,6 +9,7 @@ import BotSimulator from "@/components/demos/BotSimulator";
 import LandingBuilder from "@/components/demos/LandingBuilder";
 import CatalogBuilder from "@/components/demos/CatalogBuilder";
 import { TOOL_LABELS, ToolMode } from "@/lib/prompts";
+import { getDeliveryKind } from "@/lib/deliveryKind";
 
 export const revalidate = 30;
 
@@ -23,7 +24,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   if (!service) return {};
   const description = service.short_desc_ar || service.long_desc_ar || undefined;
   return {
-    title: `${service.name_ar} — ${formatUsd(service.price_usd)} | TTBIK`,
+    title: `${service.name_ar} — ${formatUsd(service.price_usd)} | سوق تولز`,
     description,
     openGraph: { title: service.name_ar, description, type: "website" },
   };
@@ -37,8 +38,12 @@ export default async function ServicePage({ params }: { params: { slug: string }
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">{service.name_ar}</h1>
+          <span className="inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            {getDeliveryKind(service).label}
+          </span>
+          <h1 className="mt-3 text-2xl font-extrabold text-slate-900">{service.name_ar}</h1>
           <p className="mt-2 text-slate-600">{service.long_desc_ar || service.short_desc_ar}</p>
+          <p className="mt-1 text-xs text-slate-400">{getDeliveryKind(service).detail}</p>
           <p className="mt-4 text-2xl font-extrabold text-brand-700">{formatUsd(service.price_usd)}</p>
 
           <div className="mt-6">
