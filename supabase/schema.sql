@@ -177,9 +177,9 @@ grant insert on public.orders to anon, authenticated;
 -- ============================================================================
 
 insert into categories (slug, name_ar, name_en, description_ar, icon, sort_order) values
-  ('telegram-bots', 'بوتات تليجرام', 'Telegram Bots', 'بوتات جاهزة تعمل مجاناً على Telegram Bot API لأتمتة الردود وإدارة الطلبات.', '🤖', 1),
-  ('ai-translation', 'الترجمة والذكاء الاصطناعي', 'AI & Translation', 'أدوات نصية ذكية تعمل بنماذج Groq المجانية: ترجمة، تلخيص، ردود آلية.', '🌐', 2),
-  ('automation-sites', 'الأتمتة والمواقع', 'Automation & Sites', 'قوالب مواقع وسكربتات أتمتة جاهزة للتشغيل الفوري بدون تكلفة استضافة.', '⚙️', 3),
+  ('telegram-bots', 'بوتات تليجرام', 'Telegram Bots', 'بوتات جاهزة للتشغيل الفوري لأتمتة الردود وإدارة الطلبات على تليجرام.', '🤖', 1),
+  ('ai-translation', 'الترجمة والذكاء الاصطناعي', 'AI & Translation', 'أدوات نصية ذكية بالذكاء الاصطناعي: ترجمة مستندات، تحليل تقارير، ردود آلية.', '🌐', 2),
+  ('automation-sites', 'الأتمتة والمواقع', 'Automation & Sites', 'قوالب مواقع وسكربتات أتمتة جاهزة للتشغيل الفوري.', '⚙️', 3),
   ('content-design', 'المحتوى والتصميم بالذكاء الاصطناعي', 'AI Content', 'كتابة محتوى تسويقي، أوصاف منتجات، ومنشورات سوشيال ميديا بالذكاء الاصطناعي.', '🎨', 4)
 on conflict (slug) do nothing;
 
@@ -187,7 +187,7 @@ insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, p
 select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('telegram-bots', 'auto-reply-bot', 'بوت الرد الآلي', 'بوت تليجرام يرد تلقائياً على استفسارات عملائك على مدار الساعة.',
-    'كود جاهز (Node.js) لبوت رد آلي مبني على Telegram Bot API المجاني، يدعم كلمات مفتاحية وردود مخصصة وقوائم أزرار. يعمل مجاناً على أي استضافة Free Tier.',
+    'كود جاهز (Node.js) لبوت رد آلي احترافي، يدعم كلمات مفتاحية وردود مخصصة وقوائم أزرار، وقابل للتشغيل الفوري على أي استضافة سحابية.',
     7, 'bot_simulator', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/auto-reply-bot', null, 1),
   ('telegram-bots', 'order-manager-bot', 'بوت إدارة الطلبات', 'بوت لاستقبال طلبات العملاء والموافقة عليها بضغطة زر، بنفس فكرة هذه المنصة.',
     'نسخة مصغرة وقابلة لإعادة الاستخدام من نظام الطلبات في هذه المنصة نفسها: استقبال طلب، إشعار فوري، أزرار موافقة/رفض.',
@@ -203,7 +203,7 @@ insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, p
 select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('ai-translation', 'smart-translator', 'مترجم المستندات التجارية', 'ترجمة عقود وفواتير ورسائل عمل مع الحفاظ الكامل على التنسيق والمصطلحات الرسمية.',
-    'أداة ترجمة متخصصة بالمستندات التجارية تعمل بنموذج Groq المجاني (Llama 3)، تحافظ على بنية النص (فقرات، أرقام، بنود) بدل ترجمة حرفية عامة. النسخة الكاملة بدون حد للأحرف.',
+    'أداة ترجمة متخصصة بالمستندات التجارية مدعومة بأحدث نماذج الذكاء الاصطناعي، تحافظ على بنية النص (فقرات، أرقام، بنود) بدل ترجمة حرفية عامة. النسخة الكاملة بدون حد للأحرف.',
     5, 'ai_chat', 'link', null, 'translate', 1),
   ('ai-translation', 'text-summarizer', 'محلل التقارير والمستندات', 'حوّل أي تقرير طويل إلى أهم نقاطه + توصية عملية واحدة جاهزة للتنفيذ.',
     'مصمم لمديري الأعمال: لا يُخرج ملخصاً عاماً، بل نقاطاً رئيسية وتوصية محددة يمكن اتخاذ قرار بناءً عليها فوراً. النسخة الكاملة بدون حد للأحرف.',
@@ -222,13 +222,13 @@ insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, p
 select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('automation-sites', 'landing-page-generator', 'منشئ صفحات الهبوط', 'أنشئ صفحة هبوط احترافية لمشروعك خلال دقائق بدون كتابة كود.',
-    'قالب HTML/CSS/JS جاهز للنشر المجاني الفوري (GitHub Pages / Vercel / Netlify)، يتيح تغيير النصوص والألوان والشعار من مكان واحد.',
+    'قالب HTML/CSS/JS احترافي جاهز للنشر الفوري، يتيح تغيير النصوص والألوان والشعار من مكان واحد.',
     12, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/landing-page-template', null, 1),
-  ('automation-sites', 'workflow-templates', 'قوالب أتمتة جاهزة', 'بديل مجاني لأدوات مثل Zapier: قوالب أتمتة جاهزة تعمل بخدمات مجانية.',
-    'مجموعة سيناريوهات أتمتة موثّقة (Google Apps Script + Webhooks) تعمل دون أي اشتراك مدفوع.',
+  ('automation-sites', 'workflow-templates', 'قوالب أتمتة جاهزة', 'بديل عملي لأدوات مثل Zapier: قوالب أتمتة جاهزة توفر وقتك وجهدك.',
+    'مجموعة سيناريوهات أتمتة موثّقة وجاهزة للتطبيق الفوري (Google Apps Script + Webhooks).',
     9, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/automation-recipes', null, 2),
   ('automation-sites', 'invoice-generator', 'مولد الفواتير التلقائي', 'أداة تنشئ فواتير PDF احترافية لعملائك تلقائياً.',
-    'يعمل بالكامل على المتصفح (Client-side) دون أي سيرفر أو تكلفة تشغيل.',
+    'يعمل بالكامل داخل المتصفح مباشرة، بسرعة وخصوصية تامة دون رفع بياناتك لأي سيرفر خارجي.',
     6, 'landing_builder', 'link', 'https://github.com/jonsnowx1r-lab/Ttbik/tree/main/templates/invoice-generator', null, 3),
   ('automation-sites', 'whatsapp-catalog', 'كتالوج واتساب لمنتجاتك', 'حوّل منتجاتك من صور متفرقة على حالة واتساب إلى صفحة كتالوج منظمة بزر طلب مباشر.',
     'مصمم خصيصاً لأسلوب البيع السائد في السوق العربي عبر واتساب: كل منتج له زر يفتح محادثة واتساب جاهزة برسالة تحتوي اسم المنتج وسعره تلقائياً.',
@@ -241,7 +241,7 @@ insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, p
 select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
 from (values
   ('content-design', 'social-caption-generator', 'مولد منشورات السوشيال ميديا', 'اكتب منشورات جذابة لإنستغرام وتيك توك وتويتر خلال ثوانٍ.',
-    'أداة تولّد نصوص منشورات بأساليب متعددة (مرح، احترافي، تسويقي) بالذكاء الاصطناعي المجاني. النسخة الكاملة بدون حد للأحرف.',
+    'أداة تولّد نصوص منشورات بأساليب متعددة (مرح، احترافي، تسويقي) بالذكاء الاصطناعي. النسخة الكاملة بدون حد للأحرف.',
     3, 'content_ai', 'link', null, 'caption', 1),
   ('content-design', 'blog-writer', 'كاتب المقالات الآلي', 'اكتب مسودة مقال متكامل بالعنوان والمقدمة والفقرات من كلمة مفتاحية واحدة.',
     'يوفر ساعات من الكتابة اليدوية، ويصلح كنقطة بداية لمقالات SEO. النسخة الكاملة بدون حد للأحرف.',

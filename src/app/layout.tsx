@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
         <main>{children}</main>
         <footer className="mt-16 border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-500">
-          <p>© {new Date().getFullYear()} سوق تولز — جميع الخدمات تعمل على بنية تحتية مجانية بالكامل.</p>
+          <p>© {new Date().getFullYear()} سوق تولز — جميع الحقوق محفوظة.</p>
           <p className="mt-2 flex items-center justify-center gap-4">
             <a href="/terms" className="hover:text-brand-700">الشروط وسياسة الاسترجاع</a>
             <a href="/privacy" className="hover:text-brand-700">سياسة الخصوصية</a>
