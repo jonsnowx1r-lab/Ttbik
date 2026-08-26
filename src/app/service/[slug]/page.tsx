@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { supabasePublic } from "@/lib/supabase";
 import type { Service } from "@/types";
 import { formatUsd } from "@/lib/utils";
@@ -14,6 +15,17 @@ async function getService(slug: string) {
   const db = supabasePublic();
   const { data } = await db.from("services").select("*").eq("slug", slug).single();
   return data as Service | null;
+}
+
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const service = await getService(params.slug);
+  if (!service) return {};
+  const description = service.short_desc_ar || service.long_desc_ar || undefined;
+  return {
+    title: `${service.name_ar} — ${formatUsd(service.price_usd)} | TTBIK`,
+    description,
+    openGraph: { title: service.name_ar, description, type: "website" },
+  };
 }
 
 export default async function ServicePage({ params }: { params: { slug: string } }) {
