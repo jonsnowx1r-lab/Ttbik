@@ -9,7 +9,8 @@ export function middleware(req: NextRequest) {
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 
   const cookie = req.cookies.get("ttbik_admin")?.value;
-  const isAuthed = !!cookie && cookie === process.env.ADMIN_PASSWORD;
+  const expected = (process.env.ADMIN_PASSWORD || "").trim();
+  const isAuthed = !!cookie && !!expected && cookie === expected;
 
   if (isAuthed) return NextResponse.next();
 
