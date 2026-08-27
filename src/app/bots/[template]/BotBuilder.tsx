@@ -40,7 +40,7 @@ export default function BotBuilder({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "فشل التشغيل");
+      if (!res.ok) throw new Error([data.error, data.detail].filter(Boolean).join("\n") || "فشل التشغيل");
       setResult(`${data.message}\n${data.bot?.bot_username || ""}\nرمز البوت: ${data.bot?.public_code || ""}`);
     } catch (e: any) {
       setError(e.message || "خطأ");
