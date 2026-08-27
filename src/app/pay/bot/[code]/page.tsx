@@ -5,8 +5,7 @@ export default function PayBotPage({
   searchParams,
 }: {
   params: { code: string };
-  searchParams: { kind?: string; uid?: string };
+  searchParams: { uid?: string };
 }) {
-  const kind = searchParams.kind === "withdraw" ? "withdraw" : "deposit";
-  return <PayBotClient code={params.code} kind={kind} uid={String(searchParams.uid || "")} />;
+  return <PayBotClient code={params.code} uid={String(searchParams.uid || "")} />;
 }
