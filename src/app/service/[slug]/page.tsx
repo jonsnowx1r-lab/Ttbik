@@ -59,6 +59,12 @@ export default async function ServicePage({ params }: { params: { slug: string }
             {service.demo_type === "ad_slot_preview" && (
               <AdSlotPreview channelName={service.slug === "channel-ad-slot" ? "@ttbik5" : "@your_channel"} />
             )}
+            {service.demo_type === "studio_tool" && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+                🎬 أداة حقيقية تعمل بالكامل داخل متصفحك — لا رفع لملفاتك لأي خادم. بعد الموافقة على طلبك، تحصل على
+                رابط دائم للنسخة الكاملة بلا حدود استخدام.
+              </div>
+            )}
             {(service.demo_type === "ai_chat" || service.demo_type === "content_ai") &&
               service.tool_route &&
               TOOL_LABELS[service.tool_route as ToolMode] && (

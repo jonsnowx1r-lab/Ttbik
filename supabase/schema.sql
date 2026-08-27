@@ -35,7 +35,7 @@ create table if not exists services (
   short_desc_ar     text,
   long_desc_ar      text,
   price_usd         numeric(10,2) not null default 0,
-  demo_type         text not null check (demo_type in ('ai_chat','bot_simulator','landing_builder','content_ai','catalog_builder','ad_slot_preview')),
+  demo_type         text not null check (demo_type in ('ai_chat','bot_simulator','landing_builder','content_ai','catalog_builder','ad_slot_preview','studio_tool')),
   delivery_type     text not null default 'text' check (delivery_type in ('link','text')),
   delivery_content  text, -- e.g. GitHub repo link, license key, Notion guide link
   tool_route        text, -- for demo_type in ('ai_chat','content_ai'): unlocks /tools/<tool_route>?order=<code> on approval
@@ -181,7 +181,19 @@ insert into categories (slug, name_ar, name_en, description_ar, icon, sort_order
   ('telegram-bots', 'بوتات تليجرام', 'Telegram Bots', 'بوتات جاهزة للتشغيل الفوري لأتمتة الردود وإدارة الطلبات على تليجرام.', '🤖', 1),
   ('ai-translation', 'الترجمة والذكاء الاصطناعي', 'AI & Translation', 'أدوات نصية ذكية بالذكاء الاصطناعي: ترجمة مستندات، تحليل تقارير، ردود آلية.', '🌐', 2),
   ('automation-sites', 'الأتمتة والمواقع', 'Automation & Sites', 'قوالب مواقع وسكربتات أتمتة جاهزة للتشغيل الفوري.', '⚙️', 3),
-  ('content-design', 'المحتوى والتصميم بالذكاء الاصطناعي', 'AI Content', 'كتابة محتوى تسويقي، أوصاف منتجات، ومنشورات سوشيال ميديا بالذكاء الاصطناعي.', '🎨', 4)
+  ('content-design', 'المحتوى والتصميم بالذكاء الاصطناعي', 'AI Content', 'كتابة محتوى تسويقي، أوصاف منتجات، ومنشورات سوشيال ميديا بالذكاء الاصطناعي.', '🎨', 4),
+  ('creative-studio', 'أدوات إبداعية مبتكرة', 'Creative Studio', 'أدوات حقيقية ونادرة تعمل بالكامل داخل متصفحك — لا تجدها بسهولة في أي مكان آخر.', '🎬', 5)
+on conflict (slug) do nothing;
+
+insert into services (category_id, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+select c.id, s.slug, s.name_ar, s.short_desc_ar, s.long_desc_ar, s.price_usd, s.demo_type, s.delivery_type, s.delivery_content, s.tool_route, s.sort_order
+from (values
+  ('creative-studio', 'audio-visualizer', 'استوديو تحويل الصوت إلى فيديو ريلز',
+    'حوّل أي مقطع صوتي إلى فيديو عمودي 9:16 بموجات صوتية متحركة، جاهز للنشر على TikTok وInstagram Reels خلال ثوانٍ.',
+    'أداة حقيقية تعمل بالكامل داخل متصفحك عبر Web Audio API وCanvas وMediaRecorder — بدون رفع ملفاتك لأي خادم. ارفع الصوت وصورة غلاف اختيارية ونصاً، واحصل على فيديو WebM جاهز للنشر فوراً.',
+    12, 'studio_tool', 'link', null, 'audio-visualizer', 1)
+) as s(cat_slug, slug, name_ar, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+join categories c on c.slug = s.cat_slug
 on conflict (slug) do nothing;
 
 insert into services (category_id, slug, name_ar, subcategory, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
