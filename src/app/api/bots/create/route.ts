@@ -5,6 +5,23 @@ import { randomPublicCode, randomSecret, siteBase } from "@/lib/botCodes";
 import { tgGetMe, tgSetWebhook } from "@/lib/tgApi";
 import { isOwnerRequest } from "@/lib/isOwner";
 
+/** Accept only orders tied to a bot-hosting service (slug/name contains bot/بوت). */
+function isBotService(svc: { slug?: string | null; name_ar?: string | null; tool_route?: string | null } | null) {
+  if (!svc) return false;
+  const slug = (svc.slug || "").toLowerCase();
+  const name = (svc.name_ar || "").toLowerCase();
+  const route = (svc.tool_route || "").toLowerCase();
+  return (
+    slug.includes("bot") ||
+    name.includes("بوت") ||
+    route.includes("bot") ||
+    slug.startsWith("ad-") ||
+    slug.includes("campaign") ||
+    slug.includes("store") ||
+    slug.includes("clinic")
+  );
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 });
@@ -32,35 +49,19 @@ export async function POST(req: NextRequest) {
     }
     const { data: order } = await supabaseAdmin()
       .from("orders")
-      .select("id,order_code,status, services(slug, tool_route, name_ar)")
+      .select("id,order_code,status, services(slug, name_ar, tool_route)")
       .eq("order_code", orderCode)
       .maybeSingle();
     if (!order || order.status !== "approved") {
       return NextResponse.json({ error: "الطلب غير موجود أو لم يُعتمد بعد. الإنشاء بعد الدفع والموافقة فقط." }, { status: 402 });
     }
-
-    // Prefer orders tied to a bot-related service; reject clear mismatches when service data exists
-    const svc = (order as any).services as { slug?: string; tool_route?: string; name_ar?: string } | null;
-    if (svc) {
-      const hay = `${svc.slug || ""} ${svc.tool_route || ""} ${svc.name_ar || ""}`.toLowerCase();
-      const looksBot = /bot|بوت|telegram|تليجرام/.test(hay);
-      if (!looksBot) {
-        return NextResponse.json({
-          error: "هذا الطلب ليس لخدمة إنشاء بوت. استخدم رمز طلب معتمد لخدمة البوتات.",
-        }, { status: 402 });
-      }
+    const svc = Array.isArray(order.services) ? order.services[0] : order.services;
+    if (!isBotService(svc)) {
+      return NextResponse.json(
+        { error: "هذا الطلب ليس لخدمة إنشاء بوت. استخدم رمز طلب معتمد لخدمة البوتات فقط." },
+        { status: 402 }
+      );
     }
-
-    // Prevent reuse of the same approved orderCode for multiple bots
-    const { data: existing } = await supabaseAdmin()
-      .from("hosted_bots")
-      .select("id")
-      .contains("config", { orderCode })
-      .maybeSingle();
-    if (existing) {
-      return NextResponse.json({ error: "رمز الطلب مستخدم مسبقاً لإنشاء بوت." }, { status: 402 });
-    }
-
     paidOrderId = order.id;
   }
 
