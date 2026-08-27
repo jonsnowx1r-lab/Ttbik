@@ -14,15 +14,9 @@ export async function POST(req: NextRequest) {
 
   const token = String(body.token || "").trim();
   const ownerContact = String(body.ownerContact || "").trim();
+  const orderCode = String(body.orderCode || "").trim();
   const welcome = String(body.welcome || template.defaults.welcome).trim();
-  const config = {
-    faq: String(body.faq || template.defaults.faq),
-    currencyName: String(body.currencyName || template.defaults.currencyName),
-    contest: String(body.contest || template.defaults.extra.contest || ""),
-    support: String(body.support || ""),
-    hours: String(body.hours || template.defaults.extra.hours || ""),
-    products: String(body.products || "").split("\n").map((s: string) => s.trim()).filter(Boolean).slice(0, 12),
-  };
+  const isOwner = isOwnerRequest(req);
 
   if (!token || !token.includes(":")) {
     return NextResponse.json({ error: "الصق توكن البوت من BotFather" }, { status: 400 });
@@ -31,15 +25,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "أدخل وسيلة تواصل للمالك" }, { status: 400 });
   }
 
+  let paidOrderId: string | null = null;
+  if (!isOwner) {
+    if (!orderCode) {
+      return NextResponse.json({ error: "أدخل رمز طلب معتمد من صفحة الطلب أولاً" }, { status: 402 });
+    }
+    const { data: order } = await supabaseAdmin()
+      .from("orders")
+      .select("id,order_code,status")
+      .eq("order_code", orderCode)
+      .maybeSingle();
+    if (!order || order.status !== "approved") {
+      return NextResponse.json({ error: "الطلب غير موجود أو لم يُعتمد بعد. الإنشاء بعد الدفع والموافقة فقط." }, { status: 402 });
+    }
+    paidOrderId = order.id;
+  }
+
   const me = await tgGetMe(token);
   if (!me.ok || !me.result) {
     return NextResponse.json({ error: "التوكن غير صالح أو بوت محظور" }, { status: 400 });
   }
 
-  const isOwner = isOwnerRequest(req);
   const publicCode = randomPublicCode("B");
   const webhookSecret = randomSecret();
-  const status = isOwner ? "live" : "pending";
+  const status = isOwner || paidOrderId ? "live" : "pending";
+  const config = {
+    faq: String(body.faq || template.defaults.faq),
+    currencyName: String(body.currencyName || template.defaults.currencyName),
+    products: String(body.products || "").split("\n").map((s: string) => s.trim()).filter(Boolean).slice(0, 12),
+    botUsername: me.result.username || "",
+    orderCode: orderCode || null,
+    noWithdraw: true,
+  };
 
   const row = {
     public_code: publicCode,
@@ -49,7 +66,7 @@ export async function POST(req: NextRequest) {
     bot_tg_id: String(me.result.id),
     owner_contact: ownerContact,
     welcome_text: welcome,
-    config: { ...config, botUsername: me.result.username || "" },
+    config,
     status,
     webhook_secret: webhookSecret,
   };
@@ -57,27 +74,22 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabaseAdmin().from("hosted_bots").insert(row).select("id,public_code,status,bot_username").single();
   if (error) {
     return NextResponse.json({
-      error: "تعذر الحفظ في القاعدة. شغّل ملف supabase/pending_migration.sql ثم أعد المحاولة.",
+      error: "تعذر الحفظ في القاعدة. شغّل supabase/pending_migration.sql ثم أعد.",
       detail: error.message,
     }, { status: 500 });
   }
 
   if (status === "live") {
-    const hookUrl = `${siteBase()}/api/bots/hook/${data.id}`;
-    const hook = await tgSetWebhook(token, hookUrl, webhookSecret);
+    const hook = await tgSetWebhook(token, `${siteBase()}/api/bots/hook/${data.id}`, webhookSecret);
     if (!hook.ok) {
       await supabaseAdmin().from("hosted_bots").update({ status: "pending" }).eq("id", data.id);
-      return NextResponse.json({
-        ok: true,
-        warning: "البوت حُفظ لكن تفعيل الويب هوك فشل.",
-        bot: data,
-      });
+      return NextResponse.json({ ok: true, warning: "حُفظ البوت لكن الويب هوك فشل.", bot: data });
     }
   }
 
   return NextResponse.json({
     ok: true,
     bot: data,
-    message: status === "live" ? "البوت يعمل الآن. أرسل /start" : "تم الحفظ بانتظار تفعيل المالك",
+    message: status === "live" ? "البوت يعمل. أرسل /start" : "في انتظار التفعيل",
   });
 }

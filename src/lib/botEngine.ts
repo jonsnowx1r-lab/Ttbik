@@ -35,8 +35,8 @@ async function upsertMember(botId: string, user: TgUser) {
   return data;
 }
 
-function walletLink(bot: HostedBot, userId: number, kind: "deposit" | "withdraw") {
-  return `${siteBase()}/pay/bot/${bot.public_code}?kind=${kind}&uid=${userId}`;
+function depositLink(bot: HostedBot, userId: number) {
+  return `${siteBase()}/pay/bot/${bot.public_code}?uid=${userId}`;
 }
 
 async function sendMenu(bot: HostedBot, template: BotTemplate, chatId: number, text: string) {
@@ -103,7 +103,7 @@ async function routeText(
       bot,
       template,
       chatId,
-      `رصيدك الحالي: ${points} ${template.defaults.currencyName}\n\nإيداع:\n${walletLink(bot, user.id, "deposit")}\n\nسحب:\n${walletLink(bot, user.id, "withdraw")}`
+      `رصيدك: ${points} ${template.defaults.currencyName}\n\nشراء نقاط عبر الموقع (بعد مراجعة المالك):\n${depositLink(bot, user.id)}\n\nالنقاط للاستخدام داخل البوت فقط. لا يوجد سحب نقدي.`
     );
     return;
   }
@@ -114,12 +114,7 @@ async function routeText(
       await sendMenu(bot, template, chatId, `المنتجات:\n• ${items.join("\n• ")}`);
       return;
     }
-    await sendMenu(
-      bot,
-      template,
-      chatId,
-      `لا حملات نشطة حالياً.\n${siteBase()}/bots/live/${bot.public_code}/ads?uid=${user.id}`
-    );
+    await sendMenu(bot, template, chatId, `لا حملات نشطة حالياً.\n${siteBase()}/bots/live/${bot.public_code}/ads?uid=${user.id}`);
     return;
   }
 
