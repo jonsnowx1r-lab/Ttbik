@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase";
 import type { Category, Service } from "@/types";
 import StorefrontBrowser from "@/components/StorefrontBrowser";
+import { BOT_TEMPLATES } from "@/lib/botTemplates";
 
 export const revalidate = 30;
 
@@ -18,31 +20,48 @@ async function getStorefront() {
 
 export default async function HomePage() {
   const { categories, services } = await getStorefront();
+  const visible = categories.filter((c) =>
+    ["telegram-bots", "creative-studio", "automation-sites"].includes(c.slug)
+  );
 
   return (
     <div>
       <section className="bg-hero-glow bg-white">
-        <div className="mx-auto max-w-6xl px-4 pb-10 pt-16 text-center sm:pb-14 sm:pt-20">
+        <div className="mx-auto max-w-6xl px-4 pb-10 pt-14 text-center sm:pb-14 sm:pt-20">
           <span className="inline-block rounded-full border border-brand-200 bg-brand-50 px-4 py-1.5 text-xs font-bold text-brand-700">
-            🚀 السوق العربي لخدمات وأدوات رقمية جاهزة
+            أدوات تعمل فعلياً — وليست ملفات للتحميل
           </span>
           <h1 className="mx-auto mt-5 max-w-3xl text-3xl font-extrabold leading-tight text-slate-900 sm:text-5xl">
-            أدوات وخدمات رقمية حقيقية، بتكلفة تشغيل <span className="text-brand-600">صفر دولار</span>
+            شغّل بوت تليجرام بتوكنك، أو استخدم أداة داخل المتصفح
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base text-slate-600 sm:text-lg">
-            جرّب كل أداة مباشرة قبل الشراء، ثم احصل على وصولك الكامل خلال دقائق عبر تحويل بسيط
-            (بنكي أو USDT) وموافقة إدارية سريعة.
+            منشئ البوتات يستضيف القالب على الموقع. روابط الإيداع والسحب تُولَّد من هنا وتربط رصيد البوت بتحويل بنكي أو USDT بعد المراجعة.
           </p>
-          <div className="mx-auto mt-7 flex max-w-xl flex-wrap items-center justify-center gap-2.5 text-xs font-semibold text-slate-600 sm:text-sm">
-            <span className="rounded-full bg-white px-3.5 py-1.5 shadow-sm ring-1 ring-slate-200">⚡ تسليم فوري</span>
-            <span className="rounded-full bg-white px-3.5 py-1.5 shadow-sm ring-1 ring-slate-200">🔒 دفع آمن</span>
-            <span className="rounded-full bg-white px-3.5 py-1.5 shadow-sm ring-1 ring-slate-200">🧪 جرّب قبل الشراء</span>
-            <span className="rounded-full bg-white px-3.5 py-1.5 shadow-sm ring-1 ring-slate-200">💬 دعم عبر تليجرام</span>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/bots" className="rounded-full bg-brand-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-800">
+              منشئ البوتات
+            </Link>
+            <Link href="/tools" className="rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              كل الأدوات
+            </Link>
+            <Link href="/free-tools" className="rounded-full border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700">
+              أدوات مجانية
+            </Link>
           </div>
         </div>
       </section>
 
-      <StorefrontBrowser categories={categories} services={services} />
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-12 sm:grid-cols-3">
+        {BOT_TEMPLATES.map((t) => (
+          <Link key={t.id} href={`/bots/${t.id}`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md">
+            <div className="text-2xl">{t.icon}</div>
+            <h2 className="mt-2 font-bold text-slate-900">{t.name}</h2>
+            <p className="mt-1 text-sm text-slate-500">{t.tagline}</p>
+          </Link>
+        ))}
+      </section>
+
+      {visible.length > 0 && <StorefrontBrowser categories={visible} services={services} />}
     </div>
   );
 }
