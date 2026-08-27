@@ -2,7 +2,13 @@ import { notFound } from "next/navigation";
 import { getBotTemplate } from "@/lib/botTemplates";
 import BotBuilder from "./BotBuilder";
 
-export default function BotTemplatePage({ params }: { params: { template: string } }) {
+export default function BotTemplatePage({
+  params,
+  searchParams,
+}: {
+  params: { template: string };
+  searchParams: { order?: string };
+}) {
   const template = getBotTemplate(params.template);
   if (!template) notFound();
 
@@ -14,7 +20,7 @@ export default function BotTemplatePage({ params }: { params: { template: string
       </h1>
       <p className="mt-3 max-w-2xl text-slate-600">{template.desc}</p>
       <div className="mt-8">
-        <BotBuilder template={template} />
+        <BotBuilder template={template} initialOrderCode={searchParams.order || ""} />
       </div>
     </div>
   );

@@ -3,10 +3,16 @@
 import { useMemo, useState } from "react";
 import type { BotTemplate } from "@/lib/botTemplates";
 
-export default function BotBuilder({ template }: { template: BotTemplate }) {
+export default function BotBuilder({
+  template,
+  initialOrderCode = "",
+}: {
+  template: BotTemplate;
+  initialOrderCode?: string;
+}) {
   const [token, setToken] = useState("");
   const [ownerContact, setOwnerContact] = useState("");
-  const [orderCode, setOrderCode] = useState("");
+  const [orderCode, setOrderCode] = useState(initialOrderCode);
   const [welcome, setWelcome] = useState(template.defaults.welcome);
   const [faq, setFaq] = useState(template.defaults.faq);
   const [products, setProducts] = useState("منتج تجريبي — 10 نقاط");
@@ -48,8 +54,13 @@ export default function BotBuilder({ template }: { template: BotTemplate }) {
       <form className="space-y-4 rounded-2xl border bg-white p-5" onSubmit={(e) => { e.preventDefault(); launch(); }}>
         <div>
           <label className="text-sm font-bold">رمز الطلب المعتمد</label>
-          <input value={orderCode} onChange={(e) => setOrderCode(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" placeholder="TB-...." />
-          <p className="mt-1 text-xs text-slate-500">اطلب الخدمة وادفع أولاً. بدون طلب موافق لا يُشغّل البوت.</p>
+          <input
+            value={orderCode}
+            onChange={(e) => setOrderCode(e.target.value.toUpperCase())}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm font-mono"
+            placeholder="TB-...."
+          />
+          <p className="mt-1 text-xs text-slate-500">اطلب الخدمة وادفع أولاً. بدون طلب موافق لا يُشغّل البوت. يُملأ تلقائياً من ?order= في الرابط.</p>
         </div>
         <div>
           <label className="text-sm font-bold">توكن @BotFather</label>
