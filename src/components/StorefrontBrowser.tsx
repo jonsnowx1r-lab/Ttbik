@@ -9,8 +9,9 @@ import CategoryBanner, { CategoryIcon } from "@/components/CategoryBanner";
 
 /**
  * Sidebar-driven category browser: only the selected category's services
- * render at a time, instead of stacking every category on one long page.
- * Keeps the page tidy as more sections/services are added over time.
+ * render at a time. A real vertical list — persistent on desktop, a
+ * slide-in drawer (opened via a ☰ button) on mobile — rather than a
+ * horizontal pill row, which people don't read as "a sidebar".
  */
 export default function StorefrontBrowser({
   categories,
@@ -20,6 +21,7 @@ export default function StorefrontBrowser({
   services: Service[];
 }) {
   const [activeId, setActiveId] = useState(categories[0]?.id);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const active = categories.find((c) => c.id === activeId) ?? categories[0];
 
   if (!active) return null;
@@ -37,42 +39,62 @@ export default function StorefrontBrowser({
   }
   const orderedGroups = [...groups.entries()].sort(([a], [b]) => (a === "" ? -1 : a.localeCompare(b, "ar")));
 
+  function selectCategory(id: string) {
+    setActiveId(id);
+    setDrawerOpen(false);
+  }
+
+  const categoryList = (
+    <nav className="space-y-1">
+      {categories.map((cat) => (
+        <button
+          key={cat.id}
+          onClick={() => selectCategory(cat.id)}
+          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+            cat.id === active.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          <CategoryIcon slug={cat.slug} className="h-5 w-5 shrink-0" />
+          <span className="flex-1 text-right">{cat.name_ar}</span>
+        </button>
+      ))}
+    </nav>
+  );
+
   return (
     <section id="categories" className="mx-auto max-w-6xl px-4 pb-20">
-      {/* Mobile: horizontal pill selector */}
-      <div className="mb-6 flex gap-2 overflow-x-auto pb-1 lg:hidden [&::-webkit-scrollbar]:hidden">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveId(cat.id)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-semibold transition ${
-              cat.id === active.id
-                ? "border-brand-600 bg-brand-50 text-brand-700"
-                : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
-            }`}
-          >
-            <CategoryIcon slug={cat.slug} className="h-4 w-4" /> {cat.name_ar}
-          </button>
-        ))}
-      </div>
+      {/* Mobile: button that opens the sidebar as a slide-in drawer */}
+      <button
+        onClick={() => setDrawerOpen(true)}
+        className="mb-6 flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 lg:hidden"
+      >
+        <span aria-hidden>☰</span> الأقسام —{" "}
+        <span className="text-brand-700">{active.name_ar}</span>
+      </button>
+
+      {drawerOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+          <div className="absolute inset-y-0 right-0 w-72 max-w-[80vw] overflow-y-auto bg-white p-4 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-bold text-slate-900">الأقسام</h2>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100"
+                aria-label="إغلاق"
+              >
+                ✕
+              </button>
+            </div>
+            {categoryList}
+          </div>
+        </div>
+      )}
 
       <div className="lg:flex lg:items-start lg:gap-8">
         {/* Desktop: persistent sidebar */}
         <aside className="hidden shrink-0 lg:block lg:w-60">
-          <nav className="sticky top-24 space-y-1">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveId(cat.id)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                  cat.id === active.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <CategoryIcon slug={cat.slug} className="h-5 w-5 shrink-0" />
-                <span className="flex-1 text-right">{cat.name_ar}</span>
-              </button>
-            ))}
-          </nav>
+          <div className="sticky top-24">{categoryList}</div>
         </aside>
 
         {/* Active category content */}
