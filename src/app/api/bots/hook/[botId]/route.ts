@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: { botId: stri
     .maybeSingle();
 
   if (!bot || !bot.bot_token) return NextResponse.json({ ok: true });
-  if (bot.webhook_secret && secret && secret !== bot.webhook_secret) {
+  if (!bot.webhook_secret || !secret || secret !== bot.webhook_secret) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: { botId: stri
     try {
       await handleBotUpdate(bot, update);
     } catch {
-      // never fail Telegram retries with a 500 if possible
+      // keep Telegram from retry-storming on handler bugs
     }
   }
   return NextResponse.json({ ok: true });
