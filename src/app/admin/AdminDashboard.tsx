@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import type { Order } from "@/types";
 
@@ -41,9 +42,14 @@ export default function AdminDashboard() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <h1 className="mb-6 text-xl font-extrabold text-slate-900">
-        لوحة التحكم — {pending.length} طلب بانتظار المراجعة
-      </h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-extrabold text-slate-900">
+          لوحة التحكم — {pending.length} طلب بانتظار المراجعة
+        </h1>
+        <Link href="/admin/bots" className="rounded-full bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900">
+          البوتات المستضافة
+        </Link>
+      </div>
 
       <div className="space-y-4">
         {pending.map((o) => (
