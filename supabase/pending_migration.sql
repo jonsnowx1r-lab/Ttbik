@@ -60,3 +60,16 @@ alter table public.bot_members enable row level security;
 alter table public.bot_wallet_tx enable row level security;
 alter table public.bot_ads enable row level security;
 alter table public.bot_appointments enable row level security;
+
+-- Purchasable service unlocking access to /bots (the hosted-bot builder).
+-- /api/bots/create requires an approved order for a service whose slug/
+-- tool_route/name contains "bot"/"بوت"/"telegram"/"تليجرام" — this is that
+-- service, giving customers a direct, obvious thing to order instead of
+-- having to realize any bot-related service's order code happens to work.
+insert into services (category_id, slug, name_ar, subcategory, short_desc_ar, long_desc_ar, price_usd, demo_type, delivery_type, delivery_content, tool_route, sort_order)
+select id, 'hosted-bot-builder', 'إنشاء بوت مستضاف بقالب جاهز', 'الإعلانات والتسويق',
+  'اختر قالباً (حملة إعلانية، متجر، عيادة)، ضع توكن بوتك، ونشغّله فعلياً على استضافة الموقع.',
+  'بعد الموافقة على طلبك، استخدم رمز الطلب في صفحة /bots لتفعيل بوتك بالقالب الذي تختاره. النقاط داخل البوت للاستخدام الداخلي فقط، بلا سحب نقدي — الإيداع فقط عبر تحويل بنكي أو USDT بموافقة يدوية.',
+  15, 'bot_simulator', 'text', 'اذهب إلى /bots، اختر قالباً، وأدخل رمز طلبك لتفعيل البوت.', null, 6
+from categories where slug = 'telegram-bots'
+on conflict (slug) do nothing;
