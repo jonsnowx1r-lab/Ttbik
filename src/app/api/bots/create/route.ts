@@ -5,7 +5,7 @@ import { randomPublicCode, randomSecret, siteBase } from "@/lib/botCodes";
 import { tgGetMe, tgSetWebhook } from "@/lib/tgApi";
 import { isOwnerRequest } from "@/lib/isOwner";
 
-/** Accept only orders tied to a bot-hosting service (slug/name/route contains bot/بوت/telegram/تليجرام, or exact hosted-bot-builder). */
+/** Accept only orders tied to a bot-hosting service. */
 function isBotService(svc: { slug?: string | null; name_ar?: string | null; tool_route?: string | null } | null) {
   if (!svc) return false;
   const slug = (svc.slug || "").toLowerCase();
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         { status: 402 }
       );
     }
-    // Prevent reuse of the same paid orderCode for multiple bots
+    // Prevent reuse of the same orderCode for multiple bots
     const { data: existing } = await supabaseAdmin()
       .from("hosted_bots")
       .select("id")
