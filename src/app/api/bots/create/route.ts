@@ -5,20 +5,20 @@ import { randomPublicCode, randomSecret, siteBase } from "@/lib/botCodes";
 import { tgGetMe, tgSetWebhook } from "@/lib/tgApi";
 import { isOwnerRequest } from "@/lib/isOwner";
 
-/** Accept only orders tied to a bot-hosting service (slug/name contains bot/بوت). */
+/** Accept only orders tied to a bot-hosting service (slug/name/route contains bot/بوت/telegram/تليجرام, or exact hosted-bot-builder). */
 function isBotService(svc: { slug?: string | null; name_ar?: string | null; tool_route?: string | null } | null) {
   if (!svc) return false;
   const slug = (svc.slug || "").toLowerCase();
   const name = (svc.name_ar || "").toLowerCase();
   const route = (svc.tool_route || "").toLowerCase();
+  if (slug === "hosted-bot-builder") return true;
   return (
     slug.includes("bot") ||
     name.includes("بوت") ||
     route.includes("bot") ||
-    slug.startsWith("ad-") ||
-    slug.includes("campaign") ||
-    slug.includes("store") ||
-    slug.includes("clinic")
+    slug.includes("telegram") ||
+    name.includes("تليجرام") ||
+    route.includes("telegram")
   );
 }
 
@@ -61,6 +61,15 @@ export async function POST(req: NextRequest) {
         { error: "هذا الطلب ليس لخدمة إنشاء بوت. استخدم رمز طلب معتمد لخدمة البوتات فقط." },
         { status: 402 }
       );
+    }
+    // Prevent reuse of the same paid orderCode for multiple bots
+    const { data: existing } = await supabaseAdmin()
+      .from("hosted_bots")
+      .select("id")
+      .contains("config", { orderCode })
+      .maybeSingle();
+    if (existing) {
+      return NextResponse.json({ error: "رمز الطلب مستخدم مسبقاً لإنشاء بوت." }, { status: 402 });
     }
     paidOrderId = order.id;
   }
