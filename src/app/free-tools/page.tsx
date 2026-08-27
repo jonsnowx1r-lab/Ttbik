@@ -8,6 +8,11 @@ export const metadata: Metadata = {
 
 const TOOLS = [
   {
+    href: "/free-tools/image-optimizer",
+    title: "ضغط وتحويل الصور (WebP/JPEG/PNG)",
+    desc: "اضغط صورك وحوّل صيغتها فوراً داخل متصفحك — بلا رفع لأي خادم وبلا حدود استخدام.",
+  },
+  {
     href: "/free-tools/whatsapp-link",
     title: "مولد رابط الطلب عبر واتساب",
     desc: "رابط جاهز يفتح محادثة واتساب مع رسالة طلب معبّأة تلقائياً لمنتجك.",
