@@ -61,6 +61,16 @@ alter table public.bot_wallet_tx enable row level security;
 alter table public.bot_ads enable row level security;
 alter table public.bot_appointments enable row level security;
 
+-- Same lesson as earlier in this project: RLS alone does not grant access.
+-- These tables were created via SQL Editor, so service_role (used by every
+-- /api/bots/* route through supabaseAdmin()) needs an explicit GRANT — RLS
+-- BYPASSRLS only skips policy checks, it does not skip base table privileges.
+-- Root cause of "permission denied for table hosted_bots" in production.
+grant select, insert, update, delete on
+  public.hosted_bots, public.bot_members, public.bot_wallet_tx,
+  public.bot_ads, public.bot_appointments
+to service_role;
+
 -- Purchasable service unlocking access to /bots (the hosted-bot builder).
 -- /api/bots/create requires an approved order for a service whose slug/
 -- tool_route/name contains "bot"/"بوت"/"telegram"/"تليجرام" — this is that

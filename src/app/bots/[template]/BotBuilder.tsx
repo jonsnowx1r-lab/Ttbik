@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { BotTemplate } from "@/lib/botTemplates";
 
 export default function BotBuilder({
@@ -60,7 +61,13 @@ export default function BotBuilder({
             className="mt-1 w-full rounded-xl border px-3 py-2 text-sm font-mono"
             placeholder="TB-...."
           />
-          <p className="mt-1 text-xs text-slate-500">اطلب الخدمة وادفع أولاً. بدون طلب موافق لا يُشغّل البوت. يُملأ تلقائياً من ?order= في الرابط.</p>
+          <p className="mt-1 text-xs text-slate-500">
+            لا تملك رمزاً بعد؟{" "}
+            <Link href="/how-it-works" className="font-semibold text-brand-700 underline">
+              اطلب خدمة «إنشاء بوت مستضاف» أولاً وشاهد كيف تحصل عليه
+            </Link>
+            . بدون طلب موافق لا يُشغّل البوت. يُملأ تلقائياً من ?order= في الرابط بعد الموافقة.
+          </p>
         </div>
         <div>
           <label className="text-sm font-bold">توكن @BotFather</label>

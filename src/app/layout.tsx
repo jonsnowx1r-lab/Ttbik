@@ -29,6 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/#categories" className="rounded-full px-3 py-1.5 transition hover:bg-brand-50 hover:text-brand-700">
                 الأقسام
               </a>
+              <a href="/how-it-works" className="rounded-full px-3 py-1.5 transition hover:bg-brand-50 hover:text-brand-700">
+                كيف يعمل الموقع؟
+              </a>
               <a
                 href="/free-tools"
                 className="rounded-full px-3 py-1.5 text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700"
