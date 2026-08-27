@@ -55,11 +55,29 @@ create table if not exists public.bot_appointments (
   created_at timestamptz not null default now()
 );
 
+-- Tracks which member has already been rewarded for which ad, so the same
+-- ad can never be claimed twice by the same person (the "الإعلانات" feature
+-- was previously just a dead-end message — this table plus the /bots/live
+-- page and /api/bots/ads/claim route make it a real watch-and-earn loop).
+create table if not exists public.bot_ad_views (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.hosted_bots(id) on delete cascade,
+  ad_id uuid not null references public.bot_ads(id) on delete cascade,
+  tg_user_id text not null,
+  created_at timestamptz not null default now(),
+  unique (ad_id, tg_user_id)
+);
+
+-- Daily check-in bonus + one-time referral credit tracking on bot_members.
+alter table public.bot_members add column if not exists last_checkin date;
+alter table public.bot_members add column if not exists referred_by text;
+
 alter table public.hosted_bots enable row level security;
 alter table public.bot_members enable row level security;
 alter table public.bot_wallet_tx enable row level security;
 alter table public.bot_ads enable row level security;
 alter table public.bot_appointments enable row level security;
+alter table public.bot_ad_views enable row level security;
 
 -- Same lesson as earlier in this project: RLS alone does not grant access.
 -- These tables were created via SQL Editor, so service_role (used by every
@@ -68,7 +86,7 @@ alter table public.bot_appointments enable row level security;
 -- Root cause of "permission denied for table hosted_bots" in production.
 grant select, insert, update, delete on
   public.hosted_bots, public.bot_members, public.bot_wallet_tx,
-  public.bot_ads, public.bot_appointments
+  public.bot_ads, public.bot_appointments, public.bot_ad_views
 to service_role;
 
 -- Purchasable service unlocking access to /bots (the hosted-bot builder).

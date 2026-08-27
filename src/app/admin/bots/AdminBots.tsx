@@ -42,6 +42,11 @@ export default function AdminBots() {
             <div className="mt-2 flex gap-2">
               <button onClick={() => act(b.id, "live")} className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs text-white">تفعيل</button>
               <button onClick={() => act(b.id, "pause")} className="rounded-xl bg-slate-700 px-3 py-1.5 text-xs text-white">إيقاف</button>
+              {b.template_type === "ad-campaign" && (
+                <Link href={`/admin/bots/${b.id}/ads`} className="rounded-xl bg-brand-700 px-3 py-1.5 text-xs text-white">
+                  إدارة الإعلانات
+                </Link>
+              )}
             </div>
           </div>
         ))}

@@ -74,17 +74,48 @@ export async function handleBotUpdate(bot: HostedBot, update: any) {
   const member = await upsertMember(bot.id, user);
 
   if (text.startsWith("/start") || text === "Home") {
+    const payload = text.startsWith("/start") ? text.slice(6).trim() : "";
+    const freshBalance = await maybeCreditReferral(bot, member, user, payload);
     const welcome = bot.welcome_text || template.defaults.welcome;
     await sendMenu(
       bot,
       template,
       chatId,
-      `${welcome}\n\nرمز البوت: ${bot.public_code}\nرصيدك: ${member.points ?? 0} ${template.defaults.currencyName}`
+      `${welcome}\n\nرمز البوت: ${bot.public_code}\nرصيدك: ${freshBalance} ${template.defaults.currencyName}`
     );
     return;
   }
 
   await routeText(bot, template, member, chatId, user, text);
+}
+
+/**
+ * A referral link is `t.me/<username>?start=<public_code>_<referrerId>`,
+ * which Telegram delivers as `/start <public_code>_<referrerId>`. Credits
+ * the referrer exactly once per referred user (guarded by member.referred_by
+ * being null) so the same signup can't be replayed for repeat rewards.
+ * Returns the current member's up-to-date point balance either way.
+ */
+async function maybeCreditReferral(bot: HostedBot, member: any, user: TgUser, payload: string) {
+  if (member.referred_by || !payload.includes("_")) return Number(member.points || 0);
+  const [code, referrerId] = payload.split("_");
+  if (code !== bot.public_code || !referrerId || referrerId === String(user.id)) {
+    return Number(member.points || 0);
+  }
+  const db = supabaseAdmin();
+  const { data: referrer } = await db
+    .from("bot_members")
+    .select("id, points")
+    .eq("bot_id", bot.id)
+    .eq("tg_user_id", referrerId)
+    .maybeSingle();
+  if (!referrer) return Number(member.points || 0);
+
+  const REFERRAL_BONUS = 5;
+  await db.from("bot_members").update({ points: Number(referrer.points || 0) + REFERRAL_BONUS }).eq("id", referrer.id);
+  await db.from("bot_members").update({ referred_by: referrerId }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
+  await tgSend(bot.bot_token, Number(referrerId), `🎉 أحلت عضواً جديداً وحصلت على ${REFERRAL_BONUS} نقطة إضافية!`).catch(() => null);
+  return Number(member.points || 0);
 }
 
 async function routeText(
@@ -114,7 +145,51 @@ async function routeText(
       await sendMenu(bot, template, chatId, `المنتجات:\n• ${items.join("\n• ")}`);
       return;
     }
-    await sendMenu(bot, template, chatId, `لا حملات نشطة حالياً.\n${siteBase()}/bots/live/${bot.public_code}/ads?uid=${user.id}`);
+    const db = supabaseAdmin();
+    const { data: ads } = await db
+      .from("bot_ads")
+      .select("id, title, reward_points")
+      .eq("bot_id", bot.id)
+      .eq("is_active", true);
+    const link = `${siteBase()}/bots/live/${bot.public_code}/ads?uid=${user.id}`;
+    if (!ads || ads.length === 0) {
+      await sendMenu(bot, template, chatId, `لا حملات نشطة حالياً. تابع هذه القائمة، ستظهر هنا فور إطلاق حملة جديدة.`);
+      return;
+    }
+    const list = ads.map((a) => `• ${a.title} — ${a.reward_points} ${template.defaults.currencyName}`).join("\n");
+    await sendMenu(bot, template, chatId, `الحملات النشطة الآن:\n${list}\n\nشاهد وأكّد من هنا لتُضاف النقاط فوراً:\n${link}`);
+    return;
+  }
+
+  if (text === "🎁 حضور يومي") {
+    const db = supabaseAdmin();
+    const today = new Date().toISOString().slice(0, 10);
+    if (member.last_checkin === today) {
+      await sendMenu(bot, template, chatId, `سجّلت حضورك اليوم بالفعل. عد غداً لتحصل على نقاط إضافية 🎁`);
+      return;
+    }
+    const CHECKIN_BONUS = 2;
+    const newPoints = points + CHECKIN_BONUS;
+    await db.from("bot_members").update({ points: newPoints, last_checkin: today }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
+    await sendMenu(bot, template, chatId, `🎁 حصلت على ${CHECKIN_BONUS} ${template.defaults.currencyName} لحضورك اليوم!\nرصيدك الآن: ${newPoints}`);
+    return;
+  }
+
+  if (text === "🏆 المتصدرون") {
+    const db = supabaseAdmin();
+    const { data: top } = await db
+      .from("bot_members")
+      .select("display_name, points")
+      .eq("bot_id", bot.id)
+      .order("points", { ascending: false })
+      .limit(5);
+    if (!top || top.length === 0) {
+      await sendMenu(bot, template, chatId, `لا يوجد أعضاء بعد.`);
+      return;
+    }
+    const medals = ["🥇", "🥈", "🥉", "4.", "5."];
+    const list = top.map((m, i) => `${medals[i]} ${m.display_name || "عضو"} — ${m.points} ${template.defaults.currencyName}`).join("\n");
+    await sendMenu(bot, template, chatId, `🏆 المتصدرون:\n${list}`);
     return;
   }
 
