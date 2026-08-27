@@ -4,7 +4,7 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isProtectedPage = pathname.startsWith("/admin") && pathname !== "/admin/login";
-  const isProtectedApi = pathname.startsWith("/api/admin");
+  const isProtectedApi = pathname.startsWith("/api/admin") && pathname !== "/api/admin/login";
 
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 

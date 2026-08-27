@@ -19,7 +19,8 @@ export default function AdminLoginPage() {
       router.push("/admin");
       router.refresh();
     } else {
-      setError("كلمة المرور غير صحيحة");
+      const data = await res.json().catch(() => ({}));
+      setError(data?.error ? `${data.error} (HTTP ${res.status})` : `تعذّر تسجيل الدخول (HTTP ${res.status})`);
     }
   }
 
