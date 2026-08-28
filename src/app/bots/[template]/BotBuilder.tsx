@@ -16,7 +16,9 @@ export default function BotBuilder({
   const [orderCode, setOrderCode] = useState(initialOrderCode);
   const [welcome, setWelcome] = useState(template.defaults.welcome);
   const [faq, setFaq] = useState(template.defaults.faq);
-  const [products, setProducts] = useState("منتج تجريبي — 10 نقاط");
+  const [products, setProducts] = useState(
+    template.id === "clinic" ? "استشارة عامة\nفحص دوري" : "منتج تجريبي — 10 نقاط"
+  );
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function BotBuilder({
           orderCode,
           welcome,
           faq,
-          products: template.id === "store" ? products : "",
+          products: template.id === "store" || template.id === "clinic" ? products : "",
         }),
       });
       const data = await res.json();
@@ -85,8 +87,11 @@ export default function BotBuilder({
           <label className="text-sm font-bold">الأسئلة الشائعة</label>
           <textarea value={faq} onChange={(e) => setFaq(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />
         </div>
-        {template.id === "store" && (
-          <textarea value={products} onChange={(e) => setProducts(e.target.value)} rows={3} className="w-full rounded-xl border px-3 py-2 text-sm" />
+        {(template.id === "store" || template.id === "clinic") && (
+          <div>
+            <label className="text-sm font-bold">{template.id === "clinic" ? "الخدمات (سطر لكل خدمة)" : "المنتجات (سطر لكل منتج)"}</label>
+            <textarea value={products} onChange={(e) => setProducts(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />
+          </div>
         )}
         <button disabled={busy} className="w-full rounded-xl bg-brand-700 py-3 text-sm font-bold text-white disabled:opacity-50">
           {busy ? "..." : "تشغيل البوت"}
