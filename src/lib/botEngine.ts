@@ -139,12 +139,23 @@ async function routeText(
     return;
   }
 
-  if (text === "الإعلانات" || text === "المنتجات" || text === "خدماتنا") {
+  if (text === "المنتجات" || (text === "خدماتنا" && template.id === "clinic")) {
     if (template.id === "store") {
       const items = Array.isArray(cfg.products) && cfg.products.length ? cfg.products : ["المنتج الأساسي"];
       await sendMenu(bot, template, chatId, `المنتجات:\n• ${items.join("\n• ")}`);
       return;
     }
+    if (template.id === "clinic") {
+      const items =
+        (Array.isArray(cfg.services) && cfg.services.length ? cfg.services : null) ||
+        (Array.isArray(cfg.products) && cfg.products.length ? cfg.products : null) ||
+        [template.defaults.extra?.hours || "استشارة عامة"];
+      await sendMenu(bot, template, chatId, `خدماتنا:\n• ${items.join("\n• ")}`);
+      return;
+    }
+  }
+
+  if (text === "الإعلانات") {
     const db = supabaseAdmin();
     const { data: ads } = await db
       .from("bot_ads")
