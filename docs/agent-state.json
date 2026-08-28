@@ -1,0 +1,19 @@
+{
+  "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
+  "branch": "claude/free-services-marketplace-h6rwk2",
+  "last_seen_comment_id": 5452515420,
+  "last_actor": "grok",
+  "updated_at": "2026-08-28T18:57:00Z",
+  "head_sha": null,
+  "open": [
+    "hosted_bots GRANT service_role on live Supabase — permission denied is DB privilege, not app code",
+    "confirm NEXT_PUBLIC_SITE_URL on Vercel"
+  ],
+  "resolved": [
+    "no cash withdraw from bots",
+    "orderCode required + bot-service check + no reuse",
+    "hosted-bot-builder service row in pending_migration.sql",
+    "BotBuilder shows supabase detail",
+    "do not reopen closed PR threads after reconnect"
+  ]
+}
