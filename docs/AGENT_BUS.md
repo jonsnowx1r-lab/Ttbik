@@ -1,33 +1,25 @@
 # Agent bus — Claude + Grok
 
 Live channel: https://github.com/jonsnowx1r-lab/Ttbik/pull/2
-State file: `docs/agent-state.json`
+State: `docs/agent-state.json`
+Inbox (Grok → Claude while Grok is offline): `docs/agent-inbox.md`
+Outbox (Claude → Grok while Grok is offline): `docs/agent-outbox.md`
 
-This is not a daemon. Neither agent stays awake 24/7. The bus exists so a reconnect does not reopen closed work.
+Not a daemon. Files persist work across disconnects. That is the retrospective link.
 
-## Hard limits (do not lie about these)
-- Grok chat dies when the human closes the app.
-- Grok background runs need quota. Quota exhaustion = silent miss.
-- Claude Code wakes on PR events it subscribed to. That is Claude-side only.
-- No repo file can keep an LLM process alive on xAI or Anthropic servers.
+## Cycle (every scheduled Grok run)
+1. Read `agent-state.json`, `agent-outbox.md`, last 8 PR #2 comments.
+2. Ignore comment ids ≤ `last_seen_comment_id` and anything in `resolved`.
+3. If outbox has an open task in Grok files: implement it, push, mark done in outbox + state.
+4. If no outbox task: pick ONE open site improvement from `open` or invent one small paid tool idea, write a short proposal in inbox + one PR comment.
+5. If a proposal is already waiting with no Claude ack: do not spam. Stop.
+6. Update `last_seen_comment_id` and `updated_at` even when you only read.
 
-## Protocol
-1. Before any PR comment or code change, read `docs/agent-state.json`.
-2. Only act on a PR comment whose numeric id is **greater than** `last_seen_comment_id`.
-3. If the topic is listed under `resolved`, do not reply. Do not re-implement.
-4. After acting, update `agent-state.json` in the same commit or the next one:
-   - `last_seen_comment_id`
-   - `last_actor` (`claude` | `grok`)
-   - `open` / `resolved`
-   - `head_sha` of the branch you just pushed
-5. Tags: first line `🔵 CLAUDE:` or `🤖 GROK:`.
-6. One actionable ask per comment. No restating closed decisions.
-7. File ownership:
-   - Grok: `src/lib/botEngine.ts`, `botTemplates.ts`, `tgApi.ts`, `botCodes.ts`, `src/app/bots/**`, `src/app/api/bots/**`, `src/app/pay/bot/**`
-   - Claude: site shell, admin, orders, migrations, Vercel/env when he can reach them
-8. If you come back after a gap: read state + last 5 comments. If the last comment already closed the topic, write nothing.
+## Ownership
+- Grok implements: botEngine, botTemplates, tgApi, botCodes, src/app/bots/**, src/app/api/bots/**, src/app/pay/bot/**
+- Claude implements: site shell, admin, orders, migrations, env/Vercel
+- Cross-file work: propose first, wait for ack, then split.
 
-## Product rules already resolved
-- No cash withdraw from hosted bots. Deposit buys in-bot points after admin review.
-- Create bot requires approved `orderCode` for a bot service, except site owner.
-- One approved order = one bot.
+## Product rules (resolved)
+- No cash withdraw from hosted bots.
+- Paid orderCode for create, except owner. One order = one bot.
