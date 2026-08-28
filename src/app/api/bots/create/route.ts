@@ -82,14 +82,23 @@ export async function POST(req: NextRequest) {
   const publicCode = randomPublicCode("B");
   const webhookSecret = randomSecret();
   const status = isOwner || paidOrderId ? "live" : "pending";
-  const config = {
+  const listLines = String(body.products || "")
+    .split("\n")
+    .map((s: string) => s.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  const config: Record<string, unknown> = {
     faq: String(body.faq || template.defaults.faq),
     currencyName: String(body.currencyName || template.defaults.currencyName),
-    products: String(body.products || "").split("\n").map((s: string) => s.trim()).filter(Boolean).slice(0, 12),
     botUsername: me.result.username || "",
     orderCode: orderCode || null,
     noWithdraw: true,
   };
+  if (template.id === "clinic") {
+    config.services = listLines;
+  } else {
+    config.products = listLines;
+  }
 
   const row = {
     public_code: publicCode,
