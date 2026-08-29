@@ -92,7 +92,10 @@ export async function POST(req: NextRequest) {
     currencyName: String(body.currencyName || template.defaults.currencyName),
     botUsername: me.result.username || "",
     orderCode: orderCode || null,
-    noWithdraw: true,
+    // Not read anywhere in the bot engine (withdrawal eligibility is decided
+    // by template.id === "ad-campaign" directly) — kept only as accurate
+    // metadata reflecting the actual policy per template.
+    noWithdraw: template.id !== "ad-campaign",
   };
   if (template.id === "clinic") {
     config.services = listLines;

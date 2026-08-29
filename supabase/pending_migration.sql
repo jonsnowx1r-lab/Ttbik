@@ -72,6 +72,19 @@ create table if not exists public.bot_ad_views (
 alter table public.bot_members add column if not exists last_checkin date;
 alter table public.bot_members add column if not exists referred_by text;
 
+-- Needed for the ad-campaign withdrawal eligibility check (minimum account
+-- age before a first withdrawal request, per owner decision 2026-08-29).
+-- Existing rows backfill to now() — acceptable since there are no real
+-- public users yet (admin-testing phase only).
+alter table public.bot_members add column if not exists created_at timestamptz not null default now();
+
+-- Medical-facilities bot: location is determined by having the member share
+-- their phone number (Telegram request_contact button), which carries an
+-- international dialing code we can map to a country — not from the
+-- Telegram user id itself (owner decision 2026-08-29, question 7.1).
+alter table public.bot_members add column if not exists phone_number text;
+alter table public.bot_members add column if not exists country_code text;
+
 -- Optional "join our channel" requirement on an ad: when set, /api/bots/ads/claim
 -- verifies real Telegram channel membership via getChatMember before awarding
 -- points, instead of trusting an honesty-based "I watched it" click.
@@ -101,13 +114,13 @@ create table if not exists public.marketplace_listings (
   created_at timestamptz not null default now()
 );
 
--- Medical-facilities system (pharmacy/hospital/clinic/medical point) — schema
--- only, prepared ahead of the bot-engine work for it. One unified table per
--- facility_type instead of four near-identical tables (see project brief
--- section 10.2). Bot-engine wiring is intentionally NOT built yet: it
--- depends on two open product decisions (how a user's location/country is
--- determined, and the pharmacist/facility verification method) that are
--- still pending the owner's answer.
+-- Medical-facilities system (pharmacy/hospital/clinic/medical point). One
+-- unified table per facility_type instead of four near-identical tables
+-- (see project brief section 10.2). Verification: license number + a photo
+-- of the license (owner decision 2026-08-29, question 7.2) — the photo is
+-- kept as a Telegram file_id (Telegram already hosts it for free) instead of
+-- uploading to Supabase Storage, so there is zero extra storage cost; the
+-- admin views it by fetching getFile with the bot's own token.
 create table if not exists public.locations (
   id uuid primary key default gen_random_uuid(),
   parent_id uuid references public.locations(id) on delete cascade,
@@ -115,14 +128,30 @@ create table if not exists public.locations (
   name text not null
 );
 
+-- Seed: Syria's 14 governorates as the top-level location entries the owner
+-- explicitly used as the flagship example. Cities/districts/villages are
+-- added incrementally later (by admin, or as real facilities register) —
+-- not seeded here to avoid guessing an exhaustive, unverified city list.
+insert into public.locations (level, name)
+select 'governorate', g from (values
+  ('دمشق'), ('ريف دمشق'), ('حلب'), ('حمص'), ('حماة'), ('اللاذقية'),
+  ('طرطوس'), ('إدلب'), ('درعا'), ('السويداء'), ('القنيطرة'),
+  ('دير الزور'), ('الرقة'), ('الحسكة')
+) as t(g)
+where not exists (
+  select 1 from public.locations l where l.level = 'governorate' and l.name = t.g
+);
+
 create table if not exists public.medical_facilities (
   id uuid primary key default gen_random_uuid(),
   bot_id uuid not null references public.hosted_bots(id) on delete cascade,
   facility_type text not null, -- pharmacy | hospital | clinic | medical_point
   name text not null,
-  location_id uuid references public.locations(id),
+  governorate_id uuid references public.locations(id),
+  city_text text, -- free text for now; upgrade to a locations row once a real city list exists
   owner_tg_user_id text not null,
   license_number text,
+  license_photo_file_id text,
   verification_status text not null default 'pending', -- pending | verified | rejected
   created_at timestamptz not null default now()
 );

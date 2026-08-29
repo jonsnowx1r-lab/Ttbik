@@ -57,3 +57,14 @@ export async function tgIsChannelMember(token: string, channelUsername: string, 
   if (!res.ok || !res.result) return false;
   return ["member", "administrator", "creator"].includes(res.result.status);
 }
+
+/**
+ * Resolves a Telegram file_id (e.g. a license photo submitted to the
+ * medical-facilities bot) to a temporary direct download URL. Telegram
+ * already hosts the file — this avoids any Supabase Storage cost.
+ */
+export async function tgGetFileUrl(token: string, fileId: string): Promise<string | null> {
+  const res = await tgCall<{ file_path?: string }>(token, "getFile", { file_id: fileId });
+  if (!res.ok || !res.result?.file_path) return null;
+  return `${TG_API}/file/bot${token}/${res.result.file_path}`;
+}

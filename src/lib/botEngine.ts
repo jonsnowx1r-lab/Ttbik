@@ -3,8 +3,8 @@ import { getBotTemplate, replyKeyboard, type BotTemplate } from "@/lib/botTempla
 import { siteBase } from "@/lib/botCodes";
 import { tgAnswerCallback, tgSend } from "@/lib/tgApi";
 
-type TgUser = { id: number; username?: string; first_name?: string; last_name?: string };
-type HostedBot = {
+export type TgUser = { id: number; username?: string; first_name?: string; last_name?: string };
+export type HostedBot = {
   id: string;
   public_code: string;
   template_type: string;
@@ -14,7 +14,7 @@ type HostedBot = {
   status: string;
 };
 
-async function upsertMember(botId: string, user: TgUser) {
+export async function upsertMember(botId: string, user: TgUser) {
   const db = supabaseAdmin();
   const { data: existing } = await db
     .from("bot_members")
@@ -39,7 +39,15 @@ function depositLink(bot: HostedBot, userId: number) {
   return `${siteBase()}/pay/bot/${bot.public_code}?uid=${userId}`;
 }
 
-async function sendMenu(bot: HostedBot, template: BotTemplate, chatId: number, text: string) {
+// Withdrawal eligibility for the ad-campaign bot only (the one explicit
+// exception to the site-wide no-cash-withdrawal rule, per owner decision
+// 2026-08-29). Deliberately conservative starting defaults — tune from real
+// usage once the bot has been live a while; the owner still reviews and
+// approves every withdrawal manually before any money actually moves.
+const MIN_WITHDRAWAL_POINTS = 50;
+const MIN_ACCOUNT_AGE_DAYS = 7;
+
+export async function sendMenu(bot: HostedBot, template: BotTemplate, chatId: number, text: string) {
   await tgSend(bot.bot_token, chatId, text, { reply_markup: replyKeyboard(template) });
 }
 
@@ -68,6 +76,15 @@ async function logPointsTx(
 export async function handleBotUpdate(bot: HostedBot, update: any) {
   const template = getBotTemplate(bot.template_type);
   if (!template || bot.status !== "live") return;
+
+  // Medical-facilities bot has its own conversation shape (contact sharing,
+  // photo+caption registration, facility-owner approvals) that doesn't fit
+  // the generic text/callback routing below — handled in its own module.
+  if (template.id === "medical") {
+    const { handleMedicalUpdate } = await import("@/lib/medicalBot");
+    await handleMedicalUpdate(bot, template, update);
+    return;
+  }
 
   if (update.callback_query) {
     const cq = update.callback_query;
@@ -170,11 +187,73 @@ async function routeText(
   const cfg = bot.config || {};
 
   if (text === "الرصيد" || text === "الأرباح") {
+    const withdrawLine =
+      template.id === "ad-campaign"
+        ? `\n\nللسحب اضغط زر «سحب».`
+        : `\n\nالنقاط للاستخدام داخل البوت فقط. لا يوجد سحب نقدي.`;
     await sendMenu(
       bot,
       template,
       chatId,
-      `رصيدك: ${points} ${template.defaults.currencyName}\n\nشراء نقاط عبر الموقع (بعد مراجعة المالك):\n${depositLink(bot, user.id)}\n\nالنقاط للاستخدام داخل البوت فقط. لا يوجد سحب نقدي.`
+      `رصيدك: ${points} ${template.defaults.currencyName}\n\nشراء نقاط عبر الموقع (بعد مراجعة المالك):\n${depositLink(bot, user.id)}${withdrawLine}`
+    );
+    return;
+  }
+
+  if (text === "سحب" && template.id === "ad-campaign") {
+    const accountAgeDays = member.created_at
+      ? Math.floor((Date.now() - new Date(member.created_at).getTime()) / 86400000)
+      : 0;
+    const missing: string[] = [];
+    if (points < MIN_WITHDRAWAL_POINTS) missing.push(`رصيد لا يقل عن ${MIN_WITHDRAWAL_POINTS} ${template.defaults.currencyName} (رصيدك الآن ${points})`);
+    if (accountAgeDays < MIN_ACCOUNT_AGE_DAYS) missing.push(`عمر حساب ${MIN_ACCOUNT_AGE_DAYS} أيام على الأقل (حسابك عمره ${accountAgeDays} يوم)`);
+    if (missing.length) {
+      await sendMenu(bot, template, chatId, `السحب غير متاح بعد. المطلوب:\n• ${missing.join("\n• ")}`);
+      return;
+    }
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      `رصيدك المتاح للسحب: ${points} ${template.defaults.currencyName}\nلطلب السحب أرسل:\nسحب: عدد النقاط\n\nمثال: سحب: 50\n\nيُخصم المبلغ من رصيدك فوراً ويُراجَع طلبك يدوياً من المالك قبل التحويل الفعلي.`
+    );
+    return;
+  }
+
+  if (text.startsWith("سحب:") && template.id === "ad-campaign") {
+    const amount = Number(text.slice(4).trim());
+    const accountAgeDays = member.created_at
+      ? Math.floor((Date.now() - new Date(member.created_at).getTime()) / 86400000)
+      : 0;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await sendMenu(bot, template, chatId, "الصيغة: سحب: عدد النقاط (رقم أكبر من صفر).");
+      return;
+    }
+    if (points < MIN_WITHDRAWAL_POINTS || accountAgeDays < MIN_ACCOUNT_AGE_DAYS) {
+      await sendMenu(bot, template, chatId, "لا تستوفي شروط السحب بعد. اضغط «سحب» لمعرفة التفاصيل.");
+      return;
+    }
+    if (amount > points) {
+      await sendMenu(bot, template, chatId, `رصيدك ${points} فقط، لا يمكن سحب ${amount}.`);
+      return;
+    }
+    const db = supabaseAdmin();
+    const newPoints = points - amount;
+    await db.from("bot_members").update({ points: newPoints }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
+    await db.from("bot_wallet_tx").insert({
+      bot_id: bot.id,
+      tg_user_id: String(user.id),
+      kind: "withdrawal",
+      amount,
+      status: "pending",
+      payment_method: null,
+      note: "طلب سحب بانتظار مراجعة المالك",
+    });
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      `تم استلام طلب سحب ${amount} ${template.defaults.currencyName}.\nرصيدك الآن: ${newPoints}.\nسيراجع المالك الطلب ويحوّل المبلغ يدوياً، أو يرفضه فتُعاد النقاط لرصيدك. تابع الحالة في «طلباتي».`
     );
     return;
   }
@@ -336,7 +415,9 @@ async function routeText(
                   ? "إحالة"
                   : t.kind === "ad_view"
                     ? "مشاهدة إعلان"
-                    : String(t.kind || "عملية");
+                    : t.kind === "withdrawal"
+                      ? "طلب سحب"
+                      : String(t.kind || "عملية");
         const when = t.created_at ? String(t.created_at).slice(0, 10) : "";
         const extra = t.note ? ` — ${t.note}` : t.amount ? ` ${t.amount}` : "";
         return `• ${kind}${extra} — ${statusAr(String(t.status || "pending"))}${when ? ` (${when})` : ""}`;
