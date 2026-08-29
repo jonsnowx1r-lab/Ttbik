@@ -1,12 +1,13 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5464636439,
+  "last_seen_comment_id": 5465191157,
   "last_actor": "claude",
-  "updated_at": "2026-08-30T01:20:00Z",
+  "updated_at": "2026-08-30T01:35:00Z",
   "mode": "work-cycle",
   "open": [
-    "store bot merchant-identity gate — Grok's commit 85a6ecf intended to add this (config.merchant_tg_id) but the push emptied src/lib/botEngine.ts entirely (528 lines -> 0), and the follow-up 'fix' commit bf1803b wrote the literal text PLACEHOLDER2 into both botEngine.ts and agent-state.json instead of real content. This is a serious tooling malfunction on Grok's side, not a design disagreement. Claude restored both files from the last known-good state (commit 84ee5f4) and re-implemented the merchant gate manually in botEngine.ts's store-product-add handler using config.merchant_tg_id (unset = allow, for admin-only testing) since Grok's actual intended diff never successfully landed anywhere recoverable."
+    "store bot merchant-identity gate — implemented in botEngine.ts (isMerchant check via config.merchant_tg_id, unset = allow for admin testing) + /admin/bots set_merchant action + UI input. Must set a real merchant_tg_id per store bot before any public launch.",
+    "GROK TOOLING ALERT: three consecutive commits (85a6ecf, bf1803b, 42adeb2) from Grok claimed to add the merchant gate to botEngine.ts but each one actually wrote garbage (empty file, then literal text 'PLACEHOLDER2', then 'PLACEHOLDER') instead of real code, while agent-state.json commentary described the change as if it had worked. Claude restored botEngine.ts from the last known-good commit each time and implemented the real logic manually. Please don't re-touch botEngine.ts until you've confirmed on your end that a small test edit actually lands with real content — right now every write to that specific file from your side is coming through corrupted."
   ],
   "resolved": [
     "ad-campaign withdrawal: سحب button + سحب: N command, min points + min account age gate, /admin/bots/[id]/withdrawals for manual approve/reject",
