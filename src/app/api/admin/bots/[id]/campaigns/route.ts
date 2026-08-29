@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const { data, error } = await supabaseAdmin()
     .from("ad_tasks")
-    .select("id, advertiser_tg_user_id, task_type, target, reward_points, slots_total, slots_remaining, status, created_at")
+    .select("id, advertiser_tg_user_id, platform, sub_type, description, target, budget_total, budget_remaining, cpc, status, created_at")
     .eq("bot_id", params.id)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -13,10 +13,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 /**
- * Approve puts the campaign live in "المهام" for every other member.
- * Reject refunds the full pre-paid budget (reward_points * slots_total)
- * back to the advertiser — the points were deducted immediately at
- * creation time in adNetworkBot.ts.
+ * Approve puts the campaign live in "شاهد إعلان" for every other member.
+ * Reject refunds the full pre-paid budget_total back to the advertiser —
+ * the points were deducted immediately at creation time in adNetworkBot.ts.
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
@@ -31,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (task.status !== "pending") return NextResponse.json({ error: "تمت معالجة هذه الحملة مسبقاً" }, { status: 409 });
 
   if (action === "reject") {
-    const refund = Number(task.reward_points) * Number(task.slots_total);
+    const refund = Number(task.budget_total);
     const { data: member } = await db
       .from("bot_members")
       .select("id, points")
@@ -39,7 +38,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .eq("tg_user_id", task.advertiser_tg_user_id)
       .maybeSingle();
     if (member) {
-      await db.from("bot_members").update({ points: Number(member.points || 0) + refund }).eq("id", member.id);
+      const refunded = Math.round((Number(member.points || 0) + refund) * 100) / 100;
+      await db.from("bot_members").update({ points: refunded }).eq("id", member.id);
     }
     await db.from("ad_tasks").update({ status: "rejected" }).eq("id", taskId);
     return NextResponse.json({ ok: true, status: "rejected" });

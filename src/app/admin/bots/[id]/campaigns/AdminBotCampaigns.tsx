@@ -6,20 +6,27 @@ import Link from "next/link";
 type Campaign = {
   id: string;
   advertiser_tg_user_id: string;
-  task_type: string;
+  platform: string;
+  sub_type: string | null;
+  description: string | null;
   target: string;
-  reward_points: number;
-  slots_total: number;
-  slots_remaining: number;
+  budget_total: number;
+  budget_remaining: number;
+  cpc: number;
   status: string;
   created_at: string;
 };
 
-const TYPE_LABEL: Record<string, string> = {
-  channel_join: "📢 انضمام لقناة/مجموعة",
-  bot_join: "🤖 تشغيل بوت",
-  link_visit: "🔗 زيارة رابط",
+const PLATFORM_LABEL: Record<string, string> = {
+  link: "🔗 لينك",
+  telegram: "📢 تلجرام",
+  youtube: "▶️ يوتيوب",
+  facebook: "📘 فيسبوك",
+  instagram: "📸 انستغرام",
+  twitter: "🐦 تويتر",
 };
+
+const fmt = (n: number) => `$${Number(n).toFixed(2)}`;
 
 export default function AdminBotCampaigns({ botId }: { botId: string }) {
   const [items, setItems] = useState<Campaign[]>([]);
@@ -59,15 +66,19 @@ export default function AdminBotCampaigns({ botId }: { botId: string }) {
           ← رجوع لقائمة البوتات
         </Link>
       </div>
-      <p className="mb-4 text-xs text-slate-500">الموافقة تنشر الحملة فوراً في «المهام» لكل الأعضاء. الرفض يعيد كامل المبلغ المخصوم للمعلن.</p>
+      <p className="mb-4 text-xs text-slate-500">الموافقة تنشر الحملة فوراً في «شاهد إعلان» لكل الأعضاء. الرفض يعيد كامل الميزانية للمعلن.</p>
       {msg && <p className="mb-3 text-sm">{msg}</p>}
 
       <h2 className="mb-2 font-bold text-slate-900">بانتظار المراجعة ({pending.length})</h2>
       <div className="space-y-3">
         {pending.map((c) => (
           <div key={c.id} className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
-            <p className="font-bold text-slate-900">{TYPE_LABEL[c.task_type] || c.task_type}: {c.target}</p>
-            <p className="text-xs text-slate-600">{c.reward_points} نقطة × {c.slots_total} مهمة = {c.reward_points * c.slots_total} مخصومة من المعلن</p>
+            <p className="font-bold text-slate-900">
+              {PLATFORM_LABEL[c.platform] || c.platform}
+              {c.sub_type ? ` (${c.sub_type === "retweet" ? "إعادة تغريد" : "متابعة"})` : ""}: {c.target}
+            </p>
+            {c.description && <p className="text-xs text-slate-600">{c.description}</p>}
+            <p className="text-xs text-slate-600">ميزانية {fmt(c.budget_total)} — سعر النقرة {fmt(c.cpc)}</p>
             <p className="text-xs text-slate-500">tg:{c.advertiser_tg_user_id}</p>
             <div className="mt-2 flex gap-2">
               <button onClick={() => act(c.id, "approve")} disabled={busyId === c.id} className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs text-white disabled:opacity-50">
@@ -88,7 +99,7 @@ export default function AdminBotCampaigns({ botId }: { botId: string }) {
           <div className="space-y-2">
             {others.map((c) => (
               <div key={c.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
-                {TYPE_LABEL[c.task_type] || c.task_type}: {c.target} — {c.slots_remaining}/{c.slots_total} — {c.status}
+                {PLATFORM_LABEL[c.platform] || c.platform}: {c.target} — متبقٍ {fmt(c.budget_remaining)} من {fmt(c.budget_total)} — {c.status}
               </div>
             ))}
           </div>

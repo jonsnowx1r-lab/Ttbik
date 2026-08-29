@@ -47,7 +47,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .eq("tg_user_id", tx.tg_user_id)
       .maybeSingle();
     if (member) {
-      await db.from("bot_members").update({ points: Number(member.points || 0) + Number(tx.amount || 0) }).eq("id", member.id);
+      const refunded = Math.round((Number(member.points || 0) + Number(tx.amount || 0)) * 100) / 100;
+      await db.from("bot_members").update({ points: refunded }).eq("id", member.id);
     }
     await db.from("bot_wallet_tx").update({ status: "rejected", note: "رُفض الطلب وأُعيدت النقاط" }).eq("id", txId);
     return NextResponse.json({ ok: true, status: "rejected" });

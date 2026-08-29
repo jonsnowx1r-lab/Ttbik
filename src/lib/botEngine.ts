@@ -62,13 +62,19 @@ export async function tryHandleWithdrawal(
   text: string
 ): Promise<boolean> {
   const points = Number(member.points || 0);
+  // points is a numeric (decimal) column — ad-network's fractional
+  // cost-per-click amounts drift under plain float math (e.g.
+  // 27.999999999999996), so every displayed/stored amount here rounds to
+  // cents. Harmless for ad-campaign's whole-number points too.
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const fmtAmt = (n: number) => round2(n).toFixed(2);
   const accountAgeDays = member.created_at
     ? Math.floor((Date.now() - new Date(member.created_at).getTime()) / 86400000)
     : 0;
 
   if (text === "سحب") {
     const missing: string[] = [];
-    if (points < MIN_WITHDRAWAL_POINTS) missing.push(`رصيد لا يقل عن ${MIN_WITHDRAWAL_POINTS} ${template.defaults.currencyName} (رصيدك الآن ${points})`);
+    if (points < MIN_WITHDRAWAL_POINTS) missing.push(`رصيد لا يقل عن ${MIN_WITHDRAWAL_POINTS} ${template.defaults.currencyName} (رصيدك الآن ${fmtAmt(points)})`);
     if (accountAgeDays < MIN_ACCOUNT_AGE_DAYS) missing.push(`عمر حساب ${MIN_ACCOUNT_AGE_DAYS} أيام على الأقل (حسابك عمره ${accountAgeDays} يوم)`);
     if (missing.length) {
       await sendMenu(bot, template, chatId, `السحب غير متاح بعد. المطلوب:\n• ${missing.join("\n• ")}`);
@@ -78,7 +84,7 @@ export async function tryHandleWithdrawal(
       bot,
       template,
       chatId,
-      `رصيدك المتاح للسحب: ${points} ${template.defaults.currencyName}\nلطلب السحب أرسل:\nسحب: عدد النقاط\n\nمثال: سحب: 50\n\nيُخصم المبلغ من رصيدك فوراً ويُراجَع طلبك يدوياً من المالك قبل التحويل الفعلي.`
+      `رصيدك المتاح للسحب: ${fmtAmt(points)} ${template.defaults.currencyName}\nلطلب السحب أرسل:\nسحب: عدد النقاط\n\nمثال: سحب: 50\n\nيُخصم المبلغ من رصيدك فوراً ويُراجَع طلبك يدوياً من المالك قبل التحويل الفعلي.`
     );
     return true;
   }
@@ -94,11 +100,11 @@ export async function tryHandleWithdrawal(
       return true;
     }
     if (amount > points) {
-      await sendMenu(bot, template, chatId, `رصيدك ${points} فقط، لا يمكن سحب ${amount}.`);
+      await sendMenu(bot, template, chatId, `رصيدك ${fmtAmt(points)} فقط، لا يمكن سحب ${fmtAmt(amount)}.`);
       return true;
     }
     const db = supabaseAdmin();
-    const newPoints = points - amount;
+    const newPoints = round2(points - amount);
     await db.from("bot_members").update({ points: newPoints }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
     await db.from("bot_wallet_tx").insert({
       bot_id: bot.id,
@@ -113,7 +119,7 @@ export async function tryHandleWithdrawal(
       bot,
       template,
       chatId,
-      `تم استلام طلب سحب ${amount} ${template.defaults.currencyName}.\nرصيدك الآن: ${newPoints}.\nسيراجع المالك الطلب ويحوّل المبلغ يدوياً، أو يرفضه فتُعاد النقاط لرصيدك. تابع الحالة في «طلباتي».`
+      `تم استلام طلب سحب ${fmtAmt(amount)} ${template.defaults.currencyName}.\nرصيدك الآن: ${fmtAmt(newPoints)}.\nسيراجع المالك الطلب ويحوّل المبلغ يدوياً، أو يرفضه فتُعاد النقاط لرصيدك. تابع الحالة في «طلباتي».`
     );
     return true;
   }

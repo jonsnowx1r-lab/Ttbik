@@ -86,25 +86,35 @@ alter table public.bot_members add column if not exists phone_number text;
 alter table public.bot_members add column if not exists country_code text;
 
 -- ad-network bot: a real self-serve, two-sided task marketplace (owner
--- clarified 2026-08-29 that the earlier ad-campaign template — admin adds
--- ads manually — is NOT what they meant by "بوت الإعلانات"; that one is
--- kept as-is for a different future purpose). Advertisers create a task
--- (channel join / bot join / link visit) funded from their own points
--- balance; other members complete it to earn from that budget.
+-- clarified 2026-08-30, after sharing a real reference bot's screenshots,
+-- that the earlier ad-campaign template — admin adds ads manually — is NOT
+-- what they meant by "بوت الإعلانات"; that one is kept as-is for a
+-- different future purpose). Advertisers fund and launch their own
+-- campaign on a platform (link/telegram/youtube/facebook/instagram/
+-- twitter) with a total budget and a cost-per-click; other members
+-- complete available tasks to earn from that budget.
 -- pending_action stores a short-lived "what are we waiting for from this
 -- user next" marker (e.g. mid-way through creating a campaign) — this
 -- project has no in-memory conversation state, so a DB column is the state.
 alter table public.bot_members add column if not exists pending_action jsonb;
+alter table public.bot_members add column if not exists lang text not null default 'ar';
+
+-- Balances must support sub-1 amounts (a $0.02 minimum cost-per-click is
+-- the example the owner gave) — integer points can't represent that.
+alter table public.bot_members alter column points type numeric using points::numeric;
+alter table public.bot_members alter column points set default 0;
 
 create table if not exists public.ad_tasks (
   id uuid primary key default gen_random_uuid(),
   bot_id uuid not null references public.hosted_bots(id) on delete cascade,
   advertiser_tg_user_id text not null,
-  task_type text not null, -- channel_join | bot_join | link_visit
-  target text not null, -- @channel, @bot, or a URL depending on task_type
-  reward_points integer not null,
-  slots_total integer not null,
-  slots_remaining integer not null,
+  platform text not null, -- link | telegram | youtube | facebook | instagram | twitter
+  sub_type text, -- twitter only: retweet | follow
+  description text, -- optional campaign description (asked for on richer platforms like youtube)
+  target text not null, -- the link/channel/video/page/handle being promoted
+  budget_total numeric not null,
+  budget_remaining numeric not null,
+  cpc numeric not null, -- cost paid out per completed click/action
   status text not null default 'pending', -- pending | active | paused | exhausted | rejected
   created_at timestamptz not null default now()
 );
@@ -113,6 +123,7 @@ create table if not exists public.ad_task_completions (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.ad_tasks(id) on delete cascade,
   tg_user_id text not null,
+  amount numeric not null,
   created_at timestamptz not null default now(),
   unique (task_id, tg_user_id)
 );
@@ -245,3 +256,21 @@ select id, 'hosted-bot-builder', 'إنشاء بوت مستضاف بقالب جا
   15, 'bot_simulator', 'text', 'اذهب إلى /bots، اختر قالباً، وأدخل رمز طلبك لتفعيل البوت.', null, 6
 from categories where slug = 'telegram-bots'
 on conflict (slug) do nothing;
+
+-- Owner decision 2026-08-30: remove every "code-only" service from sale —
+-- these deliver a link to a code template or generic AI-wrapper access
+-- (translate/summarize/assistant/etc.), which the project's own founding
+-- principle rejects (anyone can get the same output free from any AI in a
+-- minute, or the "product" is just a repo link). is_active=false is the
+-- mechanism this schema already uses to hide a service everywhere (RLS
+-- policy, homepage listing, order creation) while keeping historical rows
+-- intact for any past order that already references one (orders.service_id
+-- is "on delete restrict", so a hard DELETE would fail anyway if any order
+-- ever used one of these — is_active=false is also the reversible option).
+update services set is_active = false
+where slug in (
+  'smart-translator', 'text-summarizer', 'ai-chat-assistant', 'review-analyzer',
+  'social-caption-generator', 'blog-writer', 'product-description-writer',
+  'landing-page-generator', 'workflow-templates', 'invoice-generator', 'whatsapp-catalog',
+  'auto-reply-bot', 'faq-bot', 'order-manager-bot', 'ad-slot-bot', 'channel-ad-slot'
+);

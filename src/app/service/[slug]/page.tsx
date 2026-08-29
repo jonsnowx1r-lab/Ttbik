@@ -4,12 +4,10 @@ import { supabasePublic } from "@/lib/supabase";
 import type { Service } from "@/types";
 import { formatUsd } from "@/lib/utils";
 import OrderForm from "@/components/OrderForm";
-import AiTextDemo from "@/components/demos/AiTextDemo";
 import BotSimulator from "@/components/demos/BotSimulator";
 import LandingBuilder from "@/components/demos/LandingBuilder";
 import CatalogBuilder from "@/components/demos/CatalogBuilder";
 import AdSlotPreview from "@/components/demos/AdSlotPreview";
-import { TOOL_LABELS, ToolMode } from "@/lib/prompts";
 import { getDeliveryKind } from "@/lib/deliveryKind";
 import { isOwnerServer } from "@/lib/isOwner";
 import Link from "next/link";
@@ -65,15 +63,6 @@ export default async function ServicePage({ params }: { params: { slug: string }
                 رابط دائم للنسخة الكاملة بلا حدود استخدام.
               </div>
             )}
-            {(service.demo_type === "ai_chat" || service.demo_type === "content_ai") &&
-              service.tool_route &&
-              TOOL_LABELS[service.tool_route as ToolMode] && (
-                <AiTextDemo
-                  mode={service.tool_route as ToolMode}
-                  placeholder={TOOL_LABELS[service.tool_route as ToolMode].placeholder}
-                  buttonLabel={TOOL_LABELS[service.tool_route as ToolMode].button}
-                />
-              )}
           </div>
         </div>
 
