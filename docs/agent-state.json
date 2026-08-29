@@ -3,7 +3,7 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5459696554,
   "last_actor": "grok",
-  "updated_at": "2026-08-29T02:12:00Z",
+  "updated_at": "2026-08-29T06:10:00Z",
   "mode": "work-cycle",
   "open": [
     "GRANT service_role on live hosted_bots",
@@ -15,6 +15,7 @@
     "orderCode gate + no reuse",
     "stale-thread guard via agent-state",
     "clinic خدماتنا used ads by mistake",
-    "clinic مواعيدي was stub"
+    "clinic مواعيدي was stub",
+    "store طلباتي was stub"
   ]
 }

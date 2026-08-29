@@ -71,32 +71,29 @@ export async function handleBotUpdate(bot: HostedBot, update: any) {
   const user: TgUser = msg.from;
   const chatId = msg.chat.id;
   const text = String(msg.text || "").trim();
+
   const member = await upsertMember(bot.id, user);
 
-  if (text.startsWith("/start") || text === "Home") {
-    const payload = text.startsWith("/start") ? text.slice(6).trim() : "";
-    const freshBalance = await maybeCreditReferral(bot, member, user, payload);
+  if (text.startsWith("/start")) {
+    const payload = text.slice(6).trim();
+    let points = Number(member.points || 0);
+    if (payload) {
+      points = await maybeApplyReferral(bot, member, user, payload);
+    }
     const welcome = bot.welcome_text || template.defaults.welcome;
-    await sendMenu(
-      bot,
-      template,
-      chatId,
-      `${welcome}\n\nرمز البوت: ${bot.public_code}\nرصيدك: ${freshBalance} ${template.defaults.currencyName}`
-    );
+    await sendMenu(bot, template, chatId, welcome);
     return;
   }
 
   await routeText(bot, template, member, chatId, user, text);
 }
 
-/**
- * A referral link is `t.me/<username>?start=<public_code>_<referrerId>`,
- * which Telegram delivers as `/start <public_code>_<referrerId>`. Credits
- * the referrer exactly once per referred user (guarded by member.referred_by
- * being null) so the same signup can't be replayed for repeat rewards.
- * Returns the current member's up-to-date point balance either way.
- */
-async function maybeCreditReferral(bot: HostedBot, member: any, user: TgUser, payload: string) {
+async function maybeApplyReferral(
+  bot: HostedBot,
+  member: any,
+  user: TgUser,
+  payload: string
+) {
   if (member.referred_by || !payload.includes("_")) return Number(member.points || 0);
   const [code, referrerId] = payload.split("_");
   if (code !== bot.public_code || !referrerId || referrerId === String(user.id)) {
@@ -179,7 +176,7 @@ async function routeText(
       await sendMenu(bot, template, chatId, `سجّلت حضورك اليوم بالفعل. عد غداً لتحصل على نقاط إضافية 🎁`);
       return;
     }
-    const CHECKIN_BONUS = 2;
+    const CHECKIN_BONUS = 3;
     const newPoints = points + CHECKIN_BONUS;
     await db.from("bot_members").update({ points: newPoints, last_checkin: today }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
     await sendMenu(bot, template, chatId, `🎁 حصلت على ${CHECKIN_BONUS} ${template.defaults.currencyName} لحضورك اليوم!\nرصيدك الآن: ${newPoints}`);
@@ -198,7 +195,7 @@ async function routeText(
       await sendMenu(bot, template, chatId, `لا يوجد أعضاء بعد.`);
       return;
     }
-    const medals = ["🥇", "🥈", "🥉", "4.", "5."];
+    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
     const list = top.map((m, i) => `${medals[i]} ${m.display_name || "عضو"} — ${m.points} ${template.defaults.currencyName}`).join("\n");
     await sendMenu(bot, template, chatId, `🏆 المتصدرون:\n${list}`);
     return;
@@ -225,7 +222,39 @@ async function routeText(
     return;
   }
   if (text === "طلباتي") {
-    await sendMenu(bot, template, chatId, "لا توجد عمليات بعد.");
+    const db = supabaseAdmin();
+    const { data: txs } = await db
+      .from("bot_wallet_tx")
+      .select("kind, amount, status, payment_method, note, created_at")
+      .eq("bot_id", bot.id)
+      .eq("tg_user_id", String(user.id))
+      .order("created_at", { ascending: false })
+      .limit(8);
+    if (!txs || txs.length === 0) {
+      await sendMenu(
+        bot,
+        template,
+        chatId,
+        `لا طلبات مسجَّلة بعد.\nاشترِ رصيداً من هنا:\n${depositLink(bot, user.id)}`
+      );
+      return;
+    }
+    const statusAr = (s: string) =>
+      s === "approved" || s === "confirmed" || s === "مؤكد"
+        ? "مؤكد"
+        : s === "pending" || s === "قيد المراجعة"
+          ? "قيد المراجعة"
+          : s === "rejected" || s === "مرفوض"
+            ? "مرفوض"
+            : s;
+    const list = txs
+      .map((t) => {
+        const kind = t.kind === "deposit" ? "إيداع" : String(t.kind || "عملية");
+        const when = t.created_at ? String(t.created_at).slice(0, 10) : "";
+        return `• ${kind} ${t.amount} — ${statusAr(String(t.status || "pending"))}${when ? ` (${when})` : ""}`;
+      })
+      .join("\n");
+    await sendMenu(bot, template, chatId, `طلباتك:\n${list}`);
     return;
   }
   if (text === "حجز موعد") {
