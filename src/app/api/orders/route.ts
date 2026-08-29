@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { generateOrderCode } from "@/lib/utils";
 import { sendOrderAlert } from "@/lib/telegram";
+import { isRateLimited, requestIp } from "@/lib/rateLimit";
 
 export async function POST(req: NextRequest) {
+  // Public endpoint, no auth — without this, a burst of fake orders each
+  // writes a DB row and fires a Telegram alert, wasting the free API quota
+  // and flooding the owner's notification chat.
+  if (isRateLimited(`orders:${requestIp(req)}`, 5, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "طلبات كثيرة جداً، حاول لاحقاً." }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => null);
   const { serviceId, customerName, customerContact, paymentMethod, transferReference } = body ?? {};
 

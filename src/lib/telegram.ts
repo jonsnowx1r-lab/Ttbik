@@ -29,8 +29,14 @@ export async function sendOrderAlert(params: {
   const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
   if (!token || !chatId) return { message_id: null, chat_id: null };
 
+  // Plain text on purpose: params.customerName/customerContact/transferReference
+  // are raw customer input. With parse_mode "Markdown", an unescaped _ * ` [
+  // (e.g. a Telegram @handle like @ahmed_2024) makes Telegram reject the whole
+  // sendMessage call with 400 — silently, since the failure just falls through
+  // to {message_id: null, chat_id: null} below. An internal admin alert doesn't
+  // need bold/code formatting badly enough to risk losing the notification.
   const text = [
-    `🛒 *طلب جديد* \`${params.orderCode}\``,
+    `🛒 طلب جديد ${params.orderCode}`,
     `الخدمة: ${params.serviceName}`,
     `السعر: $${params.priceUsd}`,
     `العميل: ${params.customerName}`,
@@ -45,7 +51,6 @@ export async function sendOrderAlert(params: {
     body: JSON.stringify({
       chat_id: chatId,
       text,
-      parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
           [
@@ -58,7 +63,10 @@ export async function sendOrderAlert(params: {
   });
 
   const data = await res.json().catch(() => null);
-  if (!data?.ok) return { message_id: null, chat_id: null };
+  if (!data?.ok) {
+    console.error("sendOrderAlert failed:", data?.description || "no response body");
+    return { message_id: null, chat_id: null };
+  }
   return {
     message_id: String(data.result.message_id),
     chat_id: String(data.result.chat.id),
