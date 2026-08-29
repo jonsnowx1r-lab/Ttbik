@@ -51,7 +51,7 @@ async function logPointsTx(
   amount: number,
   note: string
 ) {
-  await supabaseAdmin()
+  const { error } = await supabaseAdmin()
     .from("bot_wallet_tx")
     .insert({
       bot_id: botId,
@@ -61,8 +61,8 @@ async function logPointsTx(
       status: "confirmed",
       payment_method: null,
       note,
-    })
-    .catch(() => null);
+    });
+  if (error) console.error("logPointsTx failed:", error.message);
 }
 
 export async function handleBotUpdate(bot: HostedBot, update: any) {
