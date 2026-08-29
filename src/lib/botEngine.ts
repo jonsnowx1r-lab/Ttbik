@@ -335,15 +335,14 @@ async function routeText(
     return;
   }
   if (text === "حجز موعد") {
-    // Three concrete upcoming slots (tomorrow + day after, morning/afternoon) — user picks via inline
-    const mk = (daysAhead: number, hour: number) => {
-      const d = new Date(Date.now() + daysAhead * 86400000);
-      d.setHours(hour, 0, 0, 0);
-      return d.toISOString().slice(0, 16).replace("T", " ");
-    };
-    const slots = [mk(1, 10), mk(1, 16), mk(2, 10)];
+    // Three concrete upcoming slots with Arabic labels for clarity
+    const slots = [
+      { label: "غداً 10:00", value: "غداً 10:00" },
+      { label: "غداً 16:00", value: "غداً 16:00" },
+      { label: "بعد غد 10:00", value: "بعد غد 10:00" },
+    ];
     const inline = {
-      inline_keyboard: slots.map((s) => [{ text: s, callback_data: `slot:${s}` }]),
+      inline_keyboard: slots.map((s) => [{ text: s.label, callback_data: `slot:${s.value}` }]),
     };
     await tgSend(
       bot.bot_token,
