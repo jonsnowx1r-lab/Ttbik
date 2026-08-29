@@ -139,7 +139,12 @@ async function routeText(
   if (text === "المنتجات" || (text === "خدماتنا" && template.id === "clinic")) {
     if (template.id === "store") {
       const items = Array.isArray(cfg.products) && cfg.products.length ? cfg.products : ["المنتج الأساسي"];
-      await sendMenu(bot, template, chatId, `المنتجات:\n• ${items.join("\n• ")}`);
+      await sendMenu(
+        bot,
+        template,
+        chatId,
+        `المنتجات:\n• ${items.join("\n• ")}\n\nاكتب اسم المنتج كما هو بالضبط لإرسال طلب. يظهر في «طلباتي».`
+      );
       return;
     }
     if (template.id === "clinic") {
@@ -249,9 +254,15 @@ async function routeText(
             : s;
     const list = txs
       .map((t) => {
-        const kind = t.kind === "deposit" ? "إيداع" : String(t.kind || "عملية");
+        const kind =
+          t.kind === "deposit"
+            ? "إيداع"
+            : t.kind === "order"
+              ? "طلب منتج"
+              : String(t.kind || "عملية");
         const when = t.created_at ? String(t.created_at).slice(0, 10) : "";
-        return `• ${kind} ${t.amount} — ${statusAr(String(t.status || "pending"))}${when ? ` (${when})` : ""}`;
+        const extra = t.note ? ` — ${t.note}` : t.amount ? ` ${t.amount}` : "";
+        return `• ${kind}${extra} — ${statusAr(String(t.status || "pending"))}${when ? ` (${when})` : ""}`;
       })
       .join("\n");
     await sendMenu(bot, template, chatId, `طلباتك:\n${list}`);
@@ -301,5 +312,30 @@ async function routeText(
     await sendMenu(bot, template, chatId, `مواعيدك:\n${list}`);
     return;
   }
+  // Store: text matching a product name → pending order request
+  if (template.id === "store") {
+    const items = Array.isArray(cfg.products) && cfg.products.length ? cfg.products.map(String) : [];
+    const match = items.find((p) => p === text || p.startsWith(text) || text.startsWith(p.split("—")[0].trim()) || text.startsWith(p.split("-")[0].trim()));
+    if (match) {
+      const db = supabaseAdmin();
+      await db.from("bot_wallet_tx").insert({
+        bot_id: bot.id,
+        tg_user_id: String(user.id),
+        kind: "order",
+        amount: 0,
+        status: "pending",
+        payment_method: null,
+        note: match,
+      });
+      await sendMenu(
+        bot,
+        template,
+        chatId,
+        `تم تسجيل طلبك:\n• ${match}\n\nالحالة: قيد المراجعة.\nتابع في «طلباتي» بعد تأكيد المالك.`
+      );
+      return;
+    }
+  }
+
   await sendMenu(bot, template, chatId, "اختر أحد الأزرار من القائمة.");
 }
