@@ -43,6 +43,28 @@ async function sendMenu(bot: HostedBot, template: BotTemplate, chatId: number, t
   await tgSend(bot.bot_token, chatId, text, { reply_markup: replyKeyboard(template) });
 }
 
+/** Record an internal points movement for audit (no cash). */
+async function logPointsTx(
+  botId: string,
+  tgUserId: string,
+  kind: string,
+  amount: number,
+  note: string
+) {
+  await supabaseAdmin()
+    .from("bot_wallet_tx")
+    .insert({
+      bot_id: botId,
+      tg_user_id: tgUserId,
+      kind,
+      amount,
+      status: "confirmed",
+      payment_method: null,
+      note,
+    })
+    .catch(() => null);
+}
+
 export async function handleBotUpdate(bot: HostedBot, update: any) {
   const template = getBotTemplate(bot.template_type);
   if (!template || bot.status !== "live") return;
@@ -76,9 +98,8 @@ export async function handleBotUpdate(bot: HostedBot, update: any) {
 
   if (text.startsWith("/start")) {
     const payload = text.slice(6).trim();
-    let points = Number(member.points || 0);
     if (payload) {
-      points = await maybeApplyReferral(bot, member, user, payload);
+      await maybeApplyReferral(bot, member, user, payload);
     }
     const welcome = bot.welcome_text || template.defaults.welcome;
     await sendMenu(bot, template, chatId, welcome);
@@ -111,6 +132,7 @@ async function maybeApplyReferral(
   const REFERRAL_BONUS = 5;
   await db.from("bot_members").update({ points: Number(referrer.points || 0) + REFERRAL_BONUS }).eq("id", referrer.id);
   await db.from("bot_members").update({ referred_by: referrerId }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
+  await logPointsTx(bot.id, referrerId, "referral", REFERRAL_BONUS, `إحالة عضو ${user.id}`);
   await tgSend(bot.bot_token, Number(referrerId), `🎉 أحلت عضواً جديداً وحصلت على ${REFERRAL_BONUS} نقطة إضافية!`).catch(() => null);
   return Number(member.points || 0);
 }
@@ -184,6 +206,7 @@ async function routeText(
     const CHECKIN_BONUS = 3;
     const newPoints = points + CHECKIN_BONUS;
     await db.from("bot_members").update({ points: newPoints, last_checkin: today }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
+    await logPointsTx(bot.id, String(user.id), "checkin", CHECKIN_BONUS, `حضور يومي ${today}`);
     await sendMenu(bot, template, chatId, `🎁 حصلت على ${CHECKIN_BONUS} ${template.defaults.currencyName} لحضورك اليوم!\nرصيدك الآن: ${newPoints}`);
     return;
   }
@@ -207,7 +230,9 @@ async function routeText(
   }
 
   if (text === "الإحالات") {
-    await sendMenu(bot, template, chatId, `رابط الإحالة:\nhttps://t.me/${cfg.botUsername || "bot"}?start=${bot.public_code}_${user.id}`);
+    const uname = cfg.botUsername || bot.config?.botUsername || "";
+    const handle = uname ? (String(uname).startsWith("@") ? String(uname).slice(1) : String(uname)) : "bot";
+    await sendMenu(bot, template, chatId, `رابط الإحالة:\nhttps://t.me/${handle}?start=${bot.public_code}_${user.id}`);
     return;
   }
   if (text === "المسابقات") {
@@ -259,7 +284,11 @@ async function routeText(
             ? "إيداع"
             : t.kind === "order"
               ? "طلب منتج"
-              : String(t.kind || "عملية");
+              : t.kind === "checkin"
+                ? "حضور يومي"
+                : t.kind === "referral"
+                  ? "إحالة"
+                  : String(t.kind || "عملية");
         const when = t.created_at ? String(t.created_at).slice(0, 10) : "";
         const extra = t.note ? ` — ${t.note}` : t.amount ? ` ${t.amount}` : "";
         return `• ${kind}${extra} — ${statusAr(String(t.status || "pending"))}${when ? ` (${when})` : ""}`;
