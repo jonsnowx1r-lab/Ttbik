@@ -90,6 +90,16 @@ export default function AdminBots() {
                   تسجيلات المنشآت
                 </Link>
               )}
+              {b.template_type === "ad-network" && (
+                <>
+                  <Link href={`/admin/bots/${b.id}/campaigns`} className="rounded-xl bg-yellow-600 px-3 py-1.5 text-xs text-white">
+                    مراجعة الحملات
+                  </Link>
+                  <Link href={`/admin/bots/${b.id}/withdrawals`} className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs text-white">
+                    طلبات السحب
+                  </Link>
+                </>
+              )}
               {b.template_type === "store" && (
                 <span className="flex items-center gap-1 rounded-xl bg-slate-100 px-2 py-1 text-xs">
                   <input

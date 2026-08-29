@@ -35,24 +35,98 @@ export async function upsertMember(botId: string, user: TgUser) {
   return data;
 }
 
-function depositLink(bot: HostedBot, userId: number) {
+export function depositLink(bot: HostedBot, userId: number) {
   return `${siteBase()}/pay/bot/${bot.public_code}?uid=${userId}`;
 }
 
-// Withdrawal eligibility for the ad-campaign bot only (the one explicit
-// exception to the site-wide no-cash-withdrawal rule, per owner decision
-// 2026-08-29). Deliberately conservative starting defaults — tune from real
-// usage once the bot has been live a while; the owner still reviews and
-// approves every withdrawal manually before any money actually moves.
+// Withdrawal eligibility for templates the owner explicitly exempted from
+// the site-wide no-cash-withdrawal rule (ad-campaign, and now ad-network —
+// owner decision 2026-08-29). Deliberately conservative starting defaults —
+// tune from real usage once a bot has been live a while; the owner still
+// reviews and approves every withdrawal manually before any money moves.
 const MIN_WITHDRAWAL_POINTS = 50;
 const MIN_ACCOUNT_AGE_DAYS = 7;
+
+/**
+ * Shared "سحب"/"سحب: N" handling for any template that allows withdrawal.
+ * Returns true if it handled the message (caller should stop routing).
+ * Used by both botEngine.ts (ad-campaign) and adNetworkBot.ts (ad-network)
+ * so the real-money logic exists in exactly one place.
+ */
+export async function tryHandleWithdrawal(
+  bot: HostedBot,
+  template: BotTemplate,
+  member: any,
+  user: TgUser,
+  chatId: number,
+  text: string
+): Promise<boolean> {
+  const points = Number(member.points || 0);
+  const accountAgeDays = member.created_at
+    ? Math.floor((Date.now() - new Date(member.created_at).getTime()) / 86400000)
+    : 0;
+
+  if (text === "سحب") {
+    const missing: string[] = [];
+    if (points < MIN_WITHDRAWAL_POINTS) missing.push(`رصيد لا يقل عن ${MIN_WITHDRAWAL_POINTS} ${template.defaults.currencyName} (رصيدك الآن ${points})`);
+    if (accountAgeDays < MIN_ACCOUNT_AGE_DAYS) missing.push(`عمر حساب ${MIN_ACCOUNT_AGE_DAYS} أيام على الأقل (حسابك عمره ${accountAgeDays} يوم)`);
+    if (missing.length) {
+      await sendMenu(bot, template, chatId, `السحب غير متاح بعد. المطلوب:\n• ${missing.join("\n• ")}`);
+      return true;
+    }
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      `رصيدك المتاح للسحب: ${points} ${template.defaults.currencyName}\nلطلب السحب أرسل:\nسحب: عدد النقاط\n\nمثال: سحب: 50\n\nيُخصم المبلغ من رصيدك فوراً ويُراجَع طلبك يدوياً من المالك قبل التحويل الفعلي.`
+    );
+    return true;
+  }
+
+  if (text.startsWith("سحب:")) {
+    const amount = Number(text.slice(4).trim());
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await sendMenu(bot, template, chatId, "الصيغة: سحب: عدد النقاط (رقم أكبر من صفر).");
+      return true;
+    }
+    if (points < MIN_WITHDRAWAL_POINTS || accountAgeDays < MIN_ACCOUNT_AGE_DAYS) {
+      await sendMenu(bot, template, chatId, "لا تستوفي شروط السحب بعد. اضغط «سحب» لمعرفة التفاصيل.");
+      return true;
+    }
+    if (amount > points) {
+      await sendMenu(bot, template, chatId, `رصيدك ${points} فقط، لا يمكن سحب ${amount}.`);
+      return true;
+    }
+    const db = supabaseAdmin();
+    const newPoints = points - amount;
+    await db.from("bot_members").update({ points: newPoints }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
+    await db.from("bot_wallet_tx").insert({
+      bot_id: bot.id,
+      tg_user_id: String(user.id),
+      kind: "withdrawal",
+      amount,
+      status: "pending",
+      payment_method: null,
+      note: "طلب سحب بانتظار مراجعة المالك",
+    });
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      `تم استلام طلب سحب ${amount} ${template.defaults.currencyName}.\nرصيدك الآن: ${newPoints}.\nسيراجع المالك الطلب ويحوّل المبلغ يدوياً، أو يرفضه فتُعاد النقاط لرصيدك. تابع الحالة في «طلباتي».`
+    );
+    return true;
+  }
+
+  return false;
+}
 
 export async function sendMenu(bot: HostedBot, template: BotTemplate, chatId: number, text: string) {
   await tgSend(bot.bot_token, chatId, text, { reply_markup: replyKeyboard(template) });
 }
 
 /** Record an internal points movement for audit (no cash). */
-async function logPointsTx(
+export async function logPointsTx(
   botId: string,
   tgUserId: string,
   kind: string,
@@ -83,6 +157,15 @@ export async function handleBotUpdate(bot: HostedBot, update: any) {
   if (template.id === "medical") {
     const { handleMedicalUpdate } = await import("@/lib/medicalBot");
     await handleMedicalUpdate(bot, template, update);
+    return;
+  }
+
+  // ad-network (self-serve two-sided task marketplace) has a multi-step
+  // campaign-creation flow (tracked via bot_members.pending_action) and a
+  // forwarded-message proof mechanism that don't fit the generic router.
+  if (template.id === "ad-network") {
+    const { handleAdNetworkUpdate } = await import("@/lib/adNetworkBot");
+    await handleAdNetworkUpdate(bot, template, update);
     return;
   }
 
@@ -147,7 +230,7 @@ export async function handleBotUpdate(bot: HostedBot, update: any) {
   await routeText(bot, template, member, chatId, user, text);
 }
 
-async function maybeApplyReferral(
+export async function maybeApplyReferral(
   bot: HostedBot,
   member: any,
   user: TgUser,
@@ -200,61 +283,8 @@ async function routeText(
     return;
   }
 
-  if (text === "سحب" && template.id === "ad-campaign") {
-    const accountAgeDays = member.created_at
-      ? Math.floor((Date.now() - new Date(member.created_at).getTime()) / 86400000)
-      : 0;
-    const missing: string[] = [];
-    if (points < MIN_WITHDRAWAL_POINTS) missing.push(`رصيد لا يقل عن ${MIN_WITHDRAWAL_POINTS} ${template.defaults.currencyName} (رصيدك الآن ${points})`);
-    if (accountAgeDays < MIN_ACCOUNT_AGE_DAYS) missing.push(`عمر حساب ${MIN_ACCOUNT_AGE_DAYS} أيام على الأقل (حسابك عمره ${accountAgeDays} يوم)`);
-    if (missing.length) {
-      await sendMenu(bot, template, chatId, `السحب غير متاح بعد. المطلوب:\n• ${missing.join("\n• ")}`);
-      return;
-    }
-    await sendMenu(
-      bot,
-      template,
-      chatId,
-      `رصيدك المتاح للسحب: ${points} ${template.defaults.currencyName}\nلطلب السحب أرسل:\nسحب: عدد النقاط\n\nمثال: سحب: 50\n\nيُخصم المبلغ من رصيدك فوراً ويُراجَع طلبك يدوياً من المالك قبل التحويل الفعلي.`
-    );
-    return;
-  }
-
-  if (text.startsWith("سحب:") && template.id === "ad-campaign") {
-    const amount = Number(text.slice(4).trim());
-    const accountAgeDays = member.created_at
-      ? Math.floor((Date.now() - new Date(member.created_at).getTime()) / 86400000)
-      : 0;
-    if (!Number.isFinite(amount) || amount <= 0) {
-      await sendMenu(bot, template, chatId, "الصيغة: سحب: عدد النقاط (رقم أكبر من صفر).");
-      return;
-    }
-    if (points < MIN_WITHDRAWAL_POINTS || accountAgeDays < MIN_ACCOUNT_AGE_DAYS) {
-      await sendMenu(bot, template, chatId, "لا تستوفي شروط السحب بعد. اضغط «سحب» لمعرفة التفاصيل.");
-      return;
-    }
-    if (amount > points) {
-      await sendMenu(bot, template, chatId, `رصيدك ${points} فقط، لا يمكن سحب ${amount}.`);
-      return;
-    }
-    const db = supabaseAdmin();
-    const newPoints = points - amount;
-    await db.from("bot_members").update({ points: newPoints }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
-    await db.from("bot_wallet_tx").insert({
-      bot_id: bot.id,
-      tg_user_id: String(user.id),
-      kind: "withdrawal",
-      amount,
-      status: "pending",
-      payment_method: null,
-      note: "طلب سحب بانتظار مراجعة المالك",
-    });
-    await sendMenu(
-      bot,
-      template,
-      chatId,
-      `تم استلام طلب سحب ${amount} ${template.defaults.currencyName}.\nرصيدك الآن: ${newPoints}.\nسيراجع المالك الطلب ويحوّل المبلغ يدوياً، أو يرفضه فتُعاد النقاط لرصيدك. تابع الحالة في «طلباتي».`
-    );
+  if (template.id === "ad-campaign" && (text === "سحب" || text.startsWith("سحب:"))) {
+    await tryHandleWithdrawal(bot, template, member, user, chatId, text);
     return;
   }
 

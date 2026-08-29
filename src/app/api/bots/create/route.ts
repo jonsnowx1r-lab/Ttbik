@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     // Not read anywhere in the bot engine (withdrawal eligibility is decided
     // by template.id === "ad-campaign" directly) — kept only as accurate
     // metadata reflecting the actual policy per template.
-    noWithdraw: template.id !== "ad-campaign",
+    noWithdraw: template.id !== "ad-campaign" && template.id !== "ad-network",
   };
   if (template.id === "clinic") {
     config.services = listLines;

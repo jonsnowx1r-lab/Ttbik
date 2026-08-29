@@ -85,6 +85,38 @@ alter table public.bot_members add column if not exists created_at timestamptz n
 alter table public.bot_members add column if not exists phone_number text;
 alter table public.bot_members add column if not exists country_code text;
 
+-- ad-network bot: a real self-serve, two-sided task marketplace (owner
+-- clarified 2026-08-29 that the earlier ad-campaign template — admin adds
+-- ads manually — is NOT what they meant by "بوت الإعلانات"; that one is
+-- kept as-is for a different future purpose). Advertisers create a task
+-- (channel join / bot join / link visit) funded from their own points
+-- balance; other members complete it to earn from that budget.
+-- pending_action stores a short-lived "what are we waiting for from this
+-- user next" marker (e.g. mid-way through creating a campaign) — this
+-- project has no in-memory conversation state, so a DB column is the state.
+alter table public.bot_members add column if not exists pending_action jsonb;
+
+create table if not exists public.ad_tasks (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.hosted_bots(id) on delete cascade,
+  advertiser_tg_user_id text not null,
+  task_type text not null, -- channel_join | bot_join | link_visit
+  target text not null, -- @channel, @bot, or a URL depending on task_type
+  reward_points integer not null,
+  slots_total integer not null,
+  slots_remaining integer not null,
+  status text not null default 'pending', -- pending | active | paused | exhausted | rejected
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.ad_task_completions (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.ad_tasks(id) on delete cascade,
+  tg_user_id text not null,
+  created_at timestamptz not null default now(),
+  unique (task_id, tg_user_id)
+);
+
 -- Optional "join our channel" requirement on an ad: when set, /api/bots/ads/claim
 -- verifies real Telegram channel membership via getChatMember before awarding
 -- points, instead of trusting an honesty-based "I watched it" click.
@@ -185,6 +217,8 @@ alter table public.locations enable row level security;
 alter table public.medical_facilities enable row level security;
 alter table public.facility_shifts enable row level security;
 alter table public.facility_bookings enable row level security;
+alter table public.ad_tasks enable row level security;
+alter table public.ad_task_completions enable row level security;
 
 -- Same lesson as earlier in this project: RLS alone does not grant access.
 -- These tables were created via SQL Editor, so service_role (used by every
@@ -195,7 +229,8 @@ grant select, insert, update, delete on
   public.hosted_bots, public.bot_members, public.bot_wallet_tx,
   public.bot_ads, public.bot_appointments, public.bot_ad_views,
   public.store_products, public.marketplace_listings,
-  public.locations, public.medical_facilities, public.facility_shifts, public.facility_bookings
+  public.locations, public.medical_facilities, public.facility_shifts, public.facility_bookings,
+  public.ad_tasks, public.ad_task_completions
 to service_role;
 
 -- Purchasable service unlocking access to /bots (the hosted-bot builder).
