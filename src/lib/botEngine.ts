@@ -192,7 +192,21 @@ async function routeText(
       return;
     }
     const list = ads.map((a) => `• ${a.title} — ${a.reward_points} ${template.defaults.currencyName}`).join("\n");
-    await sendMenu(bot, template, chatId, `الحملات النشطة الآن:\n${list}\n\nشاهد وأكّد من هنا لتُضاف النقاط فوراً:\n${link}`);
+    // Inline keyboard: one button per ad → existing ad:ID callback opens claim page
+    const inline = {
+      inline_keyboard: ads.slice(0, 8).map((a) => [
+        {
+          text: `${a.title} (+${a.reward_points})`,
+          callback_data: `ad:${a.id}`,
+        },
+      ]),
+    };
+    await tgSend(
+      bot.bot_token,
+      chatId,
+      `الحملات النشطة الآن:\n${list}\n\nاضغط زر الحملة للمشاهدة، أو افتح القائمة:\n${link}`,
+      { reply_markup: inline }
+    );
     return;
   }
 
