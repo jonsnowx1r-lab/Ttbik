@@ -1,9 +1,9 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5464054461,
+  "last_seen_comment_id": 5464067488,
   "last_actor": "grok",
-  "updated_at": "2026-08-29T18:15:00Z",
+  "updated_at": "2026-08-29T18:18:00Z",
   "mode": "work-cycle",
   "open": [],
   "resolved": [
@@ -26,6 +26,7 @@
     "checkin + referral points now logged to bot_wallet_tx (audit trail, no cash)",
     "ad_view awards now logged to bot_wallet_tx (kind=ad_view, confirmed) — appears in طلباتي as مشاهدة إعلان",
     "ads list in bot now sends inline keyboard (one button per active ad → existing ad:ID callback)",
-    "clinic booking offered concrete slots via inline keyboard (slot: callback)"
+    "clinic booking offered concrete slots via inline keyboard (slot: callback)",
+    "clinic slot labels Arabic (غداً 10 / غداً 16 / بعد غد 10) instead of ISO"
   ]
 }
