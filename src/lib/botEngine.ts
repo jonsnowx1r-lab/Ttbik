@@ -84,6 +84,27 @@ export async function handleBotUpdate(bot: HostedBot, update: any) {
       );
       return;
     }
+    if (data.startsWith("slot:")) {
+      const slotLabel = data.slice(5).trim();
+      if (!slotLabel) {
+        await sendMenu(bot, template, chatId, "موعد غير صالح. اختر من «حجز موعد» مرة أخرى.");
+        return;
+      }
+      await supabaseAdmin().from("bot_appointments").insert({
+        bot_id: bot.id,
+        tg_user_id: String(user.id),
+        display_name: member.display_name,
+        slot_label: slotLabel,
+        status: "pending",
+      });
+      await sendMenu(
+        bot,
+        template,
+        chatId,
+        `تم تسجيل حجز مبدئي:\n${slotLabel}\n\nستظهر حالة التأكيد هنا وفي «مواعيدي» بعد مراجعة المالك.`
+      );
+      return;
+    }
     await routeText(bot, template, member, chatId, user, data);
     return;
   }
@@ -314,15 +335,22 @@ async function routeText(
     return;
   }
   if (text === "حجز موعد") {
-    const slot = new Date(Date.now() + 86400000).toISOString().slice(0, 16).replace("T", " ");
-    await supabaseAdmin().from("bot_appointments").insert({
-      bot_id: bot.id,
-      tg_user_id: String(user.id),
-      display_name: member.display_name,
-      slot_label: slot,
-      status: "pending",
-    });
-    await sendMenu(bot, template, chatId, `تم تسجيل حجز مبدئي:\n${slot}\n\nستظهر حالة التأكيد هنا وفي «مواعيدي» بعد مراجعة المالك.`);
+    // Three concrete upcoming slots (tomorrow + day after, morning/afternoon) — user picks via inline
+    const mk = (daysAhead: number, hour: number) => {
+      const d = new Date(Date.now() + daysAhead * 86400000);
+      d.setHours(hour, 0, 0, 0);
+      return d.toISOString().slice(0, 16).replace("T", " ");
+    };
+    const slots = [mk(1, 10), mk(1, 16), mk(2, 10)];
+    const inline = {
+      inline_keyboard: slots.map((s) => [{ text: s, callback_data: `slot:${s}` }]),
+    };
+    await tgSend(
+      bot.bot_token,
+      chatId,
+      "اختر موعداً مقترحاً (قيد المراجعة حتى يؤكد المالك):",
+      { reply_markup: inline }
+    );
     return;
   }
   if (text === "مواعيدي") {
