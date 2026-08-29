@@ -20,5 +20,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     await db.from("hosted_bots").update({ status: "paused" }).eq("id", bot.id);
     return NextResponse.json({ ok: true, status: "paused" });
   }
+  if (action === "set_merchant") {
+    const merchantTgId = String(body.merchantTgId || "").trim();
+    const config = { ...(bot.config || {}), merchant_tg_id: merchantTgId || null };
+    await db.from("hosted_bots").update({ config }).eq("id", bot.id);
+    return NextResponse.json({ ok: true, merchant_tg_id: merchantTgId || null });
+  }
   return NextResponse.json({ error: "إجراء غير معروف" }, { status: 400 });
 }

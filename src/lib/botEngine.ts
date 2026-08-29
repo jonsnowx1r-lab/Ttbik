@@ -476,17 +476,33 @@ async function routeText(
     await sendMenu(bot, template, chatId, `مواعيدك:\n${list}`);
     return;
   }
+  // Merchant gate: config.merchant_tg_id identifies the one real owner of
+  // this store bot. Unset = allow any member (admin-only testing fallback,
+  // matches this project's phase-gate rule that public exploits here don't
+  // matter yet); set = only that tg_user_id can manage the store. Set the
+  // merchant by having them message the bot once and reading their id from
+  // bot_members, then saving it into hosted_bots.config from /admin.
+  const isMerchant = !bot.config?.merchant_tg_id || String(bot.config.merchant_tg_id) === String(user.id);
+
   if (template.id === "store" && text === "متجري") {
+    if (!isMerchant) {
+      await sendMenu(bot, template, chatId, "هذا القسم مخصَّص لصاحب المتجر فقط.");
+      return;
+    }
     await sendMenu(
       bot,
       template,
       chatId,
-      `إدارة متجرك — لأي عضو يرسل الصيغة التالية الآن (مرحلة اختبار الإدمن، لا تحقق هوية تاجر بعد):\n\nمنتج: الاسم | السعر | الوصف\n\nمثال:\nمنتج: قميص قطن | 15 | مقاسات S-XL متوفرة`
+      `إدارة متجرك:\n\nمنتج: الاسم | السعر | الوصف\n\nمثال:\nمنتج: قميص قطن | 15 | مقاسات S-XL متوفرة`
     );
     return;
   }
 
   if (template.id === "store" && text.startsWith("منتج:")) {
+    if (!isMerchant) {
+      await sendMenu(bot, template, chatId, "إضافة المنتجات مخصَّصة لصاحب المتجر فقط.");
+      return;
+    }
     const parts = text.slice(5).split("|").map((s) => s.trim());
     const [name, priceRaw, description] = parts;
     if (!name) {

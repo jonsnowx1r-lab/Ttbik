@@ -9,6 +9,7 @@ export default function AdminBots() {
   const [broadcastOpenId, setBroadcastOpenId] = useState<string | null>(null);
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [merchantInputs, setMerchantInputs] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/bots");
@@ -47,6 +48,18 @@ export default function AdminBots() {
     setBroadcastBusy(false);
   }
 
+  async function setMerchant(id: string) {
+    const merchantTgId = (merchantInputs[id] || "").trim();
+    const res = await fetch(`/api/admin/bots/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "set_merchant", merchantTgId }),
+    });
+    const data = await res.json();
+    setMsg(res.ok ? "تم تحديد التاجر" : data.error || "فشل");
+    await load();
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="mb-6 flex items-center justify-between gap-3">
@@ -76,6 +89,19 @@ export default function AdminBots() {
                 <Link href={`/admin/bots/${b.id}/facilities`} className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs text-white">
                   تسجيلات المنشآت
                 </Link>
+              )}
+              {b.template_type === "store" && (
+                <span className="flex items-center gap-1 rounded-xl bg-slate-100 px-2 py-1 text-xs">
+                  <input
+                    value={merchantInputs[b.id] ?? b.config?.merchant_tg_id ?? ""}
+                    onChange={(e) => setMerchantInputs((m) => ({ ...m, [b.id]: e.target.value }))}
+                    placeholder="آيدي التاجر على تيليجرام"
+                    className="w-32 rounded-lg border border-slate-300 px-2 py-1 font-mono text-xs"
+                  />
+                  <button onClick={() => setMerchant(b.id)} className="rounded-lg bg-slate-700 px-2 py-1 text-white">
+                    حفظ
+                  </button>
+                </span>
               )}
               <button
                 onClick={() => setBroadcastOpenId(broadcastOpenId === b.id ? null : b.id)}
