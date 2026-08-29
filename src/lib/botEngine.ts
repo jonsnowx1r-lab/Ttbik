@@ -237,11 +237,39 @@ async function routeText(
       slot_label: slot,
       status: "pending",
     });
-    await sendMenu(bot, template, chatId, `تم تسجيل حجز مبدئي:\n${slot}`);
+    await sendMenu(bot, template, chatId, `تم تسجيل حجز مبدئي:\n${slot}\n\nستظهر حالة التأكيد هنا وفي «مواعيدي» بعد مراجعة المالك.`);
     return;
   }
   if (text === "مواعيدي") {
-    await sendMenu(bot, template, chatId, "لا مواعيد مسجَّلة أو راجع لوحة الموقع.");
+    const db = supabaseAdmin();
+    const { data: appts } = await db
+      .from("bot_appointments")
+      .select("slot_label, status")
+      .eq("bot_id", bot.id)
+      .eq("tg_user_id", String(user.id))
+      .order("slot_label", { ascending: false })
+      .limit(8);
+    if (!appts || appts.length === 0) {
+      await sendMenu(
+        bot,
+        template,
+        chatId,
+        "لا مواعيد مسجَّلة. استخدم «حجز موعد» لطلب موعد جديد."
+      );
+      return;
+    }
+    const statusAr = (s: string) =>
+      s === "confirmed" || s === "مؤكد"
+        ? "مؤكد"
+        : s === "pending" || s === "قيد المراجعة"
+          ? "قيد المراجعة"
+          : s === "cancelled" || s === "ملغى"
+            ? "ملغى"
+            : s;
+    const list = appts
+      .map((a) => `• ${a.slot_label} — ${statusAr(String(a.status || "pending"))}`)
+      .join("\n");
+    await sendMenu(bot, template, chatId, `مواعيدك:\n${list}`);
     return;
   }
   await sendMenu(bot, template, chatId, "اختر أحد الأزرار من القائمة.");
