@@ -17,6 +17,16 @@ import {
  * clarified 2026-08-30, after sharing screenshots of a real reference bot,
  * exactly which categories and flow they meant by "بوت الإعلانات").
  *
+ * Navigation is built entirely from Telegram *reply keyboards* (the
+ * persistent button grid pinned above the text field), matching the
+ * reference bot's UX — the owner flagged (2026-08-30, with a screenshot)
+ * that inline buttons floating in the chat feed, on top of a message, do
+ * not read as a real "menu" the way a reference ad bot's does. The only
+ * place inline keyboards remain is a per-task "open link / mark done" card
+ * under "شاهد إعلان", because Telegram's reply keyboards cannot open an
+ * external URL — only an inline button's `url` field can — so that one
+ * case is a platform constraint, not a style choice.
+ *
  * Two top-level actions under "الإعلان":
  * - شاهد إعلان: browse and complete other members' campaigns to earn.
  * - ضع إعلانك: fund and launch your own campaign on one platform.
@@ -44,6 +54,7 @@ type TwitterSubType = "retweet" | "follow";
 type CreateStep = "subtype" | "description" | "target" | "budget" | "cpc";
 
 const MIN_CPC = 0.02;
+const BACK = "🔙 رجوع";
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   link: "🔗 لينك",
@@ -53,6 +64,9 @@ const PLATFORM_LABEL: Record<Platform, string> = {
   instagram: "📸 انستغرام",
   twitter: "🐦 تويتر",
 };
+const LABEL_TO_PLATFORM: Record<string, Platform> = Object.fromEntries(
+  (Object.keys(PLATFORM_LABEL) as Platform[]).map((p) => [PLATFORM_LABEL[p], p])
+) as Record<string, Platform>;
 
 const PLATFORM_STEPS: Record<Platform, CreateStep[]> = {
   link: ["target", "budget", "cpc"],
@@ -71,12 +85,29 @@ const STEP_PROMPT: Record<CreateStep, string> = {
   cpc: `حدد السعر لكل نقرة/مهمة بالدولار (الحد الأدنى $${MIN_CPC}, مثال: 0.02):`,
 };
 
+// Persistent reply keyboards (the pinned button grid), one per menu "screen".
+// resize_keyboard keeps them compact instead of full-width huge buttons.
+const AD_MENU_KB = { keyboard: [["شاهد إعلان 👀", "ضع إعلانك 📢"], [BACK]], resize_keyboard: true };
+const PLATFORM_MENU_KB = {
+  keyboard: [
+    [PLATFORM_LABEL.link, PLATFORM_LABEL.telegram],
+    [PLATFORM_LABEL.youtube, PLATFORM_LABEL.facebook],
+    [PLATFORM_LABEL.instagram, PLATFORM_LABEL.twitter],
+    [BACK],
+  ],
+  resize_keyboard: true,
+};
+const TWITTER_SUBTYPE_KB = { keyboard: [["🔁 إعادة تغريد", "➕ متابعة"], [BACK]], resize_keyboard: true };
+const REVIEW_KB = { keyboard: [["تأكيد الإرسال ✅", "إلغاء ❌"]], resize_keyboard: true };
+const WALLET_KB = { keyboard: [["إيداع 💰", "سحب 💸"], [BACK]], resize_keyboard: true };
+
 type Collected = { subType?: TwitterSubType; description?: string; target?: string; budget?: number; cpc?: number };
 type PendingAction =
+  | { mode: "platform_pick"; intent: "watch" | "place" }
   | { mode: "create_campaign"; platform: Platform; stepIndex: number; collected: Collected }
   | { mode: "reviewing_campaign"; platform: Platform; collected: Collected };
 
-const KNOWN_BUTTONS = ["الإعلان", "المحفظة", "الإحالات", "📊 الإحصائيات", "🌐 اللغة", "الأسئلة الشائعة", "سحب"];
+const TOP_BUTTONS = ["الإعلان", "المحفظة", "الإحالات", "📊 الإحصائيات", "🌐 اللغة", "الأسئلة الشائعة", "سحب"];
 
 function fmt(n: number): string {
   return `$${n.toFixed(2)}`;
@@ -93,25 +124,17 @@ async function setPendingAction(bot: HostedBot, user: TgUser, action: PendingAct
   await supabaseAdmin().from("bot_members").update({ pending_action: action }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
 }
 
-function platformKeyboard(prefix: string) {
-  return {
-    inline_keyboard: (Object.keys(PLATFORM_LABEL) as Platform[]).map((p) => [{ text: PLATFORM_LABEL[p], callback_data: `${prefix}:${p}` }]),
-  };
-}
-
 async function askNextStep(bot: HostedBot, chatId: number, platform: Platform, stepIndex: number, collected: Collected) {
   const steps = PLATFORM_STEPS[platform];
   const step = steps[stepIndex];
   if (step === "subtype") {
-    await tgSend(bot.bot_token, chatId, STEP_PROMPT.subtype, {
-      reply_markup: { inline_keyboard: [[{ text: "🔁 إعادة تغريد", callback_data: "subtype:retweet" }, { text: "➕ متابعة", callback_data: "subtype:follow" }]] },
-    });
+    await tgSend(bot.bot_token, chatId, STEP_PROMPT.subtype, { reply_markup: TWITTER_SUBTYPE_KB });
     return;
   }
-  await tgSend(bot.bot_token, chatId, STEP_PROMPT[step]);
+  await tgSend(bot.bot_token, chatId, STEP_PROMPT[step], { reply_markup: { remove_keyboard: true } });
 }
 
-async function sendReview(bot: HostedBot, template: BotTemplate, chatId: number, platform: Platform, collected: Collected) {
+async function sendReview(bot: HostedBot, chatId: number, platform: Platform, collected: Collected) {
   const clicks = Math.floor((collected.budget || 0) / (collected.cpc || MIN_CPC));
   const lines = [
     `مراجعة حملتك — ${PLATFORM_LABEL[platform]}`,
@@ -122,81 +145,21 @@ async function sendReview(bot: HostedBot, template: BotTemplate, chatId: number,
     `السعر لكل نقرة: ${fmt(collected.cpc || 0)}`,
     `عدد النقرات المتوقع: ~${clicks}`,
   ].filter(Boolean);
-  await tgSend(bot.bot_token, chatId, lines.join("\n"), {
-    reply_markup: { inline_keyboard: [[{ text: "تأكيد الإرسال ✅", callback_data: "campaign_confirm" }, { text: "إلغاء ❌", callback_data: "campaign_cancel" }]] },
-  });
+  await tgSend(bot.bot_token, chatId, lines.join("\n"), { reply_markup: REVIEW_KB });
 }
 
 export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplate, update: any) {
   const db = supabaseAdmin();
 
   if (update.callback_query) {
+    // Only the per-task "mark done" card (paired with a url button) still
+    // uses inline keyboards — everything else is reply-keyboard driven.
     const cq = update.callback_query;
     const user: TgUser = cq.from;
     const chatId = cq.message?.chat?.id ?? user.id;
     await tgAnswerCallback(bot.bot_token, cq.id);
     const member = await upsertMember(bot.id, user);
     const data = String(cq.data || "");
-    const pending = member.pending_action as PendingAction | null;
-
-    if (data === "watch_ads" || data === "place_ad") {
-      await tgSend(bot.bot_token, chatId, "اختر المنصة:", { reply_markup: platformKeyboard(data === "watch_ads" ? "watch" : "place") });
-      return;
-    }
-
-    if (data === "wallet_deposit" || data === "wallet_withdraw") {
-      await handleWalletCallback(bot, template, member, user, chatId, data);
-      return;
-    }
-
-    if (data.startsWith("watch:")) {
-      const platform = data.slice(6) as Platform;
-      const { data: tasks } = await db
-        .from("ad_tasks")
-        .select("id, platform, sub_type, description, target, cpc")
-        .eq("bot_id", bot.id)
-        .eq("platform", platform)
-        .eq("status", "active")
-        .gt("budget_remaining", 0)
-        .neq("advertiser_tg_user_id", String(user.id))
-        .order("created_at", { ascending: false })
-        .limit(10);
-      if (!tasks || tasks.length === 0) {
-        await sendMenu(bot, template, chatId, "لا حملات متاحة على هذه المنصة حالياً.");
-        return;
-      }
-      for (const t of tasks) {
-        const subLabel = t.sub_type === "retweet" ? " (إعادة تغريد)" : t.sub_type === "follow" ? " (متابعة)" : "";
-        const desc = t.description ? `\n${t.description}` : "";
-        const isTelegram = t.platform === "telegram";
-        await tgSend(bot.bot_token, chatId, `${PLATFORM_LABEL[platform]}${subLabel}${desc}\nالمكافأة: ${fmt(t.cpc)}`, {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: isTelegram ? "افتح القناة" : "فتح الرابط", url: isTelegram ? `https://t.me/${t.target.replace(/^@/, "")}` : t.target }],
-              [{ text: isTelegram ? "تحققت من الانضمام ✅" : "تأكيد الإتمام ✅", callback_data: `taskdone:${t.id}` }],
-            ],
-          },
-        });
-      }
-      return;
-    }
-
-    if (data.startsWith("place:")) {
-      const platform = data.slice(6) as Platform;
-      const steps = PLATFORM_STEPS[platform];
-      await setPendingAction(bot, user, { mode: "create_campaign", platform, stepIndex: 0, collected: {} });
-      await askNextStep(bot, chatId, platform, 0, {});
-      return;
-    }
-
-    if (data.startsWith("subtype:") && pending?.mode === "create_campaign" && PLATFORM_STEPS[pending.platform][pending.stepIndex] === "subtype") {
-      const subType = data.slice(8) as TwitterSubType;
-      const collected = { ...pending.collected, subType };
-      const nextIndex = pending.stepIndex + 1;
-      await setPendingAction(bot, user, { mode: "create_campaign", platform: pending.platform, stepIndex: nextIndex, collected });
-      await askNextStep(bot, chatId, pending.platform, nextIndex, collected);
-      return;
-    }
 
     if (data.startsWith("taskdone:")) {
       const taskId = data.slice(9);
@@ -219,44 +182,6 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
       await completeTask(bot, template, task, user, chatId, member);
       return;
     }
-
-    if (data === "campaign_confirm" && pending?.mode === "reviewing_campaign") {
-      const { platform, collected } = pending;
-      const budget = Number(collected.budget || 0);
-      const points = Number(member.points || 0);
-      if (budget > points) {
-        await sendMenu(bot, template, chatId, `الميزانية ${fmt(budget)} أكبر من رصيدك (${fmt(points)}). أودع رصيداً أولاً:\n${depositLink(bot, user.id)}`);
-        return;
-      }
-      const { error: insertError } = await db.from("ad_tasks").insert({
-        bot_id: bot.id,
-        advertiser_tg_user_id: String(user.id),
-        platform,
-        sub_type: collected.subType || null,
-        description: collected.description || null,
-        target: collected.target,
-        budget_total: budget,
-        budget_remaining: budget,
-        cpc: collected.cpc,
-        status: "pending",
-      });
-      if (insertError) {
-        await sendMenu(bot, template, chatId, `تعذّر إنشاء الحملة: ${insertError.message}`);
-        return;
-      }
-      await db.from("bot_members").update({ points: round2(points - budget) }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
-      await logPointsTx(bot.id, String(user.id), "campaign_spend", budget, `${PLATFORM_LABEL[platform]} ${collected.target}`);
-      await setPendingAction(bot, user, null);
-      await sendMenu(bot, template, chatId, `تم إرسال حملتك للمراجعة (خُصم ${fmt(budget)}). بعد موافقة المالك ستظهر في «شاهد إعلان» لكل الأعضاء.`);
-      return;
-    }
-
-    if (data === "campaign_cancel") {
-      await setPendingAction(bot, user, null);
-      await sendMenu(bot, template, chatId, "أُلغيت الحملة.");
-      return;
-    }
-
     return;
   }
 
@@ -271,28 +196,111 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
   if (text.startsWith("/start")) {
     const payload = text.slice(6).trim();
     if (payload) await maybeApplyReferral(bot, member, user, payload);
+    await setPendingAction(bot, user, null);
     await sendMenu(bot, template, chatId, bot.welcome_text || template.defaults.welcome);
     return;
   }
 
-  const isKnownCommand = KNOWN_BUTTONS.includes(text) || text.startsWith("سحب:");
   const pending = member.pending_action as PendingAction | null;
-  if (isKnownCommand && pending) {
+
+  // Universal back button: always returns to the main persistent menu.
+  if (text === BACK) {
+    await setPendingAction(bot, user, null);
+    await sendMenu(bot, template, chatId, "القائمة الرئيسية:");
+    return;
+  }
+
+  if (TOP_BUTTONS.includes(text) && pending) {
     await setPendingAction(bot, user, null);
   }
 
   if (text === "المحفظة") {
     const points = Number(member.points || 0);
-    await tgSend(bot.bot_token, chatId, `رصيدك: ${fmt(points)}`, {
-      reply_markup: { inline_keyboard: [[{ text: "إيداع 💰", callback_data: "wallet_deposit" }, { text: "سحب 💸", callback_data: "wallet_withdraw" }]] },
-    });
+    await tgSend(bot.bot_token, chatId, `رصيدك: ${fmt(points)}`, { reply_markup: WALLET_KB });
+    return;
+  }
+
+  if (text === "إيداع 💰") {
+    await tgSend(bot.bot_token, chatId, `اشترِ رصيداً (بعد مراجعة يدوية من المالك):\n${depositLink(bot, user.id)}`, { reply_markup: WALLET_KB });
+    return;
+  }
+
+  if (text === "سحب 💸") {
+    await tryHandleWithdrawal(bot, template, member, user, chatId, "سحب");
     return;
   }
 
   if (text === "الإعلان") {
-    await tgSend(bot.bot_token, chatId, "ماذا تريد؟", {
-      reply_markup: { inline_keyboard: [[{ text: "شاهد إعلان 👀", callback_data: "watch_ads" }], [{ text: "ضع إعلانك 📢", callback_data: "place_ad" }]] },
+    await tgSend(bot.bot_token, chatId, "ماذا تريد؟", { reply_markup: AD_MENU_KB });
+    return;
+  }
+
+  if (text === "شاهد إعلان 👀" || text === "ضع إعلانك 📢") {
+    const intent: "watch" | "place" = text === "شاهد إعلان 👀" ? "watch" : "place";
+    await setPendingAction(bot, user, { mode: "platform_pick", intent });
+    await tgSend(bot.bot_token, chatId, "اختر المنصة:", { reply_markup: PLATFORM_MENU_KB });
+    return;
+  }
+
+  if (pending?.mode === "platform_pick" && LABEL_TO_PLATFORM[text]) {
+    const platform = LABEL_TO_PLATFORM[text];
+    if (pending.intent === "watch") {
+      await setPendingAction(bot, user, null);
+      await sendWatchList(bot, template, platform, user, chatId);
+      return;
+    }
+    const steps = PLATFORM_STEPS[platform];
+    await setPendingAction(bot, user, { mode: "create_campaign", platform, stepIndex: 0, collected: {} });
+    await askNextStep(bot, chatId, platform, 0, {});
+    return;
+  }
+
+  if (
+    pending?.mode === "create_campaign" &&
+    PLATFORM_STEPS[pending.platform][pending.stepIndex] === "subtype" &&
+    (text === "🔁 إعادة تغريد" || text === "➕ متابعة")
+  ) {
+    const subType: TwitterSubType = text === "🔁 إعادة تغريد" ? "retweet" : "follow";
+    const collected = { ...pending.collected, subType };
+    const nextIndex = pending.stepIndex + 1;
+    await setPendingAction(bot, user, { mode: "create_campaign", platform: pending.platform, stepIndex: nextIndex, collected });
+    await askNextStep(bot, chatId, pending.platform, nextIndex, collected);
+    return;
+  }
+
+  if (pending?.mode === "reviewing_campaign" && (text === "تأكيد الإرسال ✅" || text === "إلغاء ❌")) {
+    if (text === "إلغاء ❌") {
+      await setPendingAction(bot, user, null);
+      await sendMenu(bot, template, chatId, "أُلغيت الحملة.");
+      return;
+    }
+    const { platform, collected } = pending;
+    const budget = Number(collected.budget || 0);
+    const points = Number(member.points || 0);
+    if (budget > points) {
+      await tgSend(bot.bot_token, chatId, `الميزانية ${fmt(budget)} أكبر من رصيدك (${fmt(points)}). أودع رصيداً أولاً:\n${depositLink(bot, user.id)}`, { reply_markup: REVIEW_KB });
+      return;
+    }
+    const { error: insertError } = await db.from("ad_tasks").insert({
+      bot_id: bot.id,
+      advertiser_tg_user_id: String(user.id),
+      platform,
+      sub_type: collected.subType || null,
+      description: collected.description || null,
+      target: collected.target,
+      budget_total: budget,
+      budget_remaining: budget,
+      cpc: collected.cpc,
+      status: "pending",
     });
+    if (insertError) {
+      await tgSend(bot.bot_token, chatId, `تعذّر إنشاء الحملة: ${insertError.message}`, { reply_markup: REVIEW_KB });
+      return;
+    }
+    await db.from("bot_members").update({ points: round2(points - budget) }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
+    await logPointsTx(bot.id, String(user.id), "campaign_spend", budget, `${PLATFORM_LABEL[platform]} ${collected.target}`);
+    await setPendingAction(bot, user, null);
+    await sendMenu(bot, template, chatId, `تم إرسال حملتك للمراجعة (خُصم ${fmt(budget)}). بعد موافقة المالك ستظهر في «شاهد إعلان» لكل الأعضاء.`);
     return;
   }
 
@@ -352,7 +360,7 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
     let updated = { ...collected };
     if (step === "description") {
       if (!text) {
-        await sendMenu(bot, template, chatId, "أرسل وصفاً غير فارغ.");
+        await tgSend(bot.bot_token, chatId, "أرسل وصفاً غير فارغ.");
         return;
       }
       updated.description = text;
@@ -361,18 +369,18 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
     } else if (step === "budget") {
       const budget = Number(text.replace(/[^0-9.]/g, ""));
       if (!Number.isFinite(budget) || budget <= 0) {
-        await sendMenu(bot, template, chatId, "أرسل رقماً صحيحاً أكبر من صفر بالدولار.");
+        await tgSend(bot.bot_token, chatId, "أرسل رقماً صحيحاً أكبر من صفر بالدولار.");
         return;
       }
       updated.budget = budget;
     } else if (step === "cpc") {
       const cpc = Number(text.replace(/[^0-9.]/g, ""));
       if (!Number.isFinite(cpc) || cpc < MIN_CPC) {
-        await sendMenu(bot, template, chatId, `السعر لكل نقرة لا يقل عن $${MIN_CPC}.`);
+        await tgSend(bot.bot_token, chatId, `السعر لكل نقرة لا يقل عن $${MIN_CPC}.`);
         return;
       }
       if (updated.budget && cpc > updated.budget) {
-        await sendMenu(bot, template, chatId, "السعر لكل نقرة أكبر من الميزانية الكلية.");
+        await tgSend(bot.bot_token, chatId, "السعر لكل نقرة أكبر من الميزانية الكلية.");
         return;
       }
       updated.cpc = cpc;
@@ -381,7 +389,7 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
     const nextIndex = stepIndex + 1;
     if (nextIndex >= PLATFORM_STEPS[platform].length) {
       await setPendingAction(bot, user, { mode: "reviewing_campaign", platform, collected: updated });
-      await sendReview(bot, template, chatId, platform, updated);
+      await sendReview(bot, chatId, platform, updated);
       return;
     }
     await setPendingAction(bot, user, { mode: "create_campaign", platform, stepIndex: nextIndex, collected: updated });
@@ -392,18 +400,39 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
   await sendMenu(bot, template, chatId, "اختر أحد الأزرار من القائمة.");
 }
 
-// "wallet_deposit"/"wallet_withdraw" callbacks are handled as plain text
-// commands for simplicity — Telegram inline buttons can't type text for the
-// user, so we translate the tap into the same flow "سحب" already uses, and
-// point deposit at the same manual-review link used everywhere else on the
-// site (a real automated on-chain deposit address is a separate, much
-// bigger decision — see the chat reply, not implemented here yet).
-async function handleWalletCallback(bot: HostedBot, template: BotTemplate, member: any, user: TgUser, chatId: number, action: string) {
-  if (action === "wallet_deposit") {
-    await sendMenu(bot, template, chatId, `اشترِ رصيداً (بعد مراجعة يدوية من المالك):\n${depositLink(bot, user.id)}`);
+async function sendWatchList(bot: HostedBot, template: BotTemplate, platform: Platform, user: TgUser, chatId: number) {
+  const db = supabaseAdmin();
+  const { data: tasks } = await db
+    .from("ad_tasks")
+    .select("id, platform, sub_type, description, target, cpc")
+    .eq("bot_id", bot.id)
+    .eq("platform", platform)
+    .eq("status", "active")
+    .gt("budget_remaining", 0)
+    .neq("advertiser_tg_user_id", String(user.id))
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (!tasks || tasks.length === 0) {
+    await sendMenu(bot, template, chatId, "لا حملات متاحة على هذه المنصة حالياً.");
     return;
   }
-  await tryHandleWithdrawal(bot, template, member, user, chatId, "سحب");
+  // Per-task cards keep inline buttons on purpose: a reply keyboard button
+  // can only send text back, it cannot open an external URL — only an
+  // inline button's `url` field can, so this one case stays inline.
+  for (const t of tasks) {
+    const subLabel = t.sub_type === "retweet" ? " (إعادة تغريد)" : t.sub_type === "follow" ? " (متابعة)" : "";
+    const desc = t.description ? `\n${t.description}` : "";
+    const isTelegram = t.platform === "telegram";
+    await tgSend(bot.bot_token, chatId, `${PLATFORM_LABEL[platform]}${subLabel}${desc}\nالمكافأة: ${fmt(t.cpc)}`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: isTelegram ? "افتح القناة" : "فتح الرابط", url: isTelegram ? `https://t.me/${t.target.replace(/^@/, "")}` : t.target }],
+          [{ text: isTelegram ? "تحققت من الانضمام ✅" : "تأكيد الإتمام ✅", callback_data: `taskdone:${t.id}` }],
+        ],
+      },
+    });
+  }
+  await sendMenu(bot, template, chatId, "بعد إتمام مهمة اضغط زر التأكيد أسفل بطاقتها. للرجوع للقائمة الرئيسية:");
 }
 
 async function completeTask(bot: HostedBot, template: BotTemplate, task: any, user: TgUser, chatId: number, member: any) {
