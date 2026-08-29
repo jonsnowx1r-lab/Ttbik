@@ -1,12 +1,19 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5464067488,
-  "last_actor": "grok",
-  "updated_at": "2026-08-29T18:18:00Z",
+  "last_seen_comment_id": 5464636439,
+  "last_actor": "claude",
+  "updated_at": "2026-08-29T19:00:00Z",
   "mode": "work-cycle",
-  "open": [],
+  "open": [
+    "medical facilities bot logic — blocked on owner answers to location/country detection and pharmacist verification method (see docs/IMPLEMENTATION_PLAN.md section 7)",
+    "store bot merchant-identity gate — any member can currently add a product via متجري; must be closed before public launch, acceptable only during admin-only testing"
+  ],
   "resolved": [
+    "docs/IMPLEMENTATION_PLAN.md adopted as the canonical shared plan (owner-approved reorganization of PROJECT_BRIEF_FOR_HANDOFF.md)",
+    "store bot expanded: store_products + marketplace_listings tables, متجري/بيع مستعمل/شراء مستعمل buttons, delimited-text commands",
+    "medical facilities schema prepped (locations/medical_facilities/facility_shifts/facility_bookings) — no bot logic yet, intentional",
+    "bot_token confirmed never exposed in any admin API/UI — no change needed",
     "order alert to owner failed silently on unescaped Markdown in customer fields — parse_mode dropped, error now logged",
     "orders create endpoint had no rate limit — 5/10min per IP added",
     "admin orders decision route hardened with isOwnerRequest as a second layer",
