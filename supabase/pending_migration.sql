@@ -77,12 +77,85 @@ alter table public.bot_members add column if not exists referred_by text;
 -- points, instead of trusting an honesty-based "I watched it" click.
 alter table public.bot_ads add column if not exists channel_username text;
 
+-- Store-bot expansion: dynamic products managed by the merchant via bot
+-- commands (instead of only the fixed textarea entered once at bot creation),
+-- plus a peer-to-peer used-item marketplace scoped to that bot's audience.
+create table if not exists public.store_products (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.hosted_bots(id) on delete cascade,
+  name text not null,
+  price numeric,
+  description text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.marketplace_listings (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.hosted_bots(id) on delete cascade,
+  tg_user_id text not null,
+  title text not null,
+  price numeric,
+  description text,
+  status text not null default 'available', -- available | sold
+  created_at timestamptz not null default now()
+);
+
+-- Medical-facilities system (pharmacy/hospital/clinic/medical point) — schema
+-- only, prepared ahead of the bot-engine work for it. One unified table per
+-- facility_type instead of four near-identical tables (see project brief
+-- section 10.2). Bot-engine wiring is intentionally NOT built yet: it
+-- depends on two open product decisions (how a user's location/country is
+-- determined, and the pharmacist/facility verification method) that are
+-- still pending the owner's answer.
+create table if not exists public.locations (
+  id uuid primary key default gen_random_uuid(),
+  parent_id uuid references public.locations(id) on delete cascade,
+  level text not null, -- governorate | city | district | village
+  name text not null
+);
+
+create table if not exists public.medical_facilities (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.hosted_bots(id) on delete cascade,
+  facility_type text not null, -- pharmacy | hospital | clinic | medical_point
+  name text not null,
+  location_id uuid references public.locations(id),
+  owner_tg_user_id text not null,
+  license_number text,
+  verification_status text not null default 'pending', -- pending | verified | rejected
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.facility_shifts (
+  id uuid primary key default gen_random_uuid(),
+  facility_id uuid not null references public.medical_facilities(id) on delete cascade,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null
+);
+
+create table if not exists public.facility_bookings (
+  id uuid primary key default gen_random_uuid(),
+  facility_id uuid not null references public.medical_facilities(id) on delete cascade,
+  tg_user_id text not null,
+  requested_slot text not null,
+  alternative_slot text,
+  status text not null default 'pending', -- pending | approved | rejected | rescheduled
+  created_at timestamptz not null default now()
+);
+
 alter table public.hosted_bots enable row level security;
 alter table public.bot_members enable row level security;
 alter table public.bot_wallet_tx enable row level security;
 alter table public.bot_ads enable row level security;
 alter table public.bot_appointments enable row level security;
 alter table public.bot_ad_views enable row level security;
+alter table public.store_products enable row level security;
+alter table public.marketplace_listings enable row level security;
+alter table public.locations enable row level security;
+alter table public.medical_facilities enable row level security;
+alter table public.facility_shifts enable row level security;
+alter table public.facility_bookings enable row level security;
 
 -- Same lesson as earlier in this project: RLS alone does not grant access.
 -- These tables were created via SQL Editor, so service_role (used by every
@@ -91,7 +164,9 @@ alter table public.bot_ad_views enable row level security;
 -- Root cause of "permission denied for table hosted_bots" in production.
 grant select, insert, update, delete on
   public.hosted_bots, public.bot_members, public.bot_wallet_tx,
-  public.bot_ads, public.bot_appointments, public.bot_ad_views
+  public.bot_ads, public.bot_appointments, public.bot_ad_views,
+  public.store_products, public.marketplace_listings,
+  public.locations, public.medical_facilities, public.facility_shifts, public.facility_bookings
 to service_role;
 
 -- Purchasable service unlocking access to /bots (the hosted-bot builder).

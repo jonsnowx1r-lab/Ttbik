@@ -181,7 +181,18 @@ async function routeText(
 
   if (text === "المنتجات" || (text === "خدماتنا" && template.id === "clinic")) {
     if (template.id === "store") {
-      const items = Array.isArray(cfg.products) && cfg.products.length ? cfg.products : ["المنتج الأساسي"];
+      const db = supabaseAdmin();
+      const { data: dbProducts } = await db
+        .from("store_products")
+        .select("name, price")
+        .eq("bot_id", bot.id)
+        .eq("is_active", true);
+      const items =
+        dbProducts && dbProducts.length
+          ? dbProducts.map((p) => (p.price != null ? `${p.name} — ${p.price}` : p.name))
+          : Array.isArray(cfg.products) && cfg.products.length
+            ? cfg.products
+            : ["المنتج الأساسي"];
       await sendMenu(
         bot,
         template,
@@ -384,12 +395,116 @@ async function routeText(
     await sendMenu(bot, template, chatId, `مواعيدك:\n${list}`);
     return;
   }
+  if (template.id === "store" && text === "متجري") {
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      `إدارة متجرك — لأي عضو يرسل الصيغة التالية الآن (مرحلة اختبار الإدمن، لا تحقق هوية تاجر بعد):\n\nمنتج: الاسم | السعر | الوصف\n\nمثال:\nمنتج: قميص قطن | 15 | مقاسات S-XL متوفرة`
+    );
+    return;
+  }
+
+  if (template.id === "store" && text.startsWith("منتج:")) {
+    const parts = text.slice(5).split("|").map((s) => s.trim());
+    const [name, priceRaw, description] = parts;
+    if (!name) {
+      await sendMenu(bot, template, chatId, "الصيغة: منتج: الاسم | السعر | الوصف");
+      return;
+    }
+    const price = priceRaw ? Number(priceRaw) : null;
+    const db = supabaseAdmin();
+    const { error } = await db.from("store_products").insert({
+      bot_id: bot.id,
+      name,
+      price: Number.isFinite(price as number) ? price : null,
+      description: description || null,
+      is_active: true,
+    });
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      error ? `تعذّرت الإضافة: ${error.message}` : `أُضيف المنتج «${name}» إلى «المنتجات».`
+    );
+    return;
+  }
+
+  if (template.id === "store" && text === "بيع مستعمل") {
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      `لعرض سلعة مستعملة للبيع أرسل الصيغة التالية:\n\nمستعمل: العنوان | السعر | الوصف\n\nمثال:\nمستعمل: دراجة هوائية | 40 | استعمال خفيف، بلا أعطال`
+    );
+    return;
+  }
+
+  if (template.id === "store" && text.startsWith("مستعمل:")) {
+    const parts = text.slice(7).split("|").map((s) => s.trim());
+    const [title, priceRaw, description] = parts;
+    if (!title) {
+      await sendMenu(bot, template, chatId, "الصيغة: مستعمل: العنوان | السعر | الوصف");
+      return;
+    }
+    const price = priceRaw ? Number(priceRaw) : null;
+    const db = supabaseAdmin();
+    const { error } = await db.from("marketplace_listings").insert({
+      bot_id: bot.id,
+      tg_user_id: String(user.id),
+      title,
+      price: Number.isFinite(price as number) ? price : null,
+      description: description || null,
+      status: "available",
+    });
+    await sendMenu(
+      bot,
+      template,
+      chatId,
+      error ? `تعذّر النشر: ${error.message}` : `نُشرت سلعتك «${title}» في «شراء مستعمل».`
+    );
+    return;
+  }
+
+  if (template.id === "store" && (text === "شراء مستعمل" || text.startsWith("بحث:"))) {
+    const db = supabaseAdmin();
+    let query = db
+      .from("marketplace_listings")
+      .select("title, price, description")
+      .eq("bot_id", bot.id)
+      .eq("status", "available")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (text.startsWith("بحث:")) {
+      const keyword = text.slice(4).trim();
+      if (keyword) query = query.ilike("title", `%${keyword}%`);
+    }
+    const { data: listings } = await query;
+    if (!listings || listings.length === 0) {
+      await sendMenu(bot, template, chatId, "لا توجد سلع مستعملة معروضة حالياً. للبحث باسم: بحث: اسم السلعة");
+      return;
+    }
+    const list = listings
+      .map((l) => `• ${l.title}${l.price != null ? ` — ${l.price}` : ""}${l.description ? `\n  ${l.description}` : ""}`)
+      .join("\n");
+    await sendMenu(bot, template, chatId, `السلع المستعملة المعروضة:\n${list}\n\nللبحث باسم: بحث: اسم السلعة`);
+    return;
+  }
+
   // Store: text matching a product name → pending order request
   if (template.id === "store") {
-    const items = Array.isArray(cfg.products) && cfg.products.length ? cfg.products.map(String) : [];
+    const db = supabaseAdmin();
+    const { data: dbProducts } = await db
+      .from("store_products")
+      .select("name")
+      .eq("bot_id", bot.id)
+      .eq("is_active", true);
+    const items = [
+      ...(dbProducts ? dbProducts.map((p) => p.name) : []),
+      ...(Array.isArray(cfg.products) ? cfg.products.map(String) : []),
+    ];
     const match = items.find((p) => p === text || p.startsWith(text) || text.startsWith(p.split("—")[0].trim()) || text.startsWith(p.split("-")[0].trim()));
     if (match) {
-      const db = supabaseAdmin();
       await db.from("bot_wallet_tx").insert({
         bot_id: bot.id,
         tg_user_id: String(user.id),
