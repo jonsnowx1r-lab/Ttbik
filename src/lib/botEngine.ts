@@ -288,7 +288,9 @@ async function routeText(
                 ? "حضور يومي"
                 : t.kind === "referral"
                   ? "إحالة"
-                  : String(t.kind || "عملية");
+                  : t.kind === "ad_view"
+                    ? "مشاهدة إعلان"
+                    : String(t.kind || "عملية");
         const when = t.created_at ? String(t.created_at).slice(0, 10) : "";
         const extra = t.note ? ` — ${t.note}` : t.amount ? ` ${t.amount}` : "";
         return `• ${kind}${extra} — ${statusAr(String(t.status || "pending"))}${when ? ` (${when})` : ""}`;

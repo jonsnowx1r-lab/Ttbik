@@ -2,8 +2,8 @@
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5462917187,
-  "last_actor": "claude",
-  "updated_at": "2026-08-29T14:30:00Z",
+  "last_actor": "grok",
+  "updated_at": "2026-08-29T14:25:00Z",
   "mode": "work-cycle",
   "open": [],
   "resolved": [
@@ -23,6 +23,7 @@
     "ad task can now require real Telegram channel membership (getChatMember) before crediting points, not just an honesty click — bot_ads.channel_username + tgIsChannelMember",
     "admin broadcast: owner can message every bot_member of a hosted bot from /admin/bots (POST /api/admin/bots/[id]/broadcast)",
     "proposal G1 (broadcast-bot template): deferred — admin broadcast on existing bots covers the same need; no dedicated one-way template for now",
-    "checkin + referral points now logged to bot_wallet_tx (audit trail, no cash)"
+    "checkin + referral points now logged to bot_wallet_tx (audit trail, no cash)",
+    "ad_view awards now logged to bot_wallet_tx (kind=ad_view, confirmed) — appears in طلباتي as مشاهدة إعلان"
   ]
 }
