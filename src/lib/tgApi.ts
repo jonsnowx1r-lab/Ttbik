@@ -50,3 +50,10 @@ export async function tgAnswerCallback(token: string, id: string, text?: string)
     show_alert: false,
   });
 }
+
+export async function tgIsChannelMember(token: string, channelUsername: string, userId: number) {
+  const chatId = channelUsername.startsWith("@") ? channelUsername : `@${channelUsername}`;
+  const res = await tgCall<{ status: string }>(token, "getChatMember", { chat_id: chatId, user_id: userId });
+  if (!res.ok || !res.result) return false;
+  return ["member", "administrator", "creator"].includes(res.result.status);
+}

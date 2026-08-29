@@ -72,6 +72,11 @@ create table if not exists public.bot_ad_views (
 alter table public.bot_members add column if not exists last_checkin date;
 alter table public.bot_members add column if not exists referred_by text;
 
+-- Optional "join our channel" requirement on an ad: when set, /api/bots/ads/claim
+-- verifies real Telegram channel membership via getChatMember before awarding
+-- points, instead of trusting an honesty-based "I watched it" click.
+alter table public.bot_ads add column if not exists channel_username text;
+
 alter table public.hosted_bots enable row level security;
 alter table public.bot_members enable row level security;
 alter table public.bot_wallet_tx enable row level security;

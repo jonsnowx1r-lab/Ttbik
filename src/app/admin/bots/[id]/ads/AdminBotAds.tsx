@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
-type Ad = { id: string; title: string; reward_points: number; is_active: boolean };
+type Ad = { id: string; title: string; reward_points: number; is_active: boolean; channel_username?: string | null };
 
 export default function AdminBotAds({ botId }: { botId: string }) {
   const [ads, setAds] = useState<Ad[]>([]);
   const [title, setTitle] = useState("");
   const [rewardPoints, setRewardPoints] = useState("5");
+  const [channelUsername, setChannelUsername] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -27,13 +28,14 @@ export default function AdminBotAds({ botId }: { botId: string }) {
     const res = await fetch(`/api/admin/bots/${botId}/ads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, rewardPoints: Number(rewardPoints) }),
+      body: JSON.stringify({ title, rewardPoints: Number(rewardPoints), channelUsername }),
     });
     const data = await res.json();
     setMsg(res.ok ? "أُضيف الإعلان" : data.error || "فشل");
     if (res.ok) {
       setTitle("");
       setRewardPoints("5");
+      setChannelUsername("");
       await load();
     }
     setBusy(false);
@@ -82,6 +84,15 @@ export default function AdminBotAds({ botId }: { botId: string }) {
             إضافة
           </button>
         </div>
+        <input
+          value={channelUsername}
+          onChange={(e) => setChannelUsername(e.target.value)}
+          placeholder="يوزر قناة للانضمام الإجباري (اختياري) مثال: mychannel"
+          className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+        />
+        <p className="mt-1 text-[11px] text-slate-400">
+          إن أُدخل يوزر، يتحقق البوت فعلياً من عضوية المستخدم في القناة عبر تيليجرام قبل احتساب النقاط.
+        </p>
         {msg && <p className="mt-2 text-xs text-slate-500">{msg}</p>}
       </div>
 
@@ -92,6 +103,7 @@ export default function AdminBotAds({ botId }: { botId: string }) {
               <p className="font-bold text-slate-900">{ad.title}</p>
               <p className="text-xs text-slate-500">
                 {ad.reward_points} نقطة · {ad.is_active ? "🟢 نشط" : "⚪ متوقف"}
+                {ad.channel_username && ` · يشترط الانضمام إلى @${ad.channel_username}`}
               </p>
             </div>
             <div className="flex gap-2">

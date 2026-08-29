@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { tgIsChannelMember } from "@/lib/tgApi";
 
 /**
  * Awards points for watching one specific ad, exactly once per member.
@@ -17,16 +18,27 @@ export async function POST(req: NextRequest) {
 
   const db = supabaseAdmin();
 
-  const { data: bot } = await db.from("hosted_bots").select("id").eq("public_code", publicCode).maybeSingle();
+  const { data: bot } = await db.from("hosted_bots").select("id, bot_token").eq("public_code", publicCode).maybeSingle();
   if (!bot) return NextResponse.json({ error: "البوت غير موجود" }, { status: 404 });
 
   const { data: ad } = await db
     .from("bot_ads")
-    .select("id, reward_points, is_active")
+    .select("id, reward_points, is_active, channel_username")
     .eq("id", adId)
     .eq("bot_id", bot.id)
     .maybeSingle();
   if (!ad || !ad.is_active) return NextResponse.json({ error: "الإعلان غير متاح" }, { status: 404 });
+
+  if (ad.channel_username) {
+    const numericUid = Number(uid);
+    const isMember = Number.isFinite(numericUid) && (await tgIsChannelMember(bot.bot_token, ad.channel_username, numericUid));
+    if (!isMember) {
+      return NextResponse.json(
+        { error: `انضم إلى القناة أولاً: @${ad.channel_username.replace(/^@/, "")}` },
+        { status: 403 }
+      );
+    }
+  }
 
   const { error: viewError } = await db.from("bot_ad_views").insert({ bot_id: bot.id, ad_id: adId, tg_user_id: uid });
   if (viewError) {

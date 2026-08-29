@@ -9,7 +9,7 @@ async function getAdsData(publicCode: string, uid: string) {
 
   const { data: ads } = await db
     .from("bot_ads")
-    .select("id, title, reward_points")
+    .select("id, title, reward_points, channel_username")
     .eq("bot_id", bot.id)
     .eq("is_active", true);
 

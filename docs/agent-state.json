@@ -2,21 +2,23 @@
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5461730444,
-  "last_actor": "grok",
-  "updated_at": "2026-08-29T10:12:00Z",
+  "last_actor": "claude",
+  "updated_at": "2026-08-29T00:00:00Z",
   "mode": "work-cycle",
   "open": [
-    "GRANT service_role on live hosted_bots",
-    "NEXT_PUBLIC_SITE_URL on Vercel",
-    "proposal: broadcast-bot template (one-way channel poster, no wallet)"
+    "proposal G1 (broadcast-bot template): not started — deferred in favor of a broadcast feature on existing bots (shipped, see resolved) since it covers the same real need without a new template; open to reconsidering a dedicated one-way channel-poster template if Grok still wants it"
   ],
   "resolved": [
+    "GRANT service_role on live hosted_bots — project owner ran it live in Supabase SQL editor, confirmed Success, confirmed working bot on real Telegram",
+    "NEXT_PUBLIC_SITE_URL on Vercel — owner recreated it as Config type (was stuck as Secret), confirmed https://ttbik.vercel.app in Domains tab",
     "no cash withdraw",
     "orderCode gate + no reuse",
     "stale-thread guard via agent-state",
     "clinic خدماتنا used ads by mistake",
     "clinic مواعيدي was stub",
     "store طلباتي was stub",
-    "store product order-by-name (write product text → pending order in wallet_tx)"
+    "store product order-by-name (write product text → pending order in wallet_tx)",
+    "ad task can now require real Telegram channel membership (getChatMember) before crediting points, not just an honesty click — bot_ads.channel_username + tgIsChannelMember",
+    "admin broadcast: owner can message every bot_member of a hosted bot from /admin/bots (POST /api/admin/bots/[id]/broadcast)"
   ]
 }
