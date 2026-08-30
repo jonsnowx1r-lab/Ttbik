@@ -25,6 +25,8 @@ export default function BotBuilder({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [botLink, setBotLink] = useState<string | null>(null);
+  const [publicCode, setPublicCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const preview = useMemo(() => welcome || template.defaults.welcome, [welcome, template.defaults.welcome]);
 
@@ -33,6 +35,8 @@ export default function BotBuilder({
     setError(null);
     setResult(null);
     setBotLink(null);
+    setPublicCode(null);
+    setCopied(false);
     try {
       const trimmed = token.trim();
       if (!TOKEN_RE.test(trimmed)) {
@@ -55,12 +59,25 @@ export default function BotBuilder({
       const data = await res.json();
       if (!res.ok) throw new Error([data.error, data.detail].filter(Boolean).join("\n") || "فشل التشغيل");
       const uname = String(data.bot?.bot_username || "").replace(/^@/, "");
-      setResult(`${data.message}\n${data.bot?.bot_username || ""}\nرمز البوت: ${data.bot?.public_code || ""}`);
+      const code = String(data.bot?.public_code || "");
+      setResult(`${data.message}\n${data.bot?.bot_username || ""}\nرمز البوت: ${code}`);
       if (uname) setBotLink(`https://t.me/${uname}`);
+      if (code) setPublicCode(code);
     } catch (e: any) {
       setError(e.message || "خطأ");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyPublicCode() {
+    if (!publicCode) return;
+    try {
+      await navigator.clipboard.writeText(publicCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -132,16 +149,27 @@ export default function BotBuilder({
         {result && (
           <div className="space-y-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm">
             <pre className="whitespace-pre-wrap">{result}</pre>
-            {botLink && (
-              <a
-                href={botLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block rounded-lg bg-brand-700 px-3 py-2 text-xs font-bold text-white"
-              >
-                افتح البوت على تليجرام →
-              </a>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {botLink && (
+                <a
+                  href={botLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block rounded-lg bg-brand-700 px-3 py-2 text-xs font-bold text-white"
+                >
+                  افتح البوت على تليجرام →
+                </a>
+              )}
+              {publicCode && (
+                <button
+                  type="button"
+                  onClick={copyPublicCode}
+                  className="rounded-lg border border-emerald-600 bg-white px-3 py-2 text-xs font-bold text-emerald-800"
+                >
+                  {copied ? "تم النسخ ✓" : "نسخ رمز البوت"}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </form>
