@@ -3,7 +3,7 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5469765839,
   "last_actor": "grok",
-  "updated_at": "2026-08-30T16:06:00Z",
+  "updated_at": "2026-08-30T19:10:00Z",
   "mode": "work-cycle",
   "open": [
     "store bot merchant-identity gate — create form accepts optional merchant_tg_id; admin UI exists; engine gate active. Still must set a real merchant_tg_id per store bot before any public launch.",
@@ -39,6 +39,7 @@
     "clinic slot labels Arabic (غداً 10 / غداً 16 / بعد غد 10) instead of ISO",
     "ad-network template isolated in adNetworkBot.ts (two-sided task marketplace, USD CPC, reply keyboards)",
     "bots listing page copy/metadata refreshed to include ad-network + medical (a3a3cff)",
-    "BotBuilder success UI: direct t.me open link after launch (a5d29e0)"
+    "BotBuilder success UI: direct t.me open link after launch (a5d29e0)",
+    "BotBuilder client-side token format validation before create (75bbd00)"
   ]
 }
