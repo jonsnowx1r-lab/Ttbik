@@ -22,6 +22,7 @@ export default function BotBuilder({
   const [merchantTgId, setMerchantTgId] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [botLink, setBotLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const preview = useMemo(() => welcome || template.defaults.welcome, [welcome, template.defaults.welcome]);
 
@@ -29,6 +30,7 @@ export default function BotBuilder({
     setBusy(true);
     setError(null);
     setResult(null);
+    setBotLink(null);
     try {
       const res = await fetch("/api/bots/create", {
         method: "POST",
@@ -46,7 +48,9 @@ export default function BotBuilder({
       });
       const data = await res.json();
       if (!res.ok) throw new Error([data.error, data.detail].filter(Boolean).join("\n") || "فشل التشغيل");
+      const uname = String(data.bot?.bot_username || "").replace(/^@/, "");
       setResult(`${data.message}\n${data.bot?.bot_username || ""}\nرمز البوت: ${data.bot?.public_code || ""}`);
+      if (uname) setBotLink(`https://t.me/${uname}`);
     } catch (e: any) {
       setError(e.message || "خطأ");
     } finally {
@@ -119,7 +123,21 @@ export default function BotBuilder({
           {busy ? "..." : "تشغيل البوت"}
         </button>
         {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        {result && <pre className="whitespace-pre-wrap rounded-xl bg-emerald-50 px-3 py-2 text-sm">{result}</pre>}
+        {result && (
+          <div className="space-y-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm">
+            <pre className="whitespace-pre-wrap">{result}</pre>
+            {botLink && (
+              <a
+                href={botLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block rounded-lg bg-brand-700 px-3 py-2 text-xs font-bold text-white"
+              >
+                افتح البوت على تليجرام →
+              </a>
+            )}
+          </div>
+        )}
       </form>
       <div className="rounded-2xl bg-[#0e1621] p-4 text-slate-100">
         <p className="mb-3 text-center text-xs text-slate-400">معاينة</p>
