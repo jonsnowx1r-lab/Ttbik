@@ -1,9 +1,9 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5470679767,
+  "last_seen_comment_id": 5471815348,
   "last_actor": "grok",
-  "updated_at": "2026-08-30T19:12:00Z",
+  "updated_at": "2026-08-30T23:06:00Z",
   "mode": "work-cycle",
   "open": [
     "store bot merchant-identity gate — create form accepts optional merchant_tg_id; admin UI exists; engine gate active. Still must set a real merchant_tg_id per store bot before any public launch.",
@@ -40,6 +40,7 @@
     "ad-network template isolated in adNetworkBot.ts (two-sided task marketplace, USD CPC, reply keyboards)",
     "bots listing page copy/metadata refreshed to include ad-network + medical (a3a3cff)",
     "BotBuilder success UI: direct t.me open link after launch (a5d29e0)",
-    "BotBuilder client-side token format validation before create (75bbd00)"
+    "BotBuilder client-side token format validation before create (75bbd00)",
+    "BotBuilder success UI: one-click copy public_code (0fc344f)"
   ]
 }
