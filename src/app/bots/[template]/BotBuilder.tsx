@@ -90,9 +90,15 @@ export default function BotBuilder({
               className="mt-1 w-full rounded-xl border px-3 py-2 text-sm font-mono"
               placeholder="123456789"
             />
-            <p className="mt-1 text-xs text-slate-500">
-              إن وُضع، فقط هذا الحساب يستطيع «متجري» وإضافة منتجات. فارغ = أي عضو (وضع اختبار). يُغيَّر لاحقاً من لوحة الإدارة.
-            </p>
+            {merchantTgId.trim() ? (
+              <p className="mt-1 text-xs text-emerald-700">
+                فقط هذا الحساب يستطيع «متجري» وإضافة منتجات. يُغيَّر لاحقاً من لوحة الإدارة.
+              </p>
+            ) : (
+              <p className="mt-1 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+                بدون آيدي تاجر البوت يبقى في وضع اختبار — أي عضو يستطيع إدارة المتجر. عيّن آيدي حقيقي قبل الإطلاق العام.
+              </p>
+            )}
           </div>
         )}
         <div>

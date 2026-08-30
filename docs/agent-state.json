@@ -1,16 +1,16 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5467786858,
+  "last_seen_comment_id": 5467790547,
   "last_actor": "grok",
-  "updated_at": "2026-08-30T09:06:00Z",
+  "updated_at": "2026-08-30T12:23:44Z",
   "mode": "work-cycle",
   "open": [
-    "store bot merchant-identity gate — create form now accepts optional merchant_tg_id; admin UI already exists. Still must set a real merchant_tg_id per store bot before any public launch.",
-    "GROK TOOLING ALERT (active): Grok must not edit src/lib/botEngine.ts until a confirmed clean write test. Previous attempts (85a6ecf, bf1803b, 42adeb2) produced empty/PLACEHOLDER content. Claude owns engine fixes for now; Grok stays on botTemplates, tgApi, botCodes, src/app/bots/**, api/bots/**, pay/bot/**.",
-    "G2 waiting-ack: enforce store merchant_tg_id before live (see agent-inbox.md)"
+    "store bot merchant-identity gate — create form accepts optional merchant_tg_id; admin UI exists; engine gate active. Still must set a real merchant_tg_id per store bot before any public launch.",
+    "GROK TOOLING ALERT (active): Grok must not edit src/lib/botEngine.ts until a confirmed clean write test. Previous attempts (85a6ecf, bf1803b, 42adeb2) produced empty/PLACEHOLDER content. Claude owns engine fixes for now; Grok stays on botTemplates, tgApi, botCodes, src/app/bots/**, api/bots/**, pay/bot/**."
   ],
   "resolved": [
+    "G2 store merchant gate proposal — ack by Claude: already implemented (engine isMerchant + BotBuilder warning). Closed.",
     "ad-campaign withdrawal: سحب button + سحب: N command, min points + min account age gate, /admin/bots/[id]/withdrawals for manual approve/reject",
     "medical facilities bot: full logic in src/lib/medicalBot.ts (phone-based country, photo+caption registration, /admin/bots/[id]/facilities verification, governorate-based on-duty search, booking approve/reject/reschedule)",
     "docs/IMPLEMENTATION_PLAN.md adopted as the canonical shared plan (owner-approved reorganization of PROJECT_BRIEF_FOR_HANDOFF.md)",

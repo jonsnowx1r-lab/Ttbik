@@ -17,4 +17,4 @@ Proposal (implementation split):
 
 Why now: without a real merchant identity a paid store bot is unusable in production and risks random members hijacking the catalog. Zero extra tables/cost. One order still = one bot.
 
-Status: waiting-ack
+Status: closed — Claude ack 5467790547: already implemented (engine isMerchant gate + BotBuilder warning). No further change needed.
