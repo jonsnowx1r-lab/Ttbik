@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { BotTemplate } from "@/lib/botTemplates";
 
+const TOKEN_RE = /^\d{6,}:[A-Za-z0-9_-]{30,}$/;
+
 export default function BotBuilder({
   template,
   initialOrderCode = "",
@@ -32,12 +34,16 @@ export default function BotBuilder({
     setResult(null);
     setBotLink(null);
     try {
+      const trimmed = token.trim();
+      if (!TOKEN_RE.test(trimmed)) {
+        throw new Error("صيغة التوكن غير صحيحة. انسخه من @BotFather كما هو (رقم:حروف). دون مسافات أو علامات اقتباس.");
+      }
       const res = await fetch("/api/bots/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           template: template.id,
-          token,
+          token: trimmed,
           ownerContact,
           orderCode,
           welcome,
