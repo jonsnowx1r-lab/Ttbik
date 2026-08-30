@@ -4,7 +4,8 @@ import { BOT_TEMPLATES } from "@/lib/botTemplates";
 
 export const metadata: Metadata = {
   title: "منشئ البوتات المستضافة | سوق تولز",
-  description: "شغّل بوت تليجرام حقيقي بتوكنك على قوالب جاهزة: حملات إعلانية، متجر، عيادة.",
+  description:
+    "شغّل بوت تليجرام حقيقي بتوكنك على قوالب جاهزة: شبكة إعلانات (اربح واعلن)، حملات، متجر، عيادة، منشآت طبية.",
 };
 
 export default function BotsPage() {
@@ -13,10 +14,10 @@ export default function BotsPage() {
       <p className="text-xs font-bold text-brand-700">قسم الأدوات — استضافة بوتات</p>
       <h1 className="mt-2 text-3xl font-extrabold text-slate-900">منشئ البوتات العامل</h1>
       <p className="mt-3 max-w-2xl text-slate-600">
-        لا نبيع ملفاً. تضع توكن البوت من BotFather، تختار قالباً، ونشغّله على خادم الموقع.
-        القوائم والمحفظة والإيداع تعمل داخل تليجرام، بينما روابط الدفع تُولَّد من سوق تولز.
+        لا نبيع ملفاً ولا كوداً للتحميل. تضع توكن البوت من BotFather، تختار قالباً، ونشغّله على خادم الموقع.
+        القوائم والمحفظة والمهام تعمل داخل تليجرام؛ روابط الدفع والإيداع تُولَّد من سوق تولز بعد طلب معتمد.
       </p>
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {BOT_TEMPLATES.map((t) => (
           <Link
             key={t.id}
@@ -29,7 +30,7 @@ export default function BotsPage() {
             <div className="p-5">
               <h2 className="font-bold text-slate-900 group-hover:text-brand-700">{t.name}</h2>
               <p className="mt-1 text-xs font-semibold text-brand-700">{t.tagline}</p>
-              <p className="mt-2 text-sm text-slate-500">{t.desc}</p>
+              <p className="mt-2 text-sm text-slate-500 line-clamp-3">{t.desc}</p>
               <span className="mt-4 inline-block rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
                 افتح المنشئ
               </span>
