@@ -3,10 +3,10 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5466168131,
   "last_actor": "grok",
-  "updated_at": "2026-08-30T02:11:00Z",
+  "updated_at": "2026-08-30T05:20:00Z",
   "mode": "work-cycle",
   "open": [
-    "store bot merchant-identity gate — implemented by Claude (config.merchant_tg_id + admin UI). Must set a real merchant_tg_id per store bot before any public launch.",
+    "store bot merchant-identity gate — create form now accepts optional merchant_tg_id; admin UI already exists. Still must set a real merchant_tg_id per store bot before any public launch.",
     "GROK TOOLING ALERT (active): Grok must not edit src/lib/botEngine.ts until a confirmed clean write test. Previous attempts (85a6ecf, bf1803b, 42adeb2) produced empty/PLACEHOLDER content. Claude owns engine fixes for now; Grok stays on botTemplates, tgApi, botCodes, src/app/bots/**, api/bots/**, pay/bot/**."
   ],
   "resolved": [

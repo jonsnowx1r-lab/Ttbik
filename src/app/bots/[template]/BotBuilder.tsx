@@ -19,6 +19,7 @@ export default function BotBuilder({
   const [products, setProducts] = useState(
     template.id === "clinic" ? "استشارة عامة\nفحص دوري" : "منتج تجريبي — 10 نقاط"
   );
+  const [merchantTgId, setMerchantTgId] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export default function BotBuilder({
           welcome,
           faq,
           products: template.id === "store" || template.id === "clinic" ? products : "",
+          merchantTgId: template.id === "store" ? merchantTgId.trim() : undefined,
         }),
       });
       const data = await res.json();
@@ -79,6 +81,20 @@ export default function BotBuilder({
           <label className="text-sm font-bold">تواصل المالك</label>
           <input value={ownerContact} onChange={(e) => setOwnerContact(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" required />
         </div>
+        {template.id === "store" && (
+          <div>
+            <label className="text-sm font-bold">آيدي تليجرام للتاجر (اختياري)</label>
+            <input
+              value={merchantTgId}
+              onChange={(e) => setMerchantTgId(e.target.value.replace(/\D/g, ""))}
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm font-mono"
+              placeholder="123456789"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              إن وُضع، فقط هذا الحساب يستطيع «متجري» وإضافة منتجات. فارغ = أي عضو (وضع اختبار). يُغيَّر لاحقاً من لوحة الإدارة.
+            </p>
+          </div>
+        )}
         <div>
           <label className="text-sm font-bold">الترحيب</label>
           <textarea value={welcome} onChange={(e) => setWelcome(e.target.value)} rows={4} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />

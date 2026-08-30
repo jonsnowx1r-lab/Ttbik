@@ -102,6 +102,11 @@ export async function POST(req: NextRequest) {
   } else {
     config.products = listLines;
   }
+  // Store merchant identity gate (optional at create; required before public launch)
+  if (template.id === "store") {
+    const mid = String(body.merchantTgId || "").replace(/\D/g, "").trim();
+    if (mid) config.merchant_tg_id = mid;
+  }
 
   const row = {
     public_code: publicCode,
