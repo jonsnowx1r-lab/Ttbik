@@ -850,7 +850,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await setPending(user.id, { mode: "owner_channel_setup" });
     await bot.api.sendMessage(
       chatId,
-      `القناة الحالية: ${botRow.requiredChannel || "غير مفعّلة"}\n\nأرسل معرف القناة فقط (مثال: @MyChannel) — ⚠️ لا ترسل رابط القناة الكامل (t.me/...)، أو أرسل "إلغاء" لإلغاء الاشتراك الإجباري:`,
+      `القناة الحالية: ${botRow.requiredChannel || "غير مفعّلة"}\n\nأرسل معرف القناة أو رابطها (مثال: @MyChannel أو https://t.me/MyChannel) لتفعيل الاشتراك الإجباري، أو أرسل "إلغاء" لإلغاء الاشتراك الإجباري:`,
       { reply_markup: amountEntryMenu("ar") }
     );
     return;
@@ -864,11 +864,24 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       await bot.api.sendMessage(chatId, "✅ تم إلغاء الاشتراك الإجباري.", { reply_markup: ownerMainMenu(lang) });
       return;
     }
-    // Best-effort sanity check — doesn't block saving (the bot might not be
-    // an admin there, which getChat can still tolerate for public channels,
-    // but flag it early instead of the owner finding out from user reports).
-    const valid = await bot.api.getChat(`@${channel}`).catch(() => null);
-    const warning = valid ? "" : "\n⚠️ تعذّر العثور على هذه القناة — تأكد من صحة المعرف وأن البوت عضو/مشرف فيها.";
+    // Two real checks, not just "does the channel exist": (1) getChat
+    // confirms the handle itself resolves; (2) getChatMember on the owner's
+    // own ID confirms the bot can actually READ membership — which Telegram
+    // only allows for channels when the bot itself is an ADMIN there. A
+    // channel can pass check 1 and still make every gate check silently
+    // fail forever if the bot was only added as a regular member (or not
+    // added at all), which is the single most common setup mistake here.
+    const foundChat = await bot.api.getChat(`@${channel}`).catch(() => null);
+    let warning = "";
+    if (!foundChat) {
+      warning = "\n⚠️ تعذّر العثور على هذه القناة — تأكد من صحة المعرف.";
+    } else {
+      const canReadMembers = await bot.api.getChatMember(`@${channel}`, Number(tgUserId)).catch(() => null);
+      if (!canReadMembers) {
+        warning =
+          "\n⚠️ القناة صحيحة لكن البوت لا يستطيع التحقق من أعضائها. أضف البوت إلى القناة **كمشرف (Admin)** — هذا شرط إلزامي من تلجرام نفسه للتحقق من انضمام الأعضاء، وإلا سيستمر البوت برفض الجميع حتى بعد انضمامهم فعلاً.";
+      }
+    }
     await bot.api.sendMessage(chatId, `✅ تم تفعيل الاشتراك الإجباري في القناة @${channel}.${warning}`, { reply_markup: ownerMainMenu(lang) });
     return;
   }
