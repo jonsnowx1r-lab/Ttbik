@@ -295,6 +295,26 @@ async function ensureUser(botId: string, tgUserId: string, botRow: BotRow, refer
   return prisma.user.create({ data: { id: tgUserId, botId, role, referredBy: referredBy || null } });
 }
 
+// Shared by /start and /admin — the platform owner is recognized purely by
+// SUPER_ADMIN_TELEGRAM_ID, everywhere, on any bot; they never see the
+// regular end-user menu, not even for a moment.
+async function sendSuperAdminPanel(bot: TelegramBot, chatId: number) {
+  await bot.api.sendMessage(chatId, "🛠 لوحة تحكم المالك الأكبر", { reply_markup: ADMIN_MENU });
+}
+
+// Shared by /start and /admin — a bot's own creator (ctx.from.id === bot.ownerId)
+// is recognized the same way, regardless of whether they type /admin or
+// just /start; they never see the regular end-user menu either.
+async function sendOwnerPanel(bot: TelegramBot, chatId: number, botRow: BotRow) {
+  const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+  await bot.api.sendMessage(
+    chatId,
+    `🛠 لوحة تحكم منشئ البوت\n\nرصيد أرباحك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\nرصيد قيد الحجز (48 ساعة): ${fmt(Number(fresh?.pendingBalance || 0))}\n\n🎁 رابط إحالة منشئي بوتات آخرين (تربح 5% من صافي أرباح المنصة من كل بوت يُفعَّل عبره):\n${site}/bots?ref=${botRow.ownerId}`,
+    { reply_markup: OWNER_MENU }
+  );
+}
+
 export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update: any) {
   if (update.callback_query) {
     await handleCarouselCallback(bot, botRow, update.callback_query);
@@ -339,27 +359,33 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
         return;
       }
     }
-    const adminNote = tgUserId === SUPER_ADMIN_ID ? t(lang, "adminNote") : tgUserId === botRow.ownerId ? "\n\n🛠 أنت منشئ هذا البوت — أرسل /admin لفتح لوحة تحكمك." : "";
-    await bot.api.sendMessage(chatId, `${t(lang, "welcome")}${adminNote}`, { reply_markup: mainMenu(lang) });
+    // The platform owner (SUPER_ADMIN) and a bot's own creator are never
+    // regular participants — /start routes them straight to their control
+    // panel, never the end-user main menu (no "شاهد واربح"/"ضع إعلانك"
+    // etc.), matching the same "recognized immediately by ID" rule as
+    // /admin itself. Only an ordinary member sees the normal menu.
+    if (tgUserId === SUPER_ADMIN_ID) {
+      await sendSuperAdminPanel(bot, chatId);
+      return;
+    }
+    if (tgUserId === botRow.ownerId) {
+      await sendOwnerPanel(bot, chatId, botRow);
+      return;
+    }
+    await bot.api.sendMessage(chatId, t(lang, "welcome"), { reply_markup: mainMenu(lang) });
     return;
   }
 
   if (text === "/admin") {
     if (tgUserId === botRow.ownerId && tgUserId !== SUPER_ADMIN_ID) {
-      const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
-      const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
-      await bot.api.sendMessage(
-        chatId,
-        `🛠 لوحة تحكم منشئ البوت\n\nرصيد أرباحك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\nرصيد قيد الحجز (48 ساعة): ${fmt(Number(fresh?.pendingBalance || 0))}\n\n🎁 رابط إحالة منشئي بوتات آخرين (تربح 5% من صافي أرباح المنصة من كل بوت يُفعَّل عبره):\n${site}/bots?ref=${botRow.ownerId}`,
-        { reply_markup: OWNER_MENU }
-      );
+      await sendOwnerPanel(bot, chatId, botRow);
       return;
     }
     if (tgUserId !== SUPER_ADMIN_ID) {
       await bot.api.sendMessage(chatId, "⛔ عذراً، هذا الأمر مخصص لمالك المنصة فقط.");
       return;
     }
-    await bot.api.sendMessage(chatId, "🛠 لوحة تحكم المالك الأكبر", { reply_markup: ADMIN_MENU });
+    await sendSuperAdminPanel(bot, chatId);
     return;
   }
 
@@ -367,9 +393,21 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   const lang = asLang(user.language);
   const pending = user.pendingAction as PendingAction | null;
 
-  // Universal back button (either language's label).
+  // Universal back button (either language's label). For the platform owner
+  // or a bot's own creator this must return to THEIR panel, never the
+  // regular end-user menu — ADMIN_MENU/OWNER_MENU reuse the same "🔙"
+  // label, so without this check pressing it would leak the ordinary menu
+  // right back in.
   if (isBack(lang, text)) {
     await setPending(user.id, null);
+    if (tgUserId === SUPER_ADMIN_ID) {
+      await sendSuperAdminPanel(bot, chatId);
+      return;
+    }
+    if (tgUserId === botRow.ownerId) {
+      await sendOwnerPanel(bot, chatId, botRow);
+      return;
+    }
     await bot.api.sendMessage(chatId, t(lang, "mainMenuTitle"), { reply_markup: mainMenu(lang) });
     return;
   }
@@ -682,6 +720,17 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     return;
   }
 
+  // Unrecognized input falls back to whichever menu belongs to this
+  // sender — never the regular end-user menu for the platform owner or a
+  // bot's own creator.
+  if (tgUserId === SUPER_ADMIN_ID) {
+    await sendSuperAdminPanel(bot, chatId);
+    return;
+  }
+  if (tgUserId === botRow.ownerId) {
+    await sendOwnerPanel(bot, chatId, botRow);
+    return;
+  }
   await bot.api.sendMessage(chatId, t(lang, "chooseUnknown"), { reply_markup: mainMenu(lang) });
 }
 
