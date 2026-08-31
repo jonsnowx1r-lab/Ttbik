@@ -15,7 +15,6 @@ export const STR: Dict = {
   btnWallet: { ar: "💰 المحفظة", en: "💰 Wallet" },
   btnReferrals: { ar: "🙌 الإحالات", en: "🙌 Referrals" },
   btnStats: { ar: "📊 إحصائيات", en: "📊 Stats" },
-  btnEarnings: { ar: "💼 أرباحي", en: "💼 My Earnings" },
   btnLanguage: { ar: "🌐 اللغة", en: "🌐 Language" },
   btnFaq: { ar: "❓ الأسئلة الشائعة", en: "❓ FAQ" },
   btnDeposit: { ar: "📥 إيداع", en: "📥 Deposit" },
@@ -101,8 +100,6 @@ export const STR: Dict = {
     ar: "📊 إحصائياتك:\nحملات أنشأتها: {ads}\nإجمالي الصرف: {spent}\nمهام أتممتها: {tasks}\nإجمالي أرباحك: {earned}",
     en: "📊 Your stats:\nCampaigns created: {ads}\nTotal spent: {spent}\nTasks completed: {tasks}\nTotal earned: {earned}",
   },
-  earningsGate: { ar: "هذا القسم مخصَّص لمنشئ البوت فقط.", en: "This section is for the bot's creator only." },
-  earningsBody: { ar: "💼 أرباحك كمنشئ هذا البوت: {balance}\n(20% من كل نقرة مكتملة على حملات هذا البوت)", en: "💼 Your earnings as this bot's creator: {balance}\n(20% of every completed click on this bot's campaigns)" },
 
   depositChoose: { ar: "اختر مبلغ الإيداع وعملتك المفضّلة (USDT, TRX, TON, LTC, SOL...) في الصفحة:\n{link}", en: "Choose your deposit amount and preferred currency (USDT, TRX, TON, LTC, SOL...) on the page:\n{link}" },
 };

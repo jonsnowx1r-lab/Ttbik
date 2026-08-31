@@ -136,8 +136,8 @@ function mainMenu(lang: Lang): Keyboard {
   return new Keyboard()
     .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
-    .text(t(lang, "btnStats")).text(t(lang, "btnEarnings")).row()
-    .text(t(lang, "btnLanguage")).text(t(lang, "btnFaq")).row()
+    .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
+    .text(t(lang, "btnFaq")).row()
     .resized();
 }
 function walletMenu(lang: Lang): Keyboard {
@@ -190,7 +190,7 @@ const OWNER_MENU = new Keyboard()
   .resized();
 
 function topLevelTexts(lang: Lang): string[] {
-  return [t(lang, "btnCreateAd"), t(lang, "btnWatchEarn"), t(lang, "btnWallet"), t(lang, "btnReferrals"), t(lang, "btnStats"), t(lang, "btnEarnings"), t(lang, "btnLanguage"), t(lang, "btnFaq")];
+  return [t(lang, "btnCreateAd"), t(lang, "btnWatchEarn"), t(lang, "btnWallet"), t(lang, "btnReferrals"), t(lang, "btnStats"), t(lang, "btnLanguage"), t(lang, "btnFaq")];
 }
 function isBack(lang: Lang, text: string): boolean {
   return text === t("ar", "btnBack") || text === t("en", "btnBack");
@@ -287,10 +287,6 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   }
   if (text === t(lang, "btnStats")) {
     await sendStats(bot, chatId, user.id, lang);
-    return;
-  }
-  if (text === t(lang, "btnEarnings")) {
-    await sendCreatorEarnings(bot, chatId, botRow, user, lang);
     return;
   }
   if (text === t(lang, "btnLanguage")) {
@@ -920,16 +916,6 @@ async function sendStats(bot: TelegramBot, chatId: number, userId: string, lang:
   );
 }
 
-// Bot creator's own commission — gated to the bot's registered ownerId
-// (Prisma's Bot model already carries it directly).
-async function sendCreatorEarnings(bot: TelegramBot, chatId: number, botRow: BotRow, user: any, lang: Lang) {
-  if (user.id !== botRow.ownerId) {
-    await bot.api.sendMessage(chatId, t(lang, "earningsGate"), { reply_markup: mainMenu(lang) });
-    return;
-  }
-  const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
-  await bot.api.sendMessage(chatId, t(lang, "earningsBody", { balance: fmt(Number(fresh?.ownerBalance || 0)) }), { reply_markup: mainMenu(lang) });
-}
 
 async function decideWithdrawal(bot: TelegramBot, chatId: number, txIdSuffix: string, approve: boolean) {
   const candidates = await prisma.transaction.findMany({ where: { status: "PENDING", type: { in: ["WITHDRAWAL", "OWNER_WITHDRAWAL"] } }, take: 200 });
