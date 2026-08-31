@@ -157,9 +157,25 @@ function asLang(v: unknown): Lang {
   return v === "en" ? "en" : DEFAULT_LANG;
 }
 
+// Accepts whatever an owner is likely to paste when setting the mandatory
+// channel — "@MyChannel", "MyChannel", "https://t.me/MyChannel",
+// "t.me/MyChannel" — and normalizes to a bare username. Without this, a
+// pasted full link was stored verbatim, which broke two things at once:
+// the join-link message became double-prefixed ("t.me/https://t.me/...")
+// and getChatMember was queried with an invalid chat identifier, so
+// membership checks always failed even after actually joining.
+function normalizeChannelHandle(input: string): string {
+  return input
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^(t\.me|telegram\.me)\//i, "")
+    .replace(/^@/, "")
+    .replace(/\/+$/, "")
+    .split(/[?#]/)[0];
+}
 async function isChannelMember(bot: TelegramBot, channelHandle: string, tgUserId: string): Promise<boolean> {
   try {
-    const handle = channelHandle.startsWith("@") ? channelHandle : `@${channelHandle}`;
+    const handle = `@${normalizeChannelHandle(channelHandle)}`;
     const member = await bot.api.getChatMember(handle, Number(tgUserId));
     return ["creator", "administrator", "member"].includes(member.status);
   } catch {
@@ -405,7 +421,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       if (!joined) {
         await bot.api.sendMessage(
           chatId,
-          `📢 قبل استخدام البوت، انضم إلى القناة التالية ثم أرسل /start مجدداً:\nhttps://t.me/${botRow.requiredChannel.replace(/^@/, "")}`
+          `📢 قبل استخدام البوت، انضم إلى القناة التالية ثم أرسل /start مجدداً:\nhttps://t.me/${normalizeChannelHandle(botRow.requiredChannel)}`
         );
         return;
       }
@@ -834,17 +850,26 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await setPending(user.id, { mode: "owner_channel_setup" });
     await bot.api.sendMessage(
       chatId,
-      `القناة الحالية: ${botRow.requiredChannel || "غير مفعّلة"}\n\nأرسل معرف القناة (مثال: @MyChannel) لتفعيل الاشتراك الإجباري، أو أرسل "إلغاء" لإلغاء الاشتراك الإجباري:`,
+      `القناة الحالية: ${botRow.requiredChannel || "غير مفعّلة"}\n\nأرسل معرف القناة فقط (مثال: @MyChannel) — ⚠️ لا ترسل رابط القناة الكامل (t.me/...)، أو أرسل "إلغاء" لإلغاء الاشتراك الإجباري:`,
       { reply_markup: amountEntryMenu("ar") }
     );
     return;
   }
   if (pending?.mode === "owner_channel_setup" && tgUserId === botRow.ownerId) {
     const cancel = text.trim() === "إلغاء";
-    const channel = cancel ? null : text.trim().replace(/^@/, "");
+    const channel = cancel ? null : normalizeChannelHandle(text);
     await prisma.bot.update({ where: { id: botRow.id }, data: { requiredChannel: channel } });
     await setPending(user.id, null);
-    await bot.api.sendMessage(chatId, cancel ? "✅ تم إلغاء الاشتراك الإجباري." : `✅ تم تفعيل الاشتراك الإجباري في القناة @${channel}.`, { reply_markup: ownerMainMenu(lang) });
+    if (cancel) {
+      await bot.api.sendMessage(chatId, "✅ تم إلغاء الاشتراك الإجباري.", { reply_markup: ownerMainMenu(lang) });
+      return;
+    }
+    // Best-effort sanity check — doesn't block saving (the bot might not be
+    // an admin there, which getChat can still tolerate for public channels,
+    // but flag it early instead of the owner finding out from user reports).
+    const valid = await bot.api.getChat(`@${channel}`).catch(() => null);
+    const warning = valid ? "" : "\n⚠️ تعذّر العثور على هذه القناة — تأكد من صحة المعرف وأن البوت عضو/مشرف فيها.";
+    await bot.api.sendMessage(chatId, `✅ تم تفعيل الاشتراك الإجباري في القناة @${channel}.${warning}`, { reply_markup: ownerMainMenu(lang) });
     return;
   }
 
@@ -1164,7 +1189,7 @@ async function buildCarouselCard(ad: any, lang: Lang, tgUserId: string, currentB
 
   let actionUrl: string;
   if (type === "TELEGRAM") {
-    actionUrl = `https://t.me/${String(ad.content).replace(/^@/, "")}`;
+    actionUrl = `https://t.me/${normalizeChannelHandle(String(ad.content))}`;
   } else {
     const click = await prisma.adClick.upsert({
       where: { adId_userId: { adId: ad.id, userId: tgUserId } },
