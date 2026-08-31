@@ -623,25 +623,45 @@ async function completeTask(bot: TelegramBot, chatId: number, tgUserId: string, 
     }
   }
 
+  // Ensure the FK targets of the atomic batch below exist first — upserting
+  // inside prisma.$transaction([...]) isn't necessary for these two (they're
+  // idempotent no-ops when the row already exists), only the actual balance
+  // mutations need to be atomic together.
+  await prisma.user.upsert({ where: { id: tgUserId }, update: {}, create: { id: tgUserId, botId: ad.botId, role: "USER" } });
+  if (SUPER_ADMIN_ID) {
+    await prisma.user.upsert({ where: { id: SUPER_ADMIN_ID }, update: {}, create: { id: SUPER_ADMIN_ID, botId: ad.botId, role: "SUPER_ADMIN" } });
+  }
+
+  const newRemaining = round2(Number(ad.remaining) - Number(ad.cpc));
+  const workerCut = Number(ad.workerCut);
+  const creatorCut = Number(ad.creatorCut);
+  const ownerCut = Number(ad.ownerCut);
+
+  // Atomic — the dedup guard (unique txHash) is the first operation, so a
+  // double-claim rolls back every other write in this batch too, not just
+  // the log row. Without $transaction here, a crash between steps could
+  // leave the ad's budget decremented with no one actually paid, or the
+  // reverse — a real risk once real money is on the line.
+  let results;
   try {
-    await prisma.transaction.create({
-      data: { userId: tgUserId, amount: Number(ad.workerCut), currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${tgUserId}` },
-    });
+    results = await prisma.$transaction([
+      prisma.transaction.create({
+        data: { userId: tgUserId, amount: workerCut, currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${tgUserId}` },
+      }),
+      prisma.ad.update({ where: { id: ad.id }, data: { remaining: newRemaining, status: newRemaining < Number(ad.cpc) ? "EXPIRED" : ad.status } }),
+      prisma.user.update({ where: { id: tgUserId }, data: { balance: { increment: workerCut } } }),
+      prisma.bot.update({ where: { id: ad.botId }, data: { ownerBalance: { increment: creatorCut }, totalRevenue: { increment: ownerCut } } }),
+      ...(SUPER_ADMIN_ID
+        ? [prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, amount: ownerCut, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })]
+        : []),
+    ]);
   } catch {
     await bot.api.sendMessage(chatId, t(lang, "taskAlreadyClaimed"), { reply_markup: mainMenu(lang) });
     return;
   }
 
-  const newRemaining = round2(Number(ad.remaining) - Number(ad.cpc));
-  await prisma.ad.update({ where: { id: ad.id }, data: { remaining: newRemaining, status: newRemaining < Number(ad.cpc) ? "EXPIRED" : ad.status } });
-
-  const worker = await prisma.user.upsert({ where: { id: tgUserId }, update: {}, create: { id: tgUserId, botId: ad.botId, role: "USER" } });
-  const newBalance = round2(Number(worker.balance) + Number(ad.workerCut));
-  await prisma.user.update({ where: { id: tgUserId }, data: { balance: newBalance } });
-
-  await prisma.bot.update({ where: { id: ad.botId }, data: { ownerBalance: { increment: Number(ad.creatorCut) }, totalRevenue: { increment: Number(ad.ownerCut) } } });
-
-  await bot.api.sendMessage(chatId, t(lang, "taskRewarded", { amount: fmt(Number(ad.workerCut)), balance: fmt(newBalance) }), { reply_markup: mainMenu(lang) });
+  const updatedWorker = results[2] as { balance: number };
+  await bot.api.sendMessage(chatId, t(lang, "taskRewarded", { amount: fmt(workerCut), balance: fmt(Number(updatedWorker.balance)) }), { reply_markup: mainMenu(lang) });
 }
 
 async function confirmAd(bot: TelegramBot, chatId: number, user: any, pending: Extract<PendingAction, { mode: "reviewing_ad" }>, lang: Lang) {
