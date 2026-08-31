@@ -289,10 +289,8 @@ function ownerMainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
     .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
     .text(t(lang, "btnFaq")).row()
-    .text("💼 أرباحي والسحب").row()
-    .text("📊 إحصائيات البوت").row()
-    .text("📣 إذاعة لمستخدمي البوت").row()
-    .text("📢 قناة الاشتراك الإجباري")
+    .text("💼 أرباحي والسحب").text("📊 إحصائيات البوت").row()
+    .text("📣 إذاعة لمستخدمي البوت").text("📢 قناة الاشتراك الإجباري")
     .resized();
 }
 
