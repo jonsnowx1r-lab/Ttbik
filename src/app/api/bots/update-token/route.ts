@@ -7,9 +7,26 @@ import { prisma } from "@/lib/prisma";
 // the new token — a plain SQL UPDATE on Bot.token alone wouldn't do this,
 // since Telegram only delivers updates to whichever token last called
 // setWebhook for that bot.
+//
+// GET exists purely so this can be triggered by opening a link in a phone
+// browser (no way to fire a POST from a tap) — same logic either way.
+export async function GET(req: NextRequest) {
+  const newToken = req.nextUrl.searchParams.get("newToken");
+  const botId = req.nextUrl.searchParams.get("botId") || undefined;
+  return handleUpdate(newToken, botId);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { botId, newToken } = await req.json();
+    return handleUpdate(newToken, botId);
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message || "invalid request body" }, { status: 400 });
+  }
+}
+
+async function handleUpdate(newToken: string | null | undefined, botId: string | undefined) {
+  try {
     if (!newToken || typeof newToken !== "string") {
       return NextResponse.json({ success: false, error: "newToken is required" }, { status: 400 });
     }
