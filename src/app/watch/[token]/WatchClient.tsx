@@ -4,6 +4,33 @@ import { useEffect, useRef, useState } from "react";
 
 type ClickData = { ok: true; verified: boolean; issuedAt: string; requiredSeconds: number; targetUrl: string };
 
+// Basic composite browser fingerprint (owner spec, 2026-08-31: "بصمة
+// الجهاز... لمنع استخدام عدة حسابات على جهاز واحد"). Deliberately simple —
+// a handful of stable, always-available signals hashed together — not a
+// commercial-grade fingerprinting library. Spoofable by anyone who tries,
+// but catches the common case of one device farming several accounts.
+async function computeFingerprint(): Promise<string> {
+  const parts = [
+    navigator.userAgent,
+    navigator.language,
+    String(screen.width),
+    String(screen.height),
+    String(screen.colorDepth),
+    String(new Date().getTimezoneOffset()),
+    String(navigator.hardwareConcurrency || ""),
+  ].join("|");
+  try {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(parts));
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } catch {
+    // SubtleCrypto unavailable (very old browser) — fall back to the raw
+    // string; still usable for exact-match comparison, just not hashed.
+    return parts;
+  }
+}
+
 export default function WatchClient({ token }: { token: string }) {
   const [data, setData] = useState<ClickData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -50,7 +77,12 @@ export default function WatchClient({ token }: { token: string }) {
     setConfirming(true);
     setConfirmError(null);
     try {
-      const res = await fetch(`/api/watch/${token}/complete`, { method: "POST" });
+      const fingerprint = await computeFingerprint();
+      const res = await fetch(`/api/watch/${token}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fingerprint }),
+      });
       const d = await res.json();
       if (d.ok) {
         setConfirmed(true);

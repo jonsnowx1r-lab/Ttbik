@@ -30,10 +30,12 @@ model Bot {
   ownerId       String // Telegram User ID of the bot creator
   template      String // "AD_BOT" | "STORE" | "HOSPITAL"
   totalRevenue  Float    @default(0.0)
-  ownerBalance  Float    @default(0.0) // creator's withdrawable commission
+  ownerBalance  Float    @default(0.0) // creator's withdrawable commission (matured, past the 48h hold)
+  pendingBalance Float   @default(0.0) // creator commission still inside the 48h hold, not yet withdrawable — see CREATOR_EARNING_PENDING transactions
   isActive      Boolean  @default(true)
   webhookSecret String // Telegram setWebhook secret_token — verified on every incoming update so a guessed bot id alone can't forge updates
   requiredChannel String? // optional mandatory-subscription channel (@handle) the bot owner sets; non-owners must join before /start unlocks
+  referredByOwnerId String? // Telegram ID of the bot-owner whose B2B referral link this bot was activated through (set once at deploy time, /bots?ref=)
   created_at    DateTime @default(now())
   ads           Ad[]
 }
@@ -46,6 +48,19 @@ model User {
   depositAddress String?
   referredBy     String?
   language       String        @default("ar") // "ar" | "en" — persisted UI language preference
+  // Phone verification via Telegram's native "share contact" button —
+  // the closest honest substitute for "account age ≥ 30 days": the
+  // official Bot API exposes no account-creation date at all, so this
+  // trades that unbuildable check for real friction (a phone number tied
+  // to the account) instead of a fake heuristic.
+  phoneNumber    String?
+  phoneVerified  Boolean       @default(false)
+  // Set when this account's device fingerprint collides with >= 2 other
+  // distinct accounts (see DeviceFingerprint) — blocks further task
+  // payouts pending manual review rather than an automatic ban, since
+  // basic browser fingerprinting has real false-positive risk (shared
+  // devices, NAT).
+  multiAccountFlag Boolean     @default(false)
   // Tracks a mid-flight multi-step conversation (e.g. "creating an ad,
   // waiting for the budget"). Vercel serverless functions don't keep
   // in-memory state between requests, so this has to live in the DB —
@@ -69,7 +84,8 @@ model Ad {
   creatorCut  Float // 20% — whichever bot's user completes the task, not necessarily the creating bot (see scope)
   workerCut   Float // 50% worker
   remaining   Float
-  status      String   @default("ACTIVE") // ACTIVE | EXPIRED
+  status      String   @default("ACTIVE") // ACTIVE | EXPIRED | REJECTED (failed auto-moderation) | FLAGGED (5+ user reports)
+  reportCount Int      @default(0)
   // TARGETED: only shown inside the creating bot (targetBotId = botId).
   // GLOBAL: shown across every bot's "شاهد واربح" pool (targetBotId = null);
   // the 20% creator cut then goes to whichever bot's user completes it.
@@ -80,14 +96,40 @@ model Ad {
   user        User     @relation(fields: [userId], references: [id])
 }
 
+// One row per (ad, reporter) — the 🚩 إبلاغ carousel button. Reaching 5
+// distinct reporters auto-flips the ad to FLAGGED (see Ad.status).
+model AdReport {
+  id         String   @id @default(uuid())
+  adId       String
+  userId     String
+  created_at DateTime @default(now())
+
+  @@unique([adId, userId])
+}
+
+// Basic anti-multi-accounting signal: a composite browser fingerprint hash
+// computed client-side on the /watch/[token] page, tied to whichever
+// Telegram user completed that click. Not enterprise-grade (spoofable),
+// but enough to catch the common case of one device farming several
+// accounts back-to-back.
+model DeviceFingerprint {
+  id          String   @id @default(uuid())
+  fingerprint String
+  ip          String?
+  userId      String
+  created_at  DateTime @default(now())
+
+  @@unique([fingerprint, userId])
+}
+
 model Transaction {
   id         String   @id @default(uuid())
   userId     String
   botId      String? // which bot this happened through — set for TASK_REWARD/PLATFORM_PROFIT (the bot the click occurred in) and OWNER_WITHDRAWAL (which bot's commission); null for wallet-level DEPOSIT/WITHDRAWAL, which aren't bot-scoped
   amount     Float
   currency   String // USDT, TRX, TON, LTC, SOL, ...
-  type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT | PLATFORM_PROFIT | OWNER_WITHDRAWAL | PENALTY
-  status     String // PENDING | COMPLETED | FAILED | REJECTED
+  type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT | PLATFORM_PROFIT | OWNER_WITHDRAWAL | PENALTY | CREATOR_EARNING_PENDING | REFERRAL_COMMISSION | REFERRAL_B2B_COMMISSION
+  status     String // PENDING | PENDING_AUDIT | COMPLETED | FAILED | REJECTED | RELEASED
   txHash     String? // NOWPayments payment_id, used for IPN idempotency
   created_at DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])

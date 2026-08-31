@@ -27,6 +27,7 @@ export const STR: Dict = {
   btnDepositNow: { ar: "💳 إيداع الآن", en: "💳 Deposit Now" },
   btnLangAr: { ar: "🇸🇦 العربية", en: "🇸🇦 Arabic" },
   btnLangEn: { ar: "🇬🇧 English", en: "🇬🇧 English" },
+  btnSharePhone: { ar: "📱 مشاركة رقم الهاتف", en: "📱 Share phone number" },
 
   welcome: { ar: "🚀 مرحباً بك في منصة الإعلانات! اختر من القائمة أدناه:", en: "🚀 Welcome to the ads platform! Choose from the menu below:" },
   adminNote: { ar: "\n\n🛠 أنت مالك المنصة — أرسل /admin لفتح لوحة التحكم.", en: "\n\n🛠 You're the platform owner — send /admin to open the control panel." },
@@ -49,6 +50,26 @@ export const STR: Dict = {
   withdrawMinError: { ar: "الحد الأدنى للسحب ${min}. أرسل رقماً صحيحاً.", en: "Minimum withdrawal is ${min}. Send a valid number." },
   withdrawInsufficient: { ar: "رصيدك {balance} فقط.", en: "Your balance is only {balance}." },
   withdrawSent: { ar: "تم إرسال طلب سحب {amount}. سيُراجَع من مالك المنصة.", en: "Withdrawal request for {amount} sent. It will be reviewed by the platform owner." },
+  withdrawAddressPrompt: { ar: "أرسل عنوان محفظتك (USDT-TRC20 أو TON) لاستلام السحب:", en: "Send your wallet address (USDT-TRC20 or TON) to receive the withdrawal:" },
+  withdrawAddressError: { ar: "أرسل عنوان محفظة صالح.", en: "Send a valid wallet address." },
+
+  phoneVerifyPrompt: {
+    ar: "🔒 لحماية المنصة من الحسابات الوهمية، يرجى تأكيد رقم هاتفك أولاً بالضغط على الزر أدناه:",
+    en: "🔒 To protect the platform from fake accounts, please verify your phone number first by tapping the button below:",
+  },
+  phoneVerified: { ar: "✅ تم تأكيد رقم هاتفك بنجاح. يمكنك الآن إتمام المهام.", en: "✅ Your phone number is verified. You can now complete tasks." },
+  phoneMismatch: { ar: "⚠️ يجب مشاركة رقم هاتفك الخاص فقط.", en: "⚠️ You must share your own phone number." },
+  phoneRequiredAlert: { ar: "🔒 يجب تأكيد رقم هاتفك أولاً — انظر الرسالة الجديدة.", en: "🔒 You must verify your phone number first — see the new message." },
+  accountFlaggedAlert: { ar: "🚫 تم إيقاف حسابك مؤقتاً لأسباب أمنية. تواصل مع الدعم.", en: "🚫 Your account is temporarily on hold for security reasons. Contact support." },
+
+  carouselReport: { ar: "🚩 إبلاغ", en: "🚩 Report" },
+  reportAlready: { ar: "لقد أبلغت عن هذا الإعلان مسبقاً.", en: "You've already reported this ad." },
+  reportReceived: { ar: "✅ تم استلام بلاغك، شكراً لك.", en: "✅ Report received, thank you." },
+
+  adAutoRejected: {
+    ar: "⚠️ تم رفض إعلانك تلقائياً لمخالفته شروط المحتوى (كلمات محظورة أو رابط غير آمن). لم يُخصم أي مبلغ من رصيدك.",
+    en: "⚠️ Your ad was automatically rejected for violating content rules (banned words or an unsafe link). No amount was charged.",
+  },
 
   btnScopeTargeted: { ar: "🎯 حملة خاصة بهذا البوت", en: "🎯 This bot only" },
   btnScopeGlobal: { ar: "🌐 حملة عامة في كافة البوتات", en: "🌐 Global — all bots" },

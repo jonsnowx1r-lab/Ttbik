@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function BotsDeployPage() {
   const [token, setToken] = useState("");
   const [template, setTemplate] = useState("AD_BOT");
   const [ownerId, setOwnerId] = useState("");
+  const [ref, setRef] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get("ref");
+    if (r) setRef(r.replace(/\D/g, ""));
+  }, []);
 
   async function handleDeploy(e: React.FormEvent) {
     e.preventDefault();
@@ -18,7 +25,7 @@ export default function BotsDeployPage() {
       const res = await fetch("/api/bots/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, template, ownerId }),
+        body: JSON.stringify({ token, template, ownerId, ref: ref || undefined }),
       });
 
       const data = await res.json();
@@ -37,6 +44,11 @@ export default function BotsDeployPage() {
   return (
     <main className="mx-auto max-w-xl px-6 py-12 font-sans" dir="rtl">
       <h1 className="mb-6 text-center text-2xl font-bold">تنشيط بوت تلجرام آلياً</h1>
+      {ref && (
+        <p className="mb-4 rounded bg-emerald-50 p-3 text-center text-sm text-emerald-800">
+          🎁 أُحلت بواسطة المستخدم <span className="font-mono font-bold">{ref}</span> — سيحصل على عمولة إحالة من أرباح بوتك.
+        </p>
+      )}
       <form onSubmit={handleDeploy} className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium">Bot Token من BotFather</label>

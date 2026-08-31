@@ -1,6 +1,6 @@
 import { Bot as TelegramBot, Keyboard, InlineKeyboard } from "grammy";
 import { prisma } from "@/lib/prisma";
-import type { Bot as BotRow } from "@prisma/client";
+import type { Bot as BotRow, Prisma } from "@prisma/client";
 import { t, type Lang, DEFAULT_LANG } from "@/lib/i18n";
 
 /**
@@ -41,6 +41,15 @@ import { t, type Lang, DEFAULT_LANG } from "@/lib/i18n";
 
 const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_TELEGRAM_ID || "";
 const MIN_WITHDRAWAL = 1;
+const MIN_OWNER_WITHDRAWAL = 5;
+// Above this, a withdrawal still goes through the same SUPER_ADMIN
+// موافقة/رفض approval — it's just tagged PENDING_AUDIT instead of PENDING
+// so the admin sees it needs closer scrutiny (central-wallet protection).
+const AUDIT_THRESHOLD = 20;
+// Multi-account device-fingerprint gate: a fingerprint already tied to this
+// many OTHER distinct accounts blocks a new account from verifying through
+// it — basic anti-farming, not a hard ban (see User.multiAccountFlag).
+const FINGERPRINT_DISTINCT_USER_LIMIT = 2;
 
 type AdTypeStr = "LINK" | "TELEGRAM" | "YOUTUBE" | "TWITTER" | "TIKTOK" | "FACEBOOK" | "INSTAGRAM";
 const AD_TYPES: AdTypeStr[] = ["LINK", "TELEGRAM", "YOUTUBE", "TWITTER", "TIKTOK", "FACEBOOK", "INSTAGRAM"];
@@ -86,7 +95,8 @@ type PendingAction =
   | { mode: "platform_pick"; intent: "watch" | "create" }
   | { mode: "create_ad"; type: AdTypeStr; step: CreateAdStep; collected: CreateAdCollected }
   | { mode: "reviewing_ad"; type: AdTypeStr; collected: CreateAdCollected }
-  | { mode: "withdraw" }
+  | { mode: "withdraw_address" }
+  | { mode: "withdraw_amount"; address: string }
   | { mode: "choosing_language" }
   | { mode: "admin_broadcast" }
   | { mode: "admin_global_ad_platform" }
@@ -142,6 +152,62 @@ async function isChannelMember(bot: TelegramBot, channelHandle: string, tgUserId
   }
 }
 
+// Basic auto-moderation word filter — not exhaustive, a first-pass net for
+// the obvious cases (adult content, drugs, gambling, scams). Anything past
+// this is expected to reach the report/FLAGGED path instead.
+const BANNED_WORDS = [
+  "مخدرات",
+  "قمار",
+  "كازينو",
+  "اباحي",
+  "إباحي",
+  "دعارة",
+  "احتيال",
+  "نصب",
+  "porn",
+  "xxx",
+  "nude",
+  "escort",
+  "casino",
+  "gambling",
+  "drugs",
+  "cocaine",
+  "scam",
+  "phishing",
+];
+function containsBannedWords(text: string): boolean {
+  const lower = text.toLowerCase();
+  return BANNED_WORDS.some((w) => lower.includes(w.toLowerCase()));
+}
+
+// Google Safe Browsing v4 — env-gated (skips silently, ad passes) when no
+// key is configured, same pattern as NOWPayments being optional. Fails
+// open on any network/API error rather than blocking a legitimate ad over
+// an outage.
+async function isLinkUnsafe(url: string): Promise<boolean> {
+  const apiKey = process.env.GOOGLE_SAFE_BROWSING_API_KEY;
+  if (!apiKey) return false;
+  try {
+    const res = await fetch(`https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client: { clientId: "souqtools-ttbik", clientVersion: "1.0.0" },
+        threatInfo: {
+          threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
+          platformTypes: ["ANY_PLATFORM"],
+          threatEntryTypes: ["URL"],
+          threatEntries: [{ url }],
+        },
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    return !!(data && Array.isArray(data.matches) && data.matches.length > 0);
+  } catch {
+    return false;
+  }
+}
+
 // --- Reply keyboards (pinned bottom button grid) — all language-aware ---
 function backLabel(lang: Lang) {
   return t(lang, "btnBack");
@@ -185,6 +251,13 @@ function languageMenu(lang: Lang): Keyboard {
 }
 function scopeMenu(lang: Lang): Keyboard {
   return new Keyboard().text(t(lang, "btnScopeTargeted")).row().text(t(lang, "btnScopeGlobal")).row().text(backLabel(lang)).resized();
+}
+// Telegram's native "share contact" reply-keyboard button — the phone
+// verification gate. requestContact is a reply-keyboard-only capability
+// (no inline equivalent exists), so this stays consistent with the rest of
+// the bot's reply-keyboard-only rule.
+function phoneRequestMenu(lang: Lang): Keyboard {
+  return new Keyboard().requestContact(t(lang, "btnSharePhone")).row().text(backLabel(lang)).resized();
 }
 const ADMIN_MENU = new Keyboard()
   .text("📢 إعلان إجباري شامل").row()
@@ -231,6 +304,22 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   if (!msg?.from || !msg.chat) return;
   const chatId = msg.chat.id;
   const tgUserId = String(msg.from.id);
+
+  // Phone-verification handshake — arrives as a contact-only message (no
+  // text), so this has to be checked before the "no text, ignore" bailout
+  // below.
+  if (msg.contact) {
+    const contactUser = await ensureUser(botRow.id, tgUserId, botRow);
+    const contactLang = asLang(contactUser.language);
+    if (String(msg.contact.user_id) === tgUserId) {
+      await prisma.user.update({ where: { id: tgUserId }, data: { phoneNumber: msg.contact.phone_number, phoneVerified: true } });
+      await bot.api.sendMessage(chatId, t(contactLang, "phoneVerified"), { reply_markup: mainMenu(contactLang) });
+    } else {
+      await bot.api.sendMessage(chatId, t(contactLang, "phoneMismatch"));
+    }
+    return;
+  }
+
   const text = String(msg.text || "").trim();
   if (!text) return;
 
@@ -258,7 +347,12 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   if (text === "/admin") {
     if (tgUserId === botRow.ownerId && tgUserId !== SUPER_ADMIN_ID) {
       const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
-      await bot.api.sendMessage(chatId, `🛠 لوحة تحكم منشئ البوت\n\nرصيد أرباحك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}`, { reply_markup: OWNER_MENU });
+      const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+      await bot.api.sendMessage(
+        chatId,
+        `🛠 لوحة تحكم منشئ البوت\n\nرصيد أرباحك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\nرصيد قيد الحجز (48 ساعة): ${fmt(Number(fresh?.pendingBalance || 0))}\n\n🎁 رابط إحالة منشئي بوتات آخرين (تربح 5% من صافي أرباح المنصة من كل بوت يُفعَّل عبره):\n${site}/bots?ref=${botRow.ownerId}`,
+        { reply_markup: OWNER_MENU }
+      );
       return;
     }
     if (tgUserId !== SUPER_ADMIN_ID) {
@@ -328,8 +422,22 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     return;
   }
   if (text === t(lang, "btnWithdraw")) {
-    await setPending(user.id, { mode: "withdraw" });
+    await setPending(user.id, { mode: "withdraw_address" });
+    await bot.api.sendMessage(chatId, t(lang, "withdrawAddressPrompt"), { reply_markup: amountEntryMenu(lang) });
+    return;
+  }
+  if (pending?.mode === "withdraw_address") {
+    const address = text.trim();
+    if (address.length < 10) {
+      await bot.api.sendMessage(chatId, t(lang, "withdrawAddressError"));
+      return;
+    }
+    await setPending(user.id, { mode: "withdraw_amount", address });
     await bot.api.sendMessage(chatId, t(lang, "withdrawAmountPrompt", { min: MIN_WITHDRAWAL }), { reply_markup: amountEntryMenu(lang) });
+    return;
+  }
+  if (pending?.mode === "withdraw_amount") {
+    await consumeWithdrawAmount(bot, chatId, user, pending.address, text, lang);
     return;
   }
 
@@ -345,14 +453,18 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     return;
   }
   if (text === "📊 الإحصائيات والأرباح" && tgUserId === SUPER_ADMIN_ID) {
-    const [botsCount, usersCount, revenueAgg] = await Promise.all([
+    const [botsCount, usersCount, revenueAgg, pendingWithdrawalsAgg] = await Promise.all([
       prisma.bot.count(),
       prisma.user.count(),
       prisma.bot.aggregate({ _sum: { totalRevenue: true } }),
+      prisma.transaction.aggregate({
+        where: { type: { in: ["WITHDRAWAL", "OWNER_WITHDRAWAL"] }, status: { in: ["PENDING", "PENDING_AUDIT"] } },
+        _sum: { amount: true },
+      }),
     ]);
     await bot.api.sendMessage(
       chatId,
-      `📊 إحصائيات المنصة:\nعدد البوتات: ${botsCount}\nعدد المستخدمين: ${usersCount}\nأرباح المنصة التراكمية: ${fmt(Number(revenueAgg._sum.totalRevenue || 0))}`,
+      `📊 إحصائيات المنصة:\nعدد البوتات: ${botsCount}\nعدد المستخدمين: ${usersCount}\nأرباح المنصة التراكمية: ${fmt(Number(revenueAgg._sum.totalRevenue || 0))}\n💼 المحفظة المركزية — طلبات سحب معلّقة: ${fmt(Number(pendingWithdrawalsAgg._sum.amount || 0))}`,
       { reply_markup: ADMIN_MENU }
     );
     return;
@@ -402,7 +514,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await setPending(user.id, { mode: "owner_withdraw_address" });
     await bot.api.sendMessage(
       chatId,
-      `💼 رصيدك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\n\nأرسل عنوان محفظتك (USDT - شبكة TRC20) لطلب السحب:`,
+      `💼 رصيدك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\n⏳ رصيد قيد الحجز (48 ساعة): ${fmt(Number(fresh?.pendingBalance || 0))}\n\nأرسل عنوان محفظتك (USDT-TRC20 أو TON) لطلب السحب (الحد الأدنى $${MIN_OWNER_WITHDRAWAL}):`,
       { reply_markup: amountEntryMenu("ar") }
     );
     return;
@@ -410,7 +522,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   if (pending?.mode === "owner_withdraw_address" && tgUserId === botRow.ownerId) {
     const address = text.trim();
     if (address.length < 10) {
-      await bot.api.sendMessage(chatId, "أرسل عنوان محفظة صالح (TRC20).");
+      await bot.api.sendMessage(chatId, "أرسل عنوان محفظة صالح (TRC20 أو TON).");
       return;
     }
     await setPending(user.id, { mode: "owner_withdraw_amount", address });
@@ -419,19 +531,20 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   }
   if (pending?.mode === "owner_withdraw_amount" && tgUserId === botRow.ownerId) {
     const amount = Number(text.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(amount) || amount < MIN_WITHDRAWAL) {
-      await bot.api.sendMessage(chatId, t("ar", "withdrawMinError", { min: MIN_WITHDRAWAL }));
+    if (!Number.isFinite(amount) || amount < MIN_OWNER_WITHDRAWAL) {
+      await bot.api.sendMessage(chatId, `الحد الأدنى للسحب $${MIN_OWNER_WITHDRAWAL}. أرسل رقماً صحيحاً.`);
       return;
     }
     const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
     const ownerBalance = Number(fresh?.ownerBalance || 0);
     if (amount > ownerBalance) {
-      await bot.api.sendMessage(chatId, `رصيدك الحالي ${fmt(ownerBalance)} فقط.`);
+      await bot.api.sendMessage(chatId, `رصيدك الحالي القابل للسحب ${fmt(ownerBalance)} فقط.`);
       return;
     }
+    const isAudit = amount > AUDIT_THRESHOLD;
     await prisma.bot.update({ where: { id: botRow.id }, data: { ownerBalance: round2(ownerBalance - amount) } });
     const tx = await prisma.transaction.create({
-      data: { userId: user.id, botId: botRow.id, amount: round2(amount), currency: "internal", type: "OWNER_WITHDRAWAL", status: "PENDING" },
+      data: { userId: user.id, botId: botRow.id, amount: round2(amount), currency: "internal", type: "OWNER_WITHDRAWAL", status: isAudit ? "PENDING_AUDIT" : "PENDING" },
     });
     await setPending(user.id, null);
     await bot.api.sendMessage(
@@ -440,10 +553,11 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       { reply_markup: OWNER_MENU }
     );
     if (SUPER_ADMIN_ID) {
+      const auditNote = isAudit ? "\n🔺 يتجاوز 20$ — يتطلب تدقيقاً." : "";
       await bot.api
         .sendMessage(
           Number(SUPER_ADMIN_ID),
-          `طلب سحب أرباح منشئ بوت\nالبوت: ${botRow.id}\nالمالك: ${user.id}\nالمبلغ: ${fmt(amount)}\nالعنوان: ${pending.address}\n\nللموافقة أرسل: موافقة ${shortId(tx.id)}\nللرفض أرسل: رفض ${shortId(tx.id)}`
+          `طلب سحب أرباح منشئ بوت\nالبوت: ${botRow.id}\nالمالك: ${user.id}\nالمبلغ: ${fmt(amount)}\nالعنوان: ${pending.address}${auditNote}\n\nللموافقة أرسل: موافقة ${shortId(tx.id)}\nللرفض أرسل: رفض ${shortId(tx.id)}`
         )
         .catch(() => null);
     }
@@ -562,10 +676,6 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await consumeCreateAdStep(bot, chatId, user, pending, text, lang);
     return;
   }
-  if (pending?.mode === "withdraw") {
-    await consumeWithdrawAmount(bot, chatId, user, text, lang);
-    return;
-  }
   if (pending?.mode === "admin_broadcast" && tgUserId === SUPER_ADMIN_ID) {
     await runBroadcast(bot, chatId, text);
     await setPending(user.id, null);
@@ -664,7 +774,7 @@ async function sendAdReview(bot: TelegramBot, chatId: number, type: AdTypeStr, c
   await bot.api.sendMessage(chatId, lines.join("\n"), { reply_markup: reviewMenu(lang) });
 }
 
-async function consumeWithdrawAmount(bot: TelegramBot, chatId: number, user: any, text: string, lang: Lang) {
+async function consumeWithdrawAmount(bot: TelegramBot, chatId: number, user: any, address: string, text: string, lang: Lang) {
   const amount = Number(text.replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(amount) || amount < MIN_WITHDRAWAL) {
     await bot.api.sendMessage(chatId, t(lang, "withdrawMinError", { min: MIN_WITHDRAWAL }));
@@ -676,16 +786,20 @@ async function consumeWithdrawAmount(bot: TelegramBot, chatId: number, user: any
     await bot.api.sendMessage(chatId, t(lang, "withdrawInsufficient", { balance: fmt(balance) }));
     return;
   }
+  const isAudit = amount > AUDIT_THRESHOLD;
   await prisma.user.update({ where: { id: user.id }, data: { balance: round2(balance - amount) } });
-  const tx = await prisma.transaction.create({ data: { userId: user.id, amount: round2(amount), currency: "internal", type: "WITHDRAWAL", status: "PENDING" } });
+  const tx = await prisma.transaction.create({
+    data: { userId: user.id, amount: round2(amount), currency: "internal", type: "WITHDRAWAL", status: isAudit ? "PENDING_AUDIT" : "PENDING" },
+  });
   await setPending(user.id, null);
   await bot.api.sendMessage(chatId, t(lang, "withdrawSent", { amount: fmt(amount) }), { reply_markup: mainMenu(lang) });
 
   if (SUPER_ADMIN_ID) {
+    const auditNote = isAudit ? "\n🔺 يتجاوز 20$ — يتطلب تدقيقاً." : "";
     await bot.api
       .sendMessage(
         Number(SUPER_ADMIN_ID),
-        `طلب سحب جديد\nمستخدم: ${user.id}\nالمبلغ: ${fmt(amount)}\n\nللموافقة أرسل: موافقة ${shortId(tx.id)}\nللرفض أرسل: رفض ${shortId(tx.id)}`
+        `طلب سحب جديد\nمستخدم: ${user.id}\nالمبلغ: ${fmt(amount)}\nالعنوان: ${address}${auditNote}\n\nللموافقة أرسل: موافقة ${shortId(tx.id)}\nللرفض أرسل: رفض ${shortId(tx.id)}`
       )
       .catch(() => null);
   }
@@ -799,7 +913,8 @@ async function buildCarouselCard(ad: any, lang: Lang, tgUserId: string, currentB
   }
   kb.url(CAROUSEL_ACTION_LABEL[type][lang], actionUrl).row();
   if (!isForced) kb.text(t(lang, "carouselVerify"), `wcv|${shortId(ad.id)}`).row();
-  kb.text(t(lang, "carouselNext"), `wcn|${shortId(ad.id)}`).text(t(lang, "carouselExit"), "wcx");
+  kb.text(t(lang, "carouselNext"), `wcn|${shortId(ad.id)}`).text(t(lang, "carouselReport"), `wcr|${shortId(ad.id)}`).row();
+  kb.text(t(lang, "carouselExit"), "wcx");
 
   const lines = [
     isForced ? t(lang, "watchForcedLabel") : t(lang, "carouselAdTitle", { platform: TYPE_LABEL[type][lang] }),
@@ -826,11 +941,22 @@ async function startWatchCarousel(bot: TelegramBot, chatId: number, tgUserId: st
   await setPending(userId, { mode: "watch_carousel", type, queue, index: 0 });
 }
 
-type PayoutResult = { ok: true; workerCut: number; newBalance: number } | { ok: false; reason: "gone" | "own" | "not_done" | "already_claimed" };
+type PayoutResult =
+  | { ok: true; workerCut: number; newBalance: number }
+  | { ok: false; reason: "gone" | "own" | "not_done" | "already_claimed" | "flagged" };
 
 // Atomic payout core shared by the carousel's verify handler. Verification
 // (Telegram membership / link-timer token) must already have passed before
 // this is called — it only re-checks the ad is still claimable and pays out.
+//
+// Split of ad.cpc, in order: 50% workerCut to the completing user (full,
+// unaffected by referrals) — 20% creatorCut into the completing bot's 48h
+// pendingBalance hold (CREATOR_EARNING_PENDING, matured by the
+// release-pending-earnings cron) — 30% ownerCut to the platform, out of
+// which: a 5%-of-workerCut referral commission goes to whoever referred
+// the completing user (if any), then a further 5%-of-what's-left B2B
+// commission goes to whoever referred the completing bot's own activation
+// (if any); whatever remains is the platform's actual PLATFORM_PROFIT.
 async function payoutTask(tgUserId: string, adId: string, currentBotId: string): Promise<PayoutResult> {
   const ad = await prisma.ad.findUnique({ where: { id: adId } });
   if (!ad || ad.status !== "ACTIVE" || Number(ad.remaining) < Number(ad.cpc)) return { ok: false, reason: "gone" };
@@ -840,37 +966,76 @@ async function payoutTask(tgUserId: string, adId: string, currentBotId: string):
   // inside prisma.$transaction([...]) isn't necessary for these two (they're
   // idempotent no-ops when the row already exists), only the actual balance
   // mutations need to be atomic together.
-  await prisma.user.upsert({ where: { id: tgUserId }, update: {}, create: { id: tgUserId, botId: ad.botId, role: "USER" } });
+  const completingUser = await prisma.user.upsert({ where: { id: tgUserId }, update: {}, create: { id: tgUserId, botId: ad.botId, role: "USER" } });
+  if (completingUser.multiAccountFlag) return { ok: false, reason: "flagged" };
   if (SUPER_ADMIN_ID) {
     await prisma.user.upsert({ where: { id: SUPER_ADMIN_ID }, update: {}, create: { id: SUPER_ADMIN_ID, botId: ad.botId, role: "SUPER_ADMIN" } });
   }
+
+  const currentBot = await prisma.bot.findUnique({ where: { id: currentBotId } });
+  if (!currentBot) return { ok: false, reason: "gone" };
 
   const newRemaining = round2(Number(ad.remaining) - Number(ad.cpc));
   const workerCut = Number(ad.workerCut);
   const creatorCut = Number(ad.creatorCut);
   const ownerCut = Number(ad.ownerCut);
 
+  let referrerId: string | null = null;
+  if (completingUser.referredBy && completingUser.referredBy !== tgUserId) {
+    const referrer = await prisma.user.findUnique({ where: { id: completingUser.referredBy } });
+    if (referrer) referrerId = referrer.id;
+  }
+  const referralCut = referrerId ? round2(workerCut * 0.05) : 0;
+  const platformAfterUserReferral = round2(ownerCut - referralCut);
+
+  const b2bOwnerId = currentBot.referredByOwnerId && currentBot.referredByOwnerId !== currentBot.ownerId ? currentBot.referredByOwnerId : null;
+  const b2bCut = b2bOwnerId ? round2(platformAfterUserReferral * 0.05) : 0;
+  const platformFinal = round2(platformAfterUserReferral - b2bCut);
+
   // Atomic — the dedup guard (unique txHash) is the first operation, so a
   // double-claim rolls back every other write in this batch too, not just
   // the log row. Without $transaction here, a crash between steps could
   // leave the ad's budget decremented with no one actually paid, or the
   // reverse — a real risk once real money is on the line.
+  const ops: Prisma.PrismaPromise<any>[] = [
+    prisma.transaction.create({
+      data: { userId: tgUserId, botId: currentBotId, amount: workerCut, currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${tgUserId}` },
+    }),
+    prisma.ad.update({ where: { id: ad.id }, data: { remaining: newRemaining, status: newRemaining < Number(ad.cpc) ? "EXPIRED" : ad.status } }),
+    prisma.user.update({ where: { id: tgUserId }, data: { balance: { increment: workerCut } } }),
+    // 20% creator cut goes into the completing bot's 48h hold
+    // (pendingBalance), not the withdrawable ownerBalance directly —
+    // matured later by the release-pending-earnings cron.
+    prisma.bot.update({ where: { id: currentBotId }, data: { pendingBalance: { increment: creatorCut }, totalRevenue: { increment: ownerCut } } }),
+    prisma.transaction.create({
+      data: { userId: currentBot.ownerId, botId: currentBotId, amount: creatorCut, currency: "internal", type: "CREATOR_EARNING_PENDING", status: "PENDING" },
+    }),
+  ];
+  if (referrerId) {
+    ops.push(
+      prisma.user.update({ where: { id: referrerId }, data: { balance: { increment: referralCut } } }),
+      prisma.transaction.create({ data: { userId: referrerId, botId: currentBotId, amount: referralCut, currency: "internal", type: "REFERRAL_COMMISSION", status: "COMPLETED" } })
+    );
+  }
+  if (b2bOwnerId) {
+    ops.push(
+      prisma.user.upsert({
+        where: { id: b2bOwnerId },
+        update: { balance: { increment: b2bCut } },
+        create: { id: b2bOwnerId, botId: currentBotId, role: "BOT_OWNER", balance: b2bCut },
+      }),
+      prisma.transaction.create({ data: { userId: b2bOwnerId, botId: currentBotId, amount: b2bCut, currency: "internal", type: "REFERRAL_B2B_COMMISSION", status: "COMPLETED" } })
+    );
+  }
+  if (SUPER_ADMIN_ID) {
+    ops.push(
+      prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, botId: currentBotId, amount: platformFinal, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })
+    );
+  }
+
   let results;
   try {
-    results = await prisma.$transaction([
-      prisma.transaction.create({
-        data: { userId: tgUserId, botId: currentBotId, amount: workerCut, currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${tgUserId}` },
-      }),
-      prisma.ad.update({ where: { id: ad.id }, data: { remaining: newRemaining, status: newRemaining < Number(ad.cpc) ? "EXPIRED" : ad.status } }),
-      prisma.user.update({ where: { id: tgUserId }, data: { balance: { increment: workerCut } } }),
-      // Credited to the bot the click actually happened in, not necessarily
-      // ad.botId (the creating bot) — matters for GLOBAL-scope ads, where
-      // the 20% creator cut belongs to whichever bot brought the worker.
-      prisma.bot.update({ where: { id: currentBotId }, data: { ownerBalance: { increment: creatorCut }, totalRevenue: { increment: ownerCut } } }),
-      ...(SUPER_ADMIN_ID
-        ? [prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, botId: currentBotId, amount: ownerCut, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })]
-        : []),
-    ]);
+    results = await prisma.$transaction(ops);
   } catch {
     return { ok: false, reason: "already_claimed" };
   }
@@ -921,6 +1086,15 @@ async function handleCarouselCallback(bot: TelegramBot, botRow: BotRow, cq: any)
   }
 
   if (action === "wcv") {
+    if (!user.phoneVerified) {
+      await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "phoneRequiredAlert"), show_alert: true }).catch(() => null);
+      await bot.api.sendMessage(chatId, t(lang, "phoneVerifyPrompt"), { reply_markup: phoneRequestMenu(lang) });
+      return;
+    }
+    if (user.multiAccountFlag) {
+      await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "accountFlaggedAlert"), show_alert: true }).catch(() => null);
+      return;
+    }
     const ad = await prisma.ad.findUnique({ where: { id: currentAdId } });
     if (!ad || ad.status !== "ACTIVE") {
       await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "taskGone"), show_alert: true }).catch(() => null);
@@ -937,7 +1111,14 @@ async function handleCarouselCallback(bot: TelegramBot, botRow: BotRow, cq: any)
     }
     const result = await payoutTask(tgUserId, currentAdId, botRow.id);
     if (!result.ok) {
-      const alertText = result.reason === "already_claimed" ? t(lang, "taskAlreadyClaimed") : result.reason === "own" ? t(lang, "taskOwnCampaign") : t(lang, "taskGone");
+      const alertText =
+        result.reason === "already_claimed"
+          ? t(lang, "taskAlreadyClaimed")
+          : result.reason === "own"
+            ? t(lang, "taskOwnCampaign")
+            : result.reason === "flagged"
+              ? t(lang, "accountFlaggedAlert")
+              : t(lang, "taskGone");
       await bot.api.answerCallbackQuery(cq.id, { text: alertText, show_alert: true }).catch(() => null);
       return;
     }
@@ -951,6 +1132,24 @@ async function handleCarouselCallback(bot: TelegramBot, botRow: BotRow, cq: any)
   if (action === "wcn") {
     await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     await advanceCarousel(bot, chatId, messageId, user.id, pending, lang, botRow.id, tgUserId);
+    return;
+  }
+
+  if (action === "wcr") {
+    const already = await prisma.adReport.findUnique({ where: { adId_userId: { adId: currentAdId, userId: tgUserId } } });
+    if (already) {
+      await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "reportAlready"), show_alert: true }).catch(() => null);
+      return;
+    }
+    await prisma.adReport.create({ data: { adId: currentAdId, userId: tgUserId } });
+    const updatedAd = await prisma.ad.update({ where: { id: currentAdId }, data: { reportCount: { increment: 1 } } });
+    if (updatedAd.reportCount >= 5 && updatedAd.status === "ACTIVE") {
+      await prisma.ad.update({ where: { id: currentAdId }, data: { status: "FLAGGED" } });
+      if (SUPER_ADMIN_ID) {
+        await bot.api.sendMessage(Number(SUPER_ADMIN_ID), `🚩 تم تجميد إعلان (${shortId(currentAdId)}) تلقائياً بعد 5 بلاغات مستخدمين.`).catch(() => null);
+      }
+    }
+    await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "reportReceived") }).catch(() => null);
     return;
   }
 
@@ -998,6 +1197,17 @@ async function confirmAd(bot: TelegramBot, chatId: number, user: any, pending: E
   }
   const { ownerCut, creatorCut, workerCut } = splitCpc(cpc);
   const scope: AdScope = collected.scope === "GLOBAL" ? "GLOBAL" : "TARGETED";
+
+  // Auto-moderation: scanned once at creation, no manual review step when
+  // clean (stays ACTIVE, the schema default). A violation gets REJECTED
+  // and never charges the advertiser.
+  const scanText = [collected.target, collected.description].filter(Boolean).join(" ");
+  let rejected = containsBannedWords(scanText);
+  if (!rejected && type === "LINK" && collected.target) {
+    const url = /^https?:\/\//i.test(collected.target) ? collected.target : `https://${collected.target}`;
+    rejected = await isLinkUnsafe(url);
+  }
+
   await prisma.ad.create({
     data: {
       userId: user.id,
@@ -1010,14 +1220,18 @@ async function confirmAd(bot: TelegramBot, chatId: number, user: any, pending: E
       creatorCut,
       workerCut,
       remaining: budget,
-      status: "ACTIVE",
+      status: rejected ? "REJECTED" : "ACTIVE",
       scope,
       targetBotId: scope === "TARGETED" ? fresh!.botId : null,
     },
   });
+  await setPending(user.id, null);
+  if (rejected) {
+    await bot.api.sendMessage(chatId, t(lang, "adAutoRejected"), { reply_markup: mainMenu(lang) });
+    return;
+  }
   await prisma.user.update({ where: { id: user.id }, data: { balance: round2(balance - budget) } });
   await prisma.transaction.create({ data: { userId: user.id, amount: budget, currency: "internal", type: "AD_PAYMENT", status: "COMPLETED" } });
-  await setPending(user.id, null);
   await bot.api.sendMessage(chatId, t(lang, "adLaunched", { budget: fmt(budget) }), { reply_markup: mainMenu(lang) });
 }
 
@@ -1037,7 +1251,7 @@ async function sendStats(bot: TelegramBot, chatId: number, userId: string, lang:
 
 
 async function decideWithdrawal(bot: TelegramBot, chatId: number, txIdSuffix: string, approve: boolean) {
-  const candidates = await prisma.transaction.findMany({ where: { status: "PENDING", type: { in: ["WITHDRAWAL", "OWNER_WITHDRAWAL"] } }, take: 200 });
+  const candidates = await prisma.transaction.findMany({ where: { status: { in: ["PENDING", "PENDING_AUDIT"] }, type: { in: ["WITHDRAWAL", "OWNER_WITHDRAWAL"] } }, take: 200 });
   const tx = candidates.find((c) => shortId(c.id) === txIdSuffix);
   if (!tx) {
     await bot.api.sendMessage(chatId, "الطلب غير موجود أو عولج مسبقاً.");
