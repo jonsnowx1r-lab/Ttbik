@@ -51,6 +51,13 @@ export const STR: Dict = {
   withdrawInsufficient: { ar: "رصيدك {balance} فقط.", en: "Your balance is only {balance}." },
   withdrawSent: { ar: "تم إرسال طلب سحب {amount}. سيُراجَع من مالك المنصة.", en: "Withdrawal request for {amount} sent. It will be reviewed by the platform owner." },
 
+  btnScopeTargeted: { ar: "🎯 حملة خاصة بهذا البوت", en: "🎯 This bot only" },
+  btnScopeGlobal: { ar: "🌐 حملة عامة في كافة البوتات", en: "🌐 Global — all bots" },
+  adScopePrompt: {
+    ar: "أين تريد عرض حملتك؟\n🎯 خاصة: تظهر فقط لمستخدمي هذا البوت.\n🌐 عامة: تظهر في كل البوتات على المنصة (أولوية لهذا البوت أولاً).",
+    en: "Where should your campaign appear?\n🎯 This bot only: shown just to this bot's users.\n🌐 Global: shown across every bot on the platform (this bot gets priority).",
+  },
+  adReviewScope: { ar: "النطاق: {scope}", en: "Scope: {scope}" },
   adSubtypePrompt: { ar: "اختر نوع مهمة تويتر:", en: "Choose the Twitter task type:" },
   adDescriptionPrompt: { ar: "أرسل وصف حملتك (نص قصير يظهر للمستخدمين):", en: "Send your campaign description (short text shown to users):" },
   adTargetPrompt: { ar: "أرسل الرابط/الحساب/القناة الذي تريد الترويج له:", en: "Send the link/account/channel you want to promote:" },

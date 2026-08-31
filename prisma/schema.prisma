@@ -33,6 +33,7 @@ model Bot {
   ownerBalance  Float    @default(0.0) // creator's withdrawable commission
   isActive      Boolean  @default(true)
   webhookSecret String // Telegram setWebhook secret_token — verified on every incoming update so a guessed bot id alone can't forge updates
+  requiredChannel String? // optional mandatory-subscription channel (@handle) the bot owner sets; non-owners must join before /start unlocks
   created_at    DateTime @default(now())
   ads           Ad[]
 }
@@ -59,16 +60,21 @@ model User {
 model Ad {
   id          String   @id @default(uuid())
   userId      String // advertiser
-  botId       String // bot this campaign was created in
+  botId       String // bot this campaign was created in (the advertiser's own bot)
   type        AdType
   content     String // target link/channel/video/handle
   totalBudget Float
   cpc         Float // cost per click/task, min $0.02
   ownerCut    Float // 30% platform
-  creatorCut  Float // 20% bot creator
+  creatorCut  Float // 20% — whichever bot's user completes the task, not necessarily the creating bot (see scope)
   workerCut   Float // 50% worker
   remaining   Float
   status      String   @default("ACTIVE") // ACTIVE | EXPIRED
+  // TARGETED: only shown inside the creating bot (targetBotId = botId).
+  // GLOBAL: shown across every bot's "شاهد واربح" pool (targetBotId = null);
+  // the 20% creator cut then goes to whichever bot's user completes it.
+  scope       String   @default("TARGETED") // TARGETED | GLOBAL
+  targetBotId String?
   created_at  DateTime @default(now())
   bot         Bot      @relation(fields: [botId], references: [id])
   user        User     @relation(fields: [userId], references: [id])
@@ -77,9 +83,10 @@ model Ad {
 model Transaction {
   id         String   @id @default(uuid())
   userId     String
+  botId      String? // which bot this happened through — set for TASK_REWARD/PLATFORM_PROFIT (the bot the click occurred in) and OWNER_WITHDRAWAL (which bot's commission); null for wallet-level DEPOSIT/WITHDRAWAL, which aren't bot-scoped
   amount     Float
   currency   String // USDT, TRX, TON, LTC, SOL, ...
-  type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT
+  type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT | PLATFORM_PROFIT | OWNER_WITHDRAWAL
   status     String // PENDING | COMPLETED | FAILED
   txHash     String? // NOWPayments payment_id, used for IPN idempotency
   created_at DateTime @default(now())

@@ -79,10 +79,12 @@ const MIN_CPC_BY_TYPE: Record<AdTypeStr, number> = {
   TIKTOK: 0.005,
 };
 
-type CreateAdCollected = { subType?: "retweet" | "follow"; description?: string; target?: string; budget?: number; cpc?: number };
+type AdScope = "TARGETED" | "GLOBAL";
+type CreateAdCollected = { scope?: AdScope; subType?: "retweet" | "follow"; description?: string; target?: string; budget?: number; cpc?: number };
+type CreateAdStep = "scope" | "subtype" | "description" | "target" | "budget" | "cpc";
 type PendingAction =
   | { mode: "platform_pick"; intent: "watch" | "create" }
-  | { mode: "create_ad"; type: AdTypeStr; step: "subtype" | "description" | "target" | "budget" | "cpc"; collected: CreateAdCollected }
+  | { mode: "create_ad"; type: AdTypeStr; step: CreateAdStep; collected: CreateAdCollected }
   | { mode: "reviewing_ad"; type: AdTypeStr; collected: CreateAdCollected }
   | { mode: "withdraw" }
   | { mode: "choosing_language" }
@@ -90,7 +92,11 @@ type PendingAction =
   | { mode: "admin_global_ad_platform" }
   | { mode: "admin_global_ad_target"; type: AdTypeStr }
   | { mode: "admin_credit_target" }
-  | { mode: "admin_credit_amount"; targetId: string };
+  | { mode: "admin_credit_amount"; targetId: string }
+  | { mode: "owner_broadcast" }
+  | { mode: "owner_channel_setup" }
+  | { mode: "owner_withdraw_address" }
+  | { mode: "owner_withdraw_amount"; address: string };
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -109,6 +115,16 @@ function shortId(id: string): string {
 }
 function asLang(v: unknown): Lang {
   return v === "en" ? "en" : DEFAULT_LANG;
+}
+
+async function isChannelMember(bot: TelegramBot, channelHandle: string, tgUserId: string): Promise<boolean> {
+  try {
+    const handle = channelHandle.startsWith("@") ? channelHandle : `@${channelHandle}`;
+    const member = await bot.api.getChatMember(handle, Number(tgUserId));
+    return ["creator", "administrator", "member"].includes(member.status);
+  } catch {
+    return false;
+  }
 }
 
 // --- Reply keyboards (pinned bottom button grid) — all language-aware ---
@@ -152,11 +168,24 @@ function amountEntryMenu(lang: Lang): Keyboard {
 function languageMenu(lang: Lang): Keyboard {
   return new Keyboard().text(t(lang, "btnLangAr")).text(t(lang, "btnLangEn")).row().text(backLabel(lang)).resized();
 }
+function scopeMenu(lang: Lang): Keyboard {
+  return new Keyboard().text(t(lang, "btnScopeTargeted")).row().text(t(lang, "btnScopeGlobal")).row().text(backLabel(lang)).resized();
+}
 const ADMIN_MENU = new Keyboard()
   .text("📢 إعلان إجباري شامل").row()
   .text("📣 إذاعة لكل المستخدمين").row()
   .text("📊 الإحصائيات والأرباح").row()
   .text("➕ شحن رصيد").row()
+  .text("🔙 القائمة الرئيسية")
+  .resized();
+// Bot Owner panel is Arabic-only for now too (like the Super Admin panel) —
+// a scope call given the size of this build; can be translated later if a
+// non-Arabic-speaking bot creator actually needs it.
+const OWNER_MENU = new Keyboard()
+  .text("💼 أرباحي والسحب").row()
+  .text("📊 إحصائيات البوت").row()
+  .text("📣 إذاعة لمستخدمي البوت").row()
+  .text("📢 قناة الاشتراك الإجباري").row()
   .text("🔙 القائمة الرئيسية")
   .resized();
 
@@ -191,12 +220,28 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     const user = await ensureUser(botRow.id, tgUserId, botRow, payload && payload !== tgUserId ? payload : null);
     await setPending(user.id, null);
     const lang = asLang(user.language);
-    const adminNote = tgUserId === SUPER_ADMIN_ID ? t(lang, "adminNote") : "";
+    const isPrivileged = tgUserId === SUPER_ADMIN_ID || tgUserId === botRow.ownerId;
+    if (!isPrivileged && botRow.requiredChannel) {
+      const joined = await isChannelMember(bot, botRow.requiredChannel, tgUserId);
+      if (!joined) {
+        await bot.api.sendMessage(
+          chatId,
+          `📢 قبل استخدام البوت، انضم إلى القناة التالية ثم أرسل /start مجدداً:\nhttps://t.me/${botRow.requiredChannel.replace(/^@/, "")}`
+        );
+        return;
+      }
+    }
+    const adminNote = tgUserId === SUPER_ADMIN_ID ? t(lang, "adminNote") : tgUserId === botRow.ownerId ? "\n\n🛠 أنت منشئ هذا البوت — أرسل /admin لفتح لوحة تحكمك." : "";
     await bot.api.sendMessage(chatId, `${t(lang, "welcome")}${adminNote}`, { reply_markup: mainMenu(lang) });
     return;
   }
 
   if (text === "/admin") {
+    if (tgUserId === botRow.ownerId && tgUserId !== SUPER_ADMIN_ID) {
+      const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
+      await bot.api.sendMessage(chatId, `🛠 لوحة تحكم منشئ البوت\n\nرصيد أرباحك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}`, { reply_markup: OWNER_MENU });
+      return;
+    }
     if (tgUserId !== SUPER_ADMIN_ID) {
       await bot.api.sendMessage(chatId, "⛔ عذراً، هذا الأمر مخصص لمالك المنصة فقط.");
       return;
@@ -336,17 +381,131 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     return;
   }
 
+  // --- Bot Owner panel (Arabic-only, gated to this bot's registered ownerId) ---
+  if (text === "💼 أرباحي والسحب" && tgUserId === botRow.ownerId) {
+    const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
+    await setPending(user.id, { mode: "owner_withdraw_address" });
+    await bot.api.sendMessage(
+      chatId,
+      `💼 رصيدك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\n\nأرسل عنوان محفظتك (USDT - شبكة TRC20) لطلب السحب:`,
+      { reply_markup: amountEntryMenu("ar") }
+    );
+    return;
+  }
+  if (pending?.mode === "owner_withdraw_address" && tgUserId === botRow.ownerId) {
+    const address = text.trim();
+    if (address.length < 10) {
+      await bot.api.sendMessage(chatId, "أرسل عنوان محفظة صالح (TRC20).");
+      return;
+    }
+    await setPending(user.id, { mode: "owner_withdraw_amount", address });
+    await bot.api.sendMessage(chatId, "أرسل المبلغ بالدولار الذي تريد سحبه:", { reply_markup: amountEntryMenu("ar") });
+    return;
+  }
+  if (pending?.mode === "owner_withdraw_amount" && tgUserId === botRow.ownerId) {
+    const amount = Number(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amount) || amount < MIN_WITHDRAWAL) {
+      await bot.api.sendMessage(chatId, t("ar", "withdrawMinError", { min: MIN_WITHDRAWAL }));
+      return;
+    }
+    const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
+    const ownerBalance = Number(fresh?.ownerBalance || 0);
+    if (amount > ownerBalance) {
+      await bot.api.sendMessage(chatId, `رصيدك الحالي ${fmt(ownerBalance)} فقط.`);
+      return;
+    }
+    await prisma.bot.update({ where: { id: botRow.id }, data: { ownerBalance: round2(ownerBalance - amount) } });
+    const tx = await prisma.transaction.create({
+      data: { userId: user.id, botId: botRow.id, amount: round2(amount), currency: "internal", type: "OWNER_WITHDRAWAL", status: "PENDING" },
+    });
+    await setPending(user.id, null);
+    await bot.api.sendMessage(
+      chatId,
+      `✅ تم إرسال طلب سحب ${fmt(amount)} إلى العنوان: ${pending.address}\nسيتم التحويل خلال 24-48 ساعة بعد المراجعة.`,
+      { reply_markup: OWNER_MENU }
+    );
+    if (SUPER_ADMIN_ID) {
+      await bot.api
+        .sendMessage(
+          Number(SUPER_ADMIN_ID),
+          `طلب سحب أرباح منشئ بوت\nالبوت: ${botRow.id}\nالمالك: ${user.id}\nالمبلغ: ${fmt(amount)}\nالعنوان: ${pending.address}\n\nللموافقة أرسل: موافقة ${shortId(tx.id)}\nللرفض أرسل: رفض ${shortId(tx.id)}`
+        )
+        .catch(() => null);
+    }
+    return;
+  }
+  if (text === "📊 إحصائيات البوت" && tgUserId === botRow.ownerId) {
+    const [usersCount, tasksCompleted, adsAgg] = await Promise.all([
+      prisma.user.count({ where: { botId: botRow.id } }),
+      prisma.transaction.count({ where: { botId: botRow.id, type: "TASK_REWARD" } }),
+      prisma.ad.aggregate({ where: { botId: botRow.id }, _sum: { totalBudget: true } }),
+    ]);
+    await bot.api.sendMessage(
+      chatId,
+      `📊 إحصائيات بوتك:\nعدد المستخدمين: ${usersCount}\nعدد المهام المكتملة: ${tasksCompleted}\nإجمالي قيمة الإعلانات: ${fmt(Number(adsAgg._sum.totalBudget || 0))}`,
+      { reply_markup: OWNER_MENU }
+    );
+    return;
+  }
+  if (text === "📣 إذاعة لمستخدمي البوت" && tgUserId === botRow.ownerId) {
+    await setPending(user.id, { mode: "owner_broadcast" });
+    await bot.api.sendMessage(chatId, "أرسل نص الرسالة التي ستصل لمستخدمي بوتك فقط:", { reply_markup: amountEntryMenu("ar") });
+    return;
+  }
+  if (pending?.mode === "owner_broadcast" && tgUserId === botRow.ownerId) {
+    const users = await prisma.user.findMany({ where: { botId: botRow.id }, select: { id: true } });
+    let sent = 0;
+    let failed = 0;
+    for (const u of users) {
+      try {
+        await bot.api.sendMessage(Number(u.id), text);
+        sent++;
+      } catch {
+        failed++;
+      }
+    }
+    await setPending(user.id, null);
+    await bot.api.sendMessage(chatId, `تم الإرسال: ${sent} نجح، ${failed} فشل.`, { reply_markup: OWNER_MENU });
+    return;
+  }
+  if (text === "📢 قناة الاشتراك الإجباري" && tgUserId === botRow.ownerId) {
+    await setPending(user.id, { mode: "owner_channel_setup" });
+    await bot.api.sendMessage(
+      chatId,
+      `القناة الحالية: ${botRow.requiredChannel || "غير مفعّلة"}\n\nأرسل معرف القناة (مثال: @MyChannel) لتفعيل الاشتراك الإجباري، أو أرسل "إلغاء" لإلغاء الاشتراك الإجباري:`,
+      { reply_markup: amountEntryMenu("ar") }
+    );
+    return;
+  }
+  if (pending?.mode === "owner_channel_setup" && tgUserId === botRow.ownerId) {
+    const cancel = text.trim() === "إلغاء";
+    const channel = cancel ? null : text.trim().replace(/^@/, "");
+    await prisma.bot.update({ where: { id: botRow.id }, data: { requiredChannel: channel } });
+    await setPending(user.id, null);
+    await bot.api.sendMessage(chatId, cancel ? "✅ تم إلغاء الاشتراك الإجباري." : `✅ تم تفعيل الاشتراك الإجباري في القناة @${channel}.`, { reply_markup: OWNER_MENU });
+    return;
+  }
+
   // --- Platform-picker (disambiguated by pendingAction.intent) ---
   if (pending?.mode === "platform_pick" && LABEL_TO_TYPE[text]) {
     const type = LABEL_TO_TYPE[text];
     if (pending.intent === "watch") {
       await setPending(user.id, null);
-      await sendWatchList(bot, chatId, tgUserId, type, lang);
+      await sendWatchList(bot, chatId, tgUserId, type, lang, botRow.id);
       return;
     }
     const steps = createAdSteps(type);
     await setPending(user.id, { mode: "create_ad", type, step: steps[0], collected: {} });
     await askCreateAdStep(bot, chatId, type, steps[0], lang);
+    return;
+  }
+
+  if (pending?.mode === "create_ad" && pending.step === "scope" && (text === t(lang, "btnScopeTargeted") || text === t(lang, "btnScopeGlobal"))) {
+    const scope: AdScope = text === t(lang, "btnScopeTargeted") ? "TARGETED" : "GLOBAL";
+    const collected = { ...pending.collected, scope };
+    const next = nextCreateAdStep(pending.type, "scope")!;
+    await setPending(user.id, { mode: "create_ad", type: pending.type, step: next, collected });
+    await askCreateAdStep(bot, chatId, pending.type, next, lang);
     return;
   }
 
@@ -387,7 +546,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
 
   // Per-task confirm: "✅ <shortId>"
   if (text.startsWith("✅ ") && text.length <= 10) {
-    await completeTaskBySuffix(bot, chatId, tgUserId, text.slice(2).trim(), lang);
+    await completeTaskBySuffix(bot, chatId, tgUserId, text.slice(2).trim(), lang, botRow.id);
     return;
   }
 
@@ -451,8 +610,8 @@ async function consumeCreateAdStep(bot: TelegramBot, chatId: number, user: any, 
   await askCreateAdStep(bot, chatId, type, next, lang);
 }
 
-function createAdSteps(type: AdTypeStr): Array<"subtype" | "description" | "target" | "budget" | "cpc"> {
-  const s: Array<"subtype" | "description" | "target" | "budget" | "cpc"> = [];
+function createAdSteps(type: AdTypeStr): CreateAdStep[] {
+  const s: CreateAdStep[] = ["scope"];
   if (type === "TWITTER") s.push("subtype");
   if (NEEDS_DESCRIPTION.includes(type)) s.push("description");
   s.push("target", "budget", "cpc");
@@ -465,6 +624,10 @@ function nextCreateAdStep(type: AdTypeStr, current: string) {
 }
 
 async function askCreateAdStep(bot: TelegramBot, chatId: number, type: AdTypeStr, step: string, lang: Lang) {
+  if (step === "scope") {
+    await bot.api.sendMessage(chatId, t(lang, "adScopePrompt"), { reply_markup: scopeMenu(lang) });
+    return;
+  }
   if (step === "subtype") {
     await bot.api.sendMessage(chatId, t(lang, "adSubtypePrompt"), { reply_markup: twitterSubtypeMenu(lang) });
     return;
@@ -482,6 +645,7 @@ async function sendAdReview(bot: TelegramBot, chatId: number, type: AdTypeStr, c
   const clicks = Math.floor((c.budget || 0) / (c.cpc || MIN_CPC_BY_TYPE[type]));
   const lines = [
     t(lang, "adReviewTitle", { platform: TYPE_LABEL[type][lang] }),
+    t(lang, "adReviewScope", { scope: c.scope === "GLOBAL" ? t(lang, "btnScopeGlobal") : t(lang, "btnScopeTargeted") }),
     c.subType ? t(lang, "adReviewType", { type: c.subType === "retweet" ? t(lang, "btnRetweet") : t(lang, "btnFollow") }) : null,
     c.description ? t(lang, "adReviewDesc", { desc: c.description }) : null,
     t(lang, "adReviewTarget", { target: c.target || "" }),
@@ -548,19 +712,58 @@ async function createGlobalAd(bot: TelegramBot, chatId: number, user: any, type:
       workerCut: 0,
       remaining: Number.MAX_SAFE_INTEGER,
       status: "ACTIVE",
+      scope: "GLOBAL",
+      targetBotId: null,
     },
   });
   await setPending(user.id, null);
   await bot.api.sendMessage(chatId, "✅ تم إضافة الإعلان الإجباري. سيظهر ضمن «شاهد واربح» لكل البوتات (بلا مكافأة، ترويج مجاني للمنصة).", { reply_markup: ADMIN_MENU });
 }
 
-async function sendWatchList(bot: TelegramBot, chatId: number, tgUserId: string, type: AdTypeStr, lang: Lang) {
+async function sendWatchList(bot: TelegramBot, chatId: number, tgUserId: string, type: AdTypeStr, lang: Lang, currentBotId: string) {
+  // Pool = this bot's own TARGETED campaigns + the platform-wide GLOBAL pool
+  // (forced platform ads are created with scope "GLOBAL" too, see
+  // createGlobalAd, so they fall into the same OR branch automatically).
   const ads = await prisma.ad.findMany({
-    where: { type: type as any, status: "ACTIVE", remaining: { gte: 0 }, userId: { not: tgUserId } },
+    where: {
+      type: type as any,
+      status: "ACTIVE",
+      userId: { not: tgUserId },
+      OR: [
+        { scope: "TARGETED", botId: currentBotId },
+        { scope: "GLOBAL" },
+      ],
+    },
     orderBy: { created_at: "desc" },
-    take: 10,
+    take: 50,
   });
-  const usable = ads.filter((a) => a.cpc === 0 || Number(a.remaining) >= Number(a.cpc));
+
+  // Already-completed-by-this-user ads are excluded via the same synthetic
+  // txHash used for double-claim protection (`task_<adId>_<userId>`) — no
+  // separate "completedTasks" relation exists in this schema, so we derive
+  // it from Transaction directly instead.
+  const doneTx = await prisma.transaction.findMany({
+    where: { userId: tgUserId, type: "TASK_REWARD", txHash: { not: null } },
+    select: { txHash: true },
+  });
+  const doneAdIds = new Set(
+    doneTx
+      .map((tx) => tx.txHash?.match(/^task_(.+)_[^_]+$/)?.[1])
+      .filter((id): id is string => !!id)
+  );
+
+  const usable = ads
+    .filter((a) => !doneAdIds.has(a.id))
+    .filter((a) => a.cpc === 0 || Number(a.remaining) >= Number(a.cpc))
+    .sort((a, b) => {
+      // This bot's own campaigns first, then the global pool; within each
+      // group, highest-paying first.
+      const aOwn = a.botId === currentBotId ? 0 : 1;
+      const bOwn = b.botId === currentBotId ? 0 : 1;
+      if (aOwn !== bOwn) return aOwn - bOwn;
+      return Number(b.cpc) - Number(a.cpc);
+    })
+    .slice(0, 10);
   if (usable.length === 0) {
     await bot.api.sendMessage(chatId, t(lang, "watchNoAds"), { reply_markup: mainMenu(lang) });
     return;
@@ -590,17 +793,17 @@ async function sendWatchList(bot: TelegramBot, chatId: number, tgUserId: string,
   }
 }
 
-async function completeTaskBySuffix(bot: TelegramBot, chatId: number, tgUserId: string, suffix: string, lang: Lang) {
+async function completeTaskBySuffix(bot: TelegramBot, chatId: number, tgUserId: string, suffix: string, lang: Lang, currentBotId: string) {
   const candidates = await prisma.ad.findMany({ where: { status: "ACTIVE" }, take: 200 });
   const ad = candidates.find((a) => shortId(a.id) === suffix);
   if (!ad) {
     await bot.api.sendMessage(chatId, t(lang, "taskGone"), { reply_markup: mainMenu(lang) });
     return;
   }
-  await completeTask(bot, chatId, tgUserId, ad.id, lang);
+  await completeTask(bot, chatId, tgUserId, ad.id, lang, currentBotId);
 }
 
-async function completeTask(bot: TelegramBot, chatId: number, tgUserId: string, adId: string, lang: Lang) {
+async function completeTask(bot: TelegramBot, chatId: number, tgUserId: string, adId: string, lang: Lang, currentBotId: string) {
   const ad = await prisma.ad.findUnique({ where: { id: adId } });
   if (!ad || ad.status !== "ACTIVE" || Number(ad.remaining) < Number(ad.cpc)) {
     await bot.api.sendMessage(chatId, t(lang, "taskGone"), { reply_markup: mainMenu(lang) });
@@ -646,13 +849,16 @@ async function completeTask(bot: TelegramBot, chatId: number, tgUserId: string, 
   try {
     results = await prisma.$transaction([
       prisma.transaction.create({
-        data: { userId: tgUserId, amount: workerCut, currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${tgUserId}` },
+        data: { userId: tgUserId, botId: currentBotId, amount: workerCut, currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${tgUserId}` },
       }),
       prisma.ad.update({ where: { id: ad.id }, data: { remaining: newRemaining, status: newRemaining < Number(ad.cpc) ? "EXPIRED" : ad.status } }),
       prisma.user.update({ where: { id: tgUserId }, data: { balance: { increment: workerCut } } }),
-      prisma.bot.update({ where: { id: ad.botId }, data: { ownerBalance: { increment: creatorCut }, totalRevenue: { increment: ownerCut } } }),
+      // Credited to the bot the click actually happened in, not necessarily
+      // ad.botId (the creating bot) — matters for GLOBAL-scope ads, where
+      // the 20% creator cut belongs to whichever bot brought the worker.
+      prisma.bot.update({ where: { id: currentBotId }, data: { ownerBalance: { increment: creatorCut }, totalRevenue: { increment: ownerCut } } }),
       ...(SUPER_ADMIN_ID
-        ? [prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, amount: ownerCut, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })]
+        ? [prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, botId: currentBotId, amount: ownerCut, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })]
         : []),
     ]);
   } catch {
@@ -676,6 +882,7 @@ async function confirmAd(bot: TelegramBot, chatId: number, user: any, pending: E
     return;
   }
   const { ownerCut, creatorCut, workerCut } = splitCpc(cpc);
+  const scope: AdScope = collected.scope === "GLOBAL" ? "GLOBAL" : "TARGETED";
   await prisma.ad.create({
     data: {
       userId: user.id,
@@ -689,6 +896,8 @@ async function confirmAd(bot: TelegramBot, chatId: number, user: any, pending: E
       workerCut,
       remaining: budget,
       status: "ACTIVE",
+      scope,
+      targetBotId: scope === "TARGETED" ? fresh!.botId : null,
     },
   });
   await prisma.user.update({ where: { id: user.id }, data: { balance: round2(balance - budget) } });
@@ -723,7 +932,7 @@ async function sendCreatorEarnings(bot: TelegramBot, chatId: number, botRow: Bot
 }
 
 async function decideWithdrawal(bot: TelegramBot, chatId: number, txIdSuffix: string, approve: boolean) {
-  const candidates = await prisma.transaction.findMany({ where: { status: "PENDING", type: "WITHDRAWAL" }, take: 200 });
+  const candidates = await prisma.transaction.findMany({ where: { status: "PENDING", type: { in: ["WITHDRAWAL", "OWNER_WITHDRAWAL"] } }, take: 200 });
   const tx = candidates.find((c) => shortId(c.id) === txIdSuffix);
   if (!tx) {
     await bot.api.sendMessage(chatId, "الطلب غير موجود أو عولج مسبقاً.");
@@ -731,7 +940,13 @@ async function decideWithdrawal(bot: TelegramBot, chatId: number, txIdSuffix: st
   }
   if (approve) {
     await prisma.transaction.update({ where: { id: tx.id }, data: { status: "COMPLETED" } });
-    await bot.api.sendMessage(chatId, "✅ تمت الموافقة — حوّل المبلغ يدوياً للمستخدم.");
+    await bot.api.sendMessage(chatId, "✅ تمت الموافقة — حوّل المبلغ يدوياً للمستفيد.");
+  } else if (tx.type === "OWNER_WITHDRAWAL" && tx.botId) {
+    // Refund goes back to the bot's withdrawable commission, not a user balance.
+    const botRow = await prisma.bot.findUnique({ where: { id: tx.botId } });
+    await prisma.bot.update({ where: { id: tx.botId }, data: { ownerBalance: round2(Number(botRow?.ownerBalance || 0) + Number(tx.amount)) } });
+    await prisma.transaction.update({ where: { id: tx.id }, data: { status: "FAILED" } });
+    await bot.api.sendMessage(chatId, "❌ رُفض الطلب وأُعيد المبلغ لرصيد منشئ البوت.");
   } else {
     const user = await prisma.user.findUnique({ where: { id: tx.userId } });
     await prisma.user.update({ where: { id: tx.userId }, data: { balance: round2(Number(user?.balance || 0) + Number(tx.amount)) } });

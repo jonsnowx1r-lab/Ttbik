@@ -10,7 +10,7 @@ const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_TELEGRAM_ID || "";
 // Prisma logic directly rather than round-tripping through HTTP.
 export async function POST(req: NextRequest) {
   try {
-    const { userId, adId, botToken } = await req.json();
+    const { userId, adId, botToken, botId } = await req.json();
 
     const ad = await prisma.ad.findUnique({ where: { id: adId } });
     if (!ad || ad.status !== "ACTIVE" || Number(ad.remaining) < Number(ad.cpc)) {
@@ -29,12 +29,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Bot the click actually happened in — matters for GLOBAL-scope ads,
+    // where the 20% creator cut belongs to whichever bot brought the worker,
+    // not necessarily the bot the campaign was created in (ad.botId).
+    const currentBotId = String(botId || ad.botId);
+
     // Ensure the FK targets of the atomic batch below exist first — these
     // upserts are idempotent no-ops when the row already exists; only the
     // actual balance mutations need to be atomic together.
-    await prisma.user.upsert({ where: { id: String(userId) }, update: {}, create: { id: String(userId), botId: ad.botId, role: "USER" } });
+    await prisma.user.upsert({ where: { id: String(userId) }, update: {}, create: { id: String(userId), botId: currentBotId, role: "USER" } });
     if (SUPER_ADMIN_ID) {
-      await prisma.user.upsert({ where: { id: SUPER_ADMIN_ID }, update: {}, create: { id: SUPER_ADMIN_ID, botId: ad.botId, role: "SUPER_ADMIN" } });
+      await prisma.user.upsert({ where: { id: SUPER_ADMIN_ID }, update: {}, create: { id: SUPER_ADMIN_ID, botId: currentBotId, role: "SUPER_ADMIN" } });
     }
 
     const newRemaining = Math.round((Number(ad.remaining) - Number(ad.cpc)) * 100) / 100;
@@ -47,13 +52,13 @@ export async function POST(req: NextRequest) {
     try {
       await prisma.$transaction([
         prisma.transaction.create({
-          data: { userId: String(userId), amount: workerCut, currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${userId}` },
+          data: { userId: String(userId), botId: currentBotId, amount: workerCut, currency: "internal", type: "TASK_REWARD", status: "COMPLETED", txHash: `task_${adId}_${userId}` },
         }),
         prisma.ad.update({ where: { id: adId }, data: { remaining: newRemaining, status: newRemaining < Number(ad.cpc) ? "EXPIRED" : ad.status } }),
         prisma.user.update({ where: { id: String(userId) }, data: { balance: { increment: workerCut } } }),
-        prisma.bot.update({ where: { id: ad.botId }, data: { ownerBalance: { increment: creatorCut }, totalRevenue: { increment: ownerCut } } }),
+        prisma.bot.update({ where: { id: currentBotId }, data: { ownerBalance: { increment: creatorCut }, totalRevenue: { increment: ownerCut } } }),
         ...(SUPER_ADMIN_ID
-          ? [prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, amount: ownerCut, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })]
+          ? [prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, botId: currentBotId, amount: ownerCut, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })]
           : []),
       ]);
     } catch {
