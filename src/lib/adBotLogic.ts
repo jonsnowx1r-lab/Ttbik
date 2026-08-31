@@ -116,7 +116,11 @@ type PendingAction =
   | { mode: "owner_withdraw_address" }
   | { mode: "owner_withdraw_amount"; address: string }
   | { mode: "watch_carousel"; type: AdTypeStr; queue: string[]; index: number }
-  | { mode: "purchase_bot_reference" };
+  | { mode: "purchase_bot_reference" }
+  | { mode: "myads_select" }
+  | { mode: "myads_manage"; adId: string }
+  | { mode: "myads_cancel_confirm"; adId: string }
+  | { mode: "myads_topup_amount"; adId: string };
 
 // Per-platform inline "action" button label for the شاهد واربح carousel —
 // exempted from the reply-keyboard-only rule per explicit owner instruction
@@ -226,10 +230,11 @@ function backLabel(lang: Lang) {
 
 function mainMenu(lang: Lang): Keyboard {
   return new Keyboard()
-    .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
-    .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
-    .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).text(backLabel(lang)).row()
+    .text(t(lang, "btnCreateAd")).text(t(lang, "btnMyAds")).row()
+    .text(t(lang, "btnWatchEarn")).text(t(lang, "btnWallet")).row()
+    .text(t(lang, "btnReferrals")).text(t(lang, "btnStats")).row()
+    .text(t(lang, "btnLanguage")).text(t(lang, "btnFaq")).row()
+    .text(backLabel(lang))
     .resized();
 }
 function walletMenu(lang: Lang): Keyboard {
@@ -289,10 +294,11 @@ const ADMIN_MENU = new Keyboard()
 // per their own explicit instruction ("أنا لست مستخدماً ولست منشئاً").
 function ownerMainMenu(lang: Lang): Keyboard {
   return new Keyboard()
-    .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
-    .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
-    .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).text(backLabel(lang)).row()
+    .text(t(lang, "btnCreateAd")).text(t(lang, "btnMyAds")).row()
+    .text(t(lang, "btnWatchEarn")).text(t(lang, "btnWallet")).row()
+    .text(t(lang, "btnReferrals")).text(t(lang, "btnStats")).row()
+    .text(t(lang, "btnLanguage")).text(t(lang, "btnFaq")).row()
+    .text(backLabel(lang)).row()
     .text("💼 أرباحي والسحب").text("📊 إحصائيات البوت").row()
     .text("📣 إذاعة لمستخدمي البوت").text("📢 قناة الاشتراك الإجباري")
     .resized();
@@ -301,6 +307,7 @@ function ownerMainMenu(lang: Lang): Keyboard {
 function topLevelTexts(lang: Lang): string[] {
   return [
     t(lang, "btnCreateAd"),
+    t(lang, "btnMyAds"),
     t(lang, "btnWatchEarn"),
     t(lang, "btnWallet"),
     t(lang, "btnReferrals"),
@@ -505,6 +512,117 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       }),
       { reply_markup: amountEntryMenu(lang) }
     );
+    return;
+  }
+  if (text === t(lang, "btnMyAds")) {
+    await sendMyAdsList(bot, chatId, user.id, lang);
+    return;
+  }
+  if (pending?.mode === "myads_select") {
+    const m = text.match(/^#(\w{6})/);
+    const ad = m ? await prisma.ad.findFirst({ where: { userId: user.id, id: { endsWith: m[1] } } }) : null;
+    if (!ad) {
+      await bot.api.sendMessage(chatId, t(lang, "myAdNotFound"));
+      await sendMyAdsList(bot, chatId, user.id, lang);
+      return;
+    }
+    await sendAdManageScreen(bot, chatId, user.id, ad.id, lang);
+    return;
+  }
+  if (pending?.mode === "myads_manage") {
+    const { adId } = pending;
+    if (text === t(lang, "myAdBtnBackToList")) {
+      await sendMyAdsList(bot, chatId, user.id, lang);
+      return;
+    }
+    const ad = await prisma.ad.findUnique({ where: { id: adId } });
+    if (!ad || ad.userId !== user.id) {
+      await bot.api.sendMessage(chatId, t(lang, "myAdNotFound"));
+      await sendMyAdsList(bot, chatId, user.id, lang);
+      return;
+    }
+    if (text === t(lang, "myAdBtnPause") && ad.status === "ACTIVE") {
+      await prisma.ad.update({ where: { id: ad.id }, data: { status: "PAUSED" } });
+      await bot.api.sendMessage(chatId, t(lang, "myAdPaused"));
+      await sendAdManageScreen(bot, chatId, user.id, ad.id, lang);
+      return;
+    }
+    if (text === t(lang, "myAdBtnResume") && ad.status === "PAUSED") {
+      await prisma.ad.update({ where: { id: ad.id }, data: { status: "ACTIVE" } });
+      await bot.api.sendMessage(chatId, t(lang, "myAdResumed"));
+      await sendAdManageScreen(bot, chatId, user.id, ad.id, lang);
+      return;
+    }
+    if (text === t(lang, "myAdBtnTopup") && (ad.status === "ACTIVE" || ad.status === "PAUSED" || ad.status === "EXPIRED")) {
+      await setPending(user.id, { mode: "myads_topup_amount", adId: ad.id });
+      await bot.api.sendMessage(chatId, t(lang, "myAdTopupPrompt"), { reply_markup: amountEntryMenu(lang) });
+      return;
+    }
+    if (text === t(lang, "myAdBtnCancel") && (ad.status === "ACTIVE" || ad.status === "PAUSED" || ad.status === "EXPIRED")) {
+      await setPending(user.id, { mode: "myads_cancel_confirm", adId: ad.id });
+      await bot.api.sendMessage(chatId, t(lang, "myAdCancelConfirm", { amount: fmt(Number(ad.remaining)) }), {
+        reply_markup: new Keyboard().text(t(lang, "btnConfirmSend")).text(t(lang, "btnCancel")).resized(),
+      });
+      return;
+    }
+  }
+  if (pending?.mode === "myads_cancel_confirm") {
+    const { adId } = pending;
+    if (text === t(lang, "btnCancel")) {
+      await bot.api.sendMessage(chatId, t(lang, "myAdCancelAborted"));
+      await sendAdManageScreen(bot, chatId, user.id, adId, lang);
+      return;
+    }
+    if (text === t(lang, "btnConfirmSend")) {
+      const ad = await prisma.ad.findUnique({ where: { id: adId } });
+      if (!ad || ad.userId !== user.id) {
+        await bot.api.sendMessage(chatId, t(lang, "myAdNotFound"));
+        await sendMyAdsList(bot, chatId, user.id, lang);
+        return;
+      }
+      const refund = Number(ad.remaining);
+      const fresh = await prisma.user.findUnique({ where: { id: user.id } });
+      await prisma.$transaction([
+        prisma.ad.update({ where: { id: ad.id }, data: { status: "CANCELLED", remaining: 0 } }),
+        prisma.user.update({ where: { id: user.id }, data: { balance: round2(Number(fresh?.balance || 0) + refund) } }),
+        prisma.transaction.create({ data: { userId: user.id, amount: refund, currency: "internal", type: "AD_REFUND", status: "COMPLETED" } }),
+      ]);
+      await bot.api.sendMessage(chatId, t(lang, "myAdCancelledOk", { amount: fmt(refund) }));
+      await sendMyAdsList(bot, chatId, user.id, lang);
+      return;
+    }
+  }
+  if (pending?.mode === "myads_topup_amount") {
+    const { adId } = pending;
+    const amount = round2(Number(text.trim().replace(",", ".")));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await bot.api.sendMessage(chatId, t(lang, "myAdTopupInvalid"));
+      return;
+    }
+    const ad = await prisma.ad.findUnique({ where: { id: adId } });
+    if (!ad || ad.userId !== user.id) {
+      await bot.api.sendMessage(chatId, t(lang, "myAdNotFound"));
+      await sendMyAdsList(bot, chatId, user.id, lang);
+      return;
+    }
+    const fresh = await prisma.user.findUnique({ where: { id: user.id } });
+    const balance = Number(fresh?.balance || 0);
+    if (amount > balance) {
+      const link = `${(process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "")}/pay?uid=${user.id}`;
+      await bot.api.sendMessage(chatId, t(lang, "myAdTopupInsufficient", { amount: fmt(amount), balance: fmt(balance), link }));
+      return;
+    }
+    const newRemaining = round2(Number(ad.remaining) + amount);
+    await prisma.$transaction([
+      prisma.ad.update({
+        where: { id: ad.id },
+        data: { remaining: newRemaining, totalBudget: round2(Number(ad.totalBudget) + amount), status: ad.status === "EXPIRED" ? "ACTIVE" : ad.status },
+      }),
+      prisma.user.update({ where: { id: user.id }, data: { balance: round2(balance - amount) } }),
+      prisma.transaction.create({ data: { userId: user.id, amount, currency: "internal", type: "AD_PAYMENT", status: "COMPLETED" } }),
+    ]);
+    await bot.api.sendMessage(chatId, t(lang, "myAdTopupDone", { amount: fmt(amount), remaining: fmt(newRemaining) }));
+    await sendAdManageScreen(bot, chatId, user.id, ad.id, lang);
     return;
   }
   if (text === t(lang, "btnDeposit")) {
@@ -1376,6 +1494,82 @@ async function sendStats(bot: TelegramBot, chatId: number, userId: string, lang:
     chatId,
     t(lang, "statsTitle", { ads: adsCreated, spent: fmt(Number(spent._sum.amount || 0)), tasks: tasksCompleted, earned: fmt(Number(earned._sum.amount || 0)) }),
     { reply_markup: mainMenu(lang) }
+  );
+}
+
+// "📢 إعلاناتي" — post-launch ad management (owner spec, 2026-08-31): track
+// clicks/remaining budget per ad, pause/resume, cancel with refund, top up.
+const AD_STATUS_LABEL_KEY: Record<string, string> = {
+  ACTIVE: "adStatusActive",
+  PAUSED: "adStatusPaused",
+  EXPIRED: "adStatusExpired",
+  CANCELLED: "adStatusCancelled",
+  REJECTED: "adStatusRejected",
+  FLAGGED: "adStatusFlagged",
+};
+function adStatusLabel(status: string, lang: Lang): string {
+  const key = AD_STATUS_LABEL_KEY[status];
+  return key ? t(lang, key) : status;
+}
+// Exact click/completion count for one ad — derived from the same
+// `task_<adId>_<userId>` txHash convention used for double-claim protection
+// elsewhere (there's no separate "completed" relation in this schema).
+async function countAdClicks(adId: string): Promise<number> {
+  return prisma.transaction.count({ where: { type: "TASK_REWARD", txHash: { startsWith: `task_${adId}_` } } });
+}
+function myAdsMenu(ads: { id: string; type: string; status: string }[], lang: Lang): Keyboard {
+  const kb = new Keyboard();
+  for (const ad of ads) {
+    kb.text(`#${shortId(ad.id)} · ${TYPE_LABEL[ad.type as AdTypeStr][lang]} · ${adStatusLabel(ad.status, lang)}`).row();
+  }
+  kb.text(backLabel(lang));
+  return kb.resized();
+}
+function myAdManageMenu(ad: { status: string }, lang: Lang): Keyboard {
+  const kb = new Keyboard();
+  if (ad.status === "ACTIVE") {
+    kb.text(t(lang, "myAdBtnPause")).text(t(lang, "myAdBtnTopup")).row();
+    kb.text(t(lang, "myAdBtnCancel")).row();
+  } else if (ad.status === "PAUSED") {
+    kb.text(t(lang, "myAdBtnResume")).text(t(lang, "myAdBtnTopup")).row();
+    kb.text(t(lang, "myAdBtnCancel")).row();
+  } else if (ad.status === "EXPIRED") {
+    kb.text(t(lang, "myAdBtnTopup")).text(t(lang, "myAdBtnCancel")).row();
+  }
+  kb.text(t(lang, "myAdBtnBackToList")).row().text(backLabel(lang));
+  return kb.resized();
+}
+async function sendMyAdsList(bot: TelegramBot, chatId: number, userId: string, lang: Lang) {
+  const ads = await prisma.ad.findMany({ where: { userId }, orderBy: { created_at: "desc" }, take: 30 });
+  if (ads.length === 0) {
+    await setPending(userId, null);
+    await bot.api.sendMessage(chatId, t(lang, "myAdsEmpty"), { reply_markup: mainMenu(lang) });
+    return;
+  }
+  await setPending(userId, { mode: "myads_select" });
+  await bot.api.sendMessage(chatId, t(lang, "myAdsListTitle"), { reply_markup: myAdsMenu(ads, lang) });
+}
+async function sendAdManageScreen(bot: TelegramBot, chatId: number, userId: string, adId: string, lang: Lang) {
+  const ad = await prisma.ad.findUnique({ where: { id: adId } });
+  if (!ad || ad.userId !== userId) {
+    await sendMyAdsList(bot, chatId, userId, lang);
+    return;
+  }
+  const clicks = await countAdClicks(ad.id);
+  await setPending(userId, { mode: "myads_manage", adId: ad.id });
+  await bot.api.sendMessage(
+    chatId,
+    t(lang, "myAdDetail", {
+      id: shortId(ad.id),
+      platform: TYPE_LABEL[ad.type as AdTypeStr][lang],
+      status: adStatusLabel(ad.status, lang),
+      cpc: fmt(Number(ad.cpc)),
+      total: fmt(Number(ad.totalBudget)),
+      remaining: fmt(Number(ad.remaining)),
+      spent: fmt(round2(Number(ad.totalBudget) - Number(ad.remaining))),
+      clicks,
+    }),
+    { reply_markup: myAdManageMenu(ad, lang) }
   );
 }
 

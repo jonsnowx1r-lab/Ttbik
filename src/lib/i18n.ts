@@ -11,6 +11,7 @@ type Dict = Record<string, { ar: string; en: string }>;
 
 export const STR: Dict = {
   btnCreateAd: { ar: "➕ ضع إعلانك", en: "➕ Create Ad" },
+  btnMyAds: { ar: "📢 إعلاناتي", en: "📢 My Ads" },
   btnWatchEarn: { ar: "👀 شاهد واربح", en: "👀 Watch & Earn" },
   btnWallet: { ar: "💰 المحفظة", en: "💰 Wallet" },
   btnReferrals: { ar: "🙌 الإحالات", en: "🙌 Referrals" },
@@ -103,6 +104,45 @@ export const STR: Dict = {
   },
   adDepositThenConfirm: { ar: "بعد الإيداع اضغط «✅ تأكيد الإرسال» مجدداً لإطلاق حملتك.", en: "After depositing, tap \"✅ Confirm\" again to launch your campaign." },
   adLaunched: { ar: "تم إطلاق حملتك (خُصم {budget}). ستظهر الآن في «شاهد واربح» لكل المستخدمين.", en: "Your campaign is live (charged {budget}). It now appears in \"Watch & Earn\" for every user." },
+
+  // "📢 إعلاناتي" — post-launch ad management (owner spec, 2026-08-31):
+  // track clicks/remaining budget, pause/resume, cancel with refund, top up.
+  myAdsEmpty: { ar: "لا توجد لديك إعلانات بعد. اضغط «➕ ضع إعلانك» لإنشاء أول حملة.", en: "You don't have any ads yet. Tap \"➕ Create Ad\" to launch your first campaign." },
+  myAdsListTitle: { ar: "📢 إعلاناتك — اضغط على إعلان لإدارته:", en: "📢 Your ads — tap one to manage it:" },
+  myAdNotFound: { ar: "لم يُعثر على هذا الإعلان أو أنه لا يخصك.", en: "That ad wasn't found, or it isn't yours." },
+  myAdDetail: {
+    ar: "📢 تفاصيل الإعلان #{id}\n\n🎯 المنصة: {platform}\n📌 الحالة: {status}\n💵 سعر النقرة: {cpc}\n💰 الميزانية الكلية: {total}\n💳 المتبقي: {remaining}\n📉 المُنفق حتى الآن: {spent}\n👆 عدد الإنجازات: {clicks}",
+    en: "📢 Ad #{id} details\n\n🎯 Platform: {platform}\n📌 Status: {status}\n💵 Cost per click: {cpc}\n💰 Total budget: {total}\n💳 Remaining: {remaining}\n📉 Spent so far: {spent}\n👆 Completions: {clicks}",
+  },
+  myAdBtnPause: { ar: "⏸️ إيقاف مؤقت", en: "⏸️ Pause" },
+  myAdBtnResume: { ar: "▶️ استئناف", en: "▶️ Resume" },
+  myAdBtnCancel: { ar: "❌ إلغاء الإعلان", en: "❌ Cancel ad" },
+  myAdBtnTopup: { ar: "💰 إضافة رصيد", en: "💰 Top up" },
+  myAdBtnBackToList: { ar: "🔙 كل إعلاناتي", en: "🔙 All my ads" },
+  myAdPaused: { ar: "⏸️ تم إيقاف الإعلان مؤقتاً. لن يظهر ضمن «شاهد واربح» حتى تستأنفه.", en: "⏸️ The ad is now paused. It won't appear in \"Watch & Earn\" until you resume it." },
+  myAdResumed: { ar: "▶️ تم استئناف الإعلان، وأصبح ظاهراً في «شاهد واربح» مجدداً.", en: "▶️ The ad is active again and visible in \"Watch & Earn\"." },
+  myAdCancelConfirm: {
+    ar: "⚠️ سيتم إلغاء هذا الإعلان نهائياً واسترداد المتبقي منه ({amount}) إلى محفظتك. هل أنت متأكد؟",
+    en: "⚠️ This will permanently cancel the ad and refund its remaining balance ({amount}) to your wallet. Are you sure?",
+  },
+  myAdCancelledOk: { ar: "❌ أُلغي الإعلان، وأُضيف {amount} إلى رصيد محفظتك.", en: "❌ The ad was cancelled and {amount} was added back to your wallet balance." },
+  myAdCancelAborted: { ar: "لم يتم الإلغاء.", en: "Cancellation aborted." },
+  myAdTopupPrompt: { ar: "أرسل المبلغ الذي تريد إضافته لرصيد هذا الإعلان بالدولار:", en: "Send the amount in USD you want to add to this ad's budget:" },
+  myAdTopupInvalid: { ar: "أرسل رقماً صحيحاً أكبر من صفر.", en: "Send a valid number greater than zero." },
+  myAdTopupInsufficient: {
+    ar: "المبلغ المطلوب {amount} أكبر من رصيد محفظتك ({balance}).\nأودع رصيداً أولاً:\n{link}",
+    en: "The requested amount {amount} is greater than your wallet balance ({balance}).\nDeposit funds first:\n{link}",
+  },
+  myAdTopupDone: {
+    ar: "✅ أُضيف {amount} لرصيد الإعلان. المتبقي الآن: {remaining}.",
+    en: "✅ {amount} added to the ad's budget. Remaining balance is now: {remaining}.",
+  },
+  adStatusActive: { ar: "🟢 نشط", en: "🟢 Active" },
+  adStatusPaused: { ar: "⏸️ متوقف مؤقتاً", en: "⏸️ Paused" },
+  adStatusExpired: { ar: "🟡 نفذ الرصيد", en: "🟡 Out of budget" },
+  adStatusCancelled: { ar: "⚪ ملغى", en: "⚪ Cancelled" },
+  adStatusRejected: { ar: "🔴 مرفوض (مخالفة الشروط)", en: "🔴 Rejected (policy violation)" },
+  adStatusFlagged: { ar: "🚩 موقوف (بلاغات مستخدمين)", en: "🚩 Flagged (user reports)" },
 
   watchNoAds: { ar: "لا حملات متاحة على هذه المنصة حالياً.", en: "No campaigns available on this platform right now." },
   watchForcedLabel: { ar: "🌟 عرض من المنصة", en: "🌟 Platform promotion" },
