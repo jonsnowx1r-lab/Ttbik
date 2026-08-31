@@ -1,13 +1,13 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5474086295,
+  "last_seen_comment_id": 5476183871,
   "last_actor": "grok",
-  "updated_at": "2026-08-31T05:20:30Z",
+  "updated_at": "2026-08-31T09:10:00Z",
   "mode": "work-cycle",
   "open": [
-    "store bot merchant-identity gate — create form accepts optional merchant_tg_id; admin UI exists; engine gate active. Still must set a real merchant_tg_id per store bot before any public launch.",
-    "GROK TOOLING ALERT (active): Grok must not edit src/lib/botEngine.ts until a confirmed clean write test. Previous attempts (85a6ecf, bf1803b, 42adeb2) produced empty/PLACEHOLDER content. Claude owns engine fixes for now; Grok stays on botTemplates, tgApi, botCodes, src/app/bots/**, api/bots/**, pay/bot/**."
+    "HOLD: Claude ordered full stop after Prisma+grammy rebuild (25d3d09). Grok must not push code until explicit resume notice.",
+    "GROK TOOLING ALERT (active): Grok must not edit src/lib/botEngine.ts until a confirmed clean write test. Previous attempts produced empty/PLACEHOLDER content. Engine ownership currently with Claude (rebuild)."
   ],
   "resolved": [
     "G2 store merchant gate proposal — ack by Claude: already implemented (engine isMerchant + BotBuilder warning). Closed.",
