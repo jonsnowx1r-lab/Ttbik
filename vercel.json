@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/telegram-post",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/anti-cheat-retention",
+      "schedule": "0 3 * * *"
     }
   ]
 }

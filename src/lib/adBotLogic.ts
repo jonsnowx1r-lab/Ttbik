@@ -1,4 +1,4 @@
-import { Bot as TelegramBot, Keyboard } from "grammy";
+import { Bot as TelegramBot, Keyboard, InlineKeyboard } from "grammy";
 import { prisma } from "@/lib/prisma";
 import type { Bot as BotRow } from "@prisma/client";
 import { t, type Lang, DEFAULT_LANG } from "@/lib/i18n";
@@ -96,7 +96,22 @@ type PendingAction =
   | { mode: "owner_broadcast" }
   | { mode: "owner_channel_setup" }
   | { mode: "owner_withdraw_address" }
-  | { mode: "owner_withdraw_amount"; address: string };
+  | { mode: "owner_withdraw_amount"; address: string }
+  | { mode: "watch_carousel"; type: AdTypeStr; queue: string[]; index: number };
+
+// Per-platform inline "action" button label for the شاهد واربح carousel —
+// exempted from the reply-keyboard-only rule per explicit owner instruction
+// (2026-08-31): the carousel is InlineKeyboard-only, everything else in the
+// bot stays reply-keyboard-only as before.
+const CAROUSEL_ACTION_LABEL: Record<AdTypeStr, { ar: string; en: string }> = {
+  LINK: { ar: "🔗 زيارة الموقع (15 ثانية)", en: "🔗 Visit site (15s)" },
+  TELEGRAM: { ar: "📢 انضمام للقناة / المجموعة", en: "📢 Join channel/group" },
+  YOUTUBE: { ar: "▶️ مشاهدة الفيديو / اشتراك", en: "▶️ Watch/Subscribe" },
+  TWITTER: { ar: "🐤 متابعة الحساب", en: "🐤 Follow account" },
+  TIKTOK: { ar: "🎵 متابعة الحساب", en: "🎵 Follow account" },
+  FACEBOOK: { ar: "📘 متابعة الصفحة", en: "📘 Follow page" },
+  INSTAGRAM: { ar: "📸 متابعة الحساب", en: "📸 Follow account" },
+};
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -208,6 +223,10 @@ async function ensureUser(botId: string, tgUserId: string, botRow: BotRow, refer
 }
 
 export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update: any) {
+  if (update.callback_query) {
+    await handleCarouselCallback(bot, botRow, update.callback_query);
+    return;
+  }
   const msg = update.message;
   if (!msg?.from || !msg.chat) return;
   const chatId = msg.chat.id;
@@ -486,8 +505,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   if (pending?.mode === "platform_pick" && LABEL_TO_TYPE[text]) {
     const type = LABEL_TO_TYPE[text];
     if (pending.intent === "watch") {
-      await setPending(user.id, null);
-      await sendWatchList(bot, chatId, tgUserId, type, lang, botRow.id);
+      await startWatchCarousel(bot, chatId, tgUserId, type, lang, botRow.id, user.id);
       return;
     }
     const steps = createAdSteps(type);
@@ -537,12 +555,6 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       return;
     }
     await confirmAd(bot, chatId, user, pending, lang);
-    return;
-  }
-
-  // Per-task confirm: "✅ <shortId>"
-  if (text.startsWith("✅ ") && text.length <= 10) {
-    await completeTaskBySuffix(bot, chatId, tgUserId, text.slice(2).trim(), lang, botRow.id);
     return;
   }
 
@@ -716,10 +728,15 @@ async function createGlobalAd(bot: TelegramBot, chatId: number, user: any, type:
   await bot.api.sendMessage(chatId, "✅ تم إضافة الإعلان الإجباري. سيظهر ضمن «شاهد واربح» لكل البوتات (بلا مكافأة، ترويج مجاني للمنصة).", { reply_markup: ADMIN_MENU });
 }
 
-async function sendWatchList(bot: TelegramBot, chatId: number, tgUserId: string, type: AdTypeStr, lang: Lang, currentBotId: string) {
-  // Pool = this bot's own TARGETED campaigns + the platform-wide GLOBAL pool
-  // (forced platform ads are created with scope "GLOBAL" too, see
-  // createGlobalAd, so they fall into the same OR branch automatically).
+// Pool = this bot's own TARGETED campaigns + the platform-wide GLOBAL pool
+// (forced platform ads are created with scope "GLOBAL" too, see
+// createGlobalAd, so they fall into the same OR branch automatically).
+// This bot's own campaigns rank first, then the global pool, highest-paying
+// first within each group; already-completed-by-this-user ads are excluded
+// via the same synthetic txHash used for double-claim protection
+// (`task_<adId>_<userId>`) — there's no separate "completed" relation in
+// this schema, so it's derived from Transaction directly.
+async function buildAdQueue(tgUserId: string, type: AdTypeStr, currentBotId: string): Promise<string[]> {
   const ads = await prisma.ad.findMany({
     where: {
       type: type as any,
@@ -734,10 +751,6 @@ async function sendWatchList(bot: TelegramBot, chatId: number, tgUserId: string,
     take: 50,
   });
 
-  // Already-completed-by-this-user ads are excluded via the same synthetic
-  // txHash used for double-claim protection (`task_<adId>_<userId>`) — no
-  // separate "completedTasks" relation exists in this schema, so we derive
-  // it from Transaction directly instead.
   const doneTx = await prisma.transaction.findMany({
     where: { userId: tgUserId, type: "TASK_REWARD", txHash: { not: null } },
     select: { txHash: true },
@@ -748,79 +761,80 @@ async function sendWatchList(bot: TelegramBot, chatId: number, tgUserId: string,
       .filter((id): id is string => !!id)
   );
 
-  const usable = ads
+  return ads
     .filter((a) => !doneAdIds.has(a.id))
     .filter((a) => a.cpc === 0 || Number(a.remaining) >= Number(a.cpc))
     .sort((a, b) => {
-      // This bot's own campaigns first, then the global pool; within each
-      // group, highest-paying first.
       const aOwn = a.botId === currentBotId ? 0 : 1;
       const bOwn = b.botId === currentBotId ? 0 : 1;
       if (aOwn !== bOwn) return aOwn - bOwn;
       return Number(b.cpc) - Number(a.cpc);
     })
-    .slice(0, 10);
-  if (usable.length === 0) {
+    .slice(0, 10)
+    .map((a) => a.id);
+}
+
+// Single-ad InlineKeyboard card for the carousel. Non-Telegram ad types get
+// their action button wrapped in a per-user /watch/<token> countdown page
+// (AdClick row, minted/reset every time this card is shown) instead of a
+// direct link — the anti-cheat time-tracking gate from the owner's spec.
+// Telegram ads open t.me directly since getChatMember is a hard, instant,
+// unspoofable check that doesn't need a timer.
+async function buildCarouselCard(ad: any, lang: Lang, tgUserId: string, currentBotId: string): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  const type = ad.type as AdTypeStr;
+  const isForced = Number(ad.cpc) === 0;
+  const kb = new InlineKeyboard();
+
+  let actionUrl: string;
+  if (type === "TELEGRAM") {
+    actionUrl = `https://t.me/${String(ad.content).replace(/^@/, "")}`;
+  } else {
+    const click = await prisma.adClick.upsert({
+      where: { adId_userId: { adId: ad.id, userId: tgUserId } },
+      update: { issuedAt: new Date(), verified: false, botId: currentBotId },
+      create: { adId: ad.id, userId: tgUserId, botId: currentBotId },
+    });
+    const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+    actionUrl = `${site}/watch/${click.id}`;
+  }
+  kb.url(CAROUSEL_ACTION_LABEL[type][lang], actionUrl).row();
+  if (!isForced) kb.text(t(lang, "carouselVerify"), `wcv|${shortId(ad.id)}`).row();
+  kb.text(t(lang, "carouselNext"), `wcn|${shortId(ad.id)}`).text(t(lang, "carouselExit"), "wcx");
+
+  const lines = [
+    isForced ? t(lang, "watchForcedLabel") : t(lang, "carouselAdTitle", { platform: TYPE_LABEL[type][lang] }),
+    !isForced ? t(lang, "carouselReward", { reward: fmt(Number(ad.workerCut)) }) : null,
+  ].filter((l): l is string => !!l);
+  return { text: lines.join("\n"), keyboard: kb };
+}
+
+async function startWatchCarousel(bot: TelegramBot, chatId: number, tgUserId: string, type: AdTypeStr, lang: Lang, currentBotId: string, userId: string) {
+  const queue = await buildAdQueue(tgUserId, type, currentBotId);
+  if (queue.length === 0) {
+    await setPending(userId, null);
     await bot.api.sendMessage(chatId, t(lang, "watchNoAds"), { reply_markup: mainMenu(lang) });
     return;
   }
-
-  const claimable = usable.filter((a) => Number(a.cpc) > 0);
-  for (const ad of usable) {
-    const isForced = Number(ad.cpc) === 0;
-    const isTelegram = ad.type === "TELEGRAM";
-    const openLink = isTelegram ? `https://t.me/${ad.content.replace(/^@/, "")}` : ad.content;
-    const label = isForced ? t(lang, "watchForcedLabel") : t(lang, "watchAdLabel", { platform: TYPE_LABEL[type][lang], reward: fmt(Number(ad.workerCut)) });
-    const confirmLine = isForced ? "" : t(lang, "watchConfirmLine", { id: shortId(ad.id) });
-    await bot.api.sendMessage(chatId, `${label}${t(lang, "watchLinkLine", { link: openLink })}${confirmLine}`);
-  }
-
-  if (claimable.length > 0) {
-    const kb = new Keyboard();
-    claimable.forEach((ad, i) => {
-      kb.text(`✅ ${shortId(ad.id)}`);
-      if (i % 2 === 1) kb.row();
-    });
-    if (claimable.length % 2 === 1) kb.row();
-    kb.text(backLabel(lang));
-    await bot.api.sendMessage(chatId, t(lang, "watchTapConfirm"), { reply_markup: kb.resized() });
-  } else {
-    await bot.api.sendMessage(chatId, t(lang, "watchBackOnly"), { reply_markup: mainMenu(lang) });
-  }
-}
-
-async function completeTaskBySuffix(bot: TelegramBot, chatId: number, tgUserId: string, suffix: string, lang: Lang, currentBotId: string) {
-  const candidates = await prisma.ad.findMany({ where: { status: "ACTIVE" }, take: 200 });
-  const ad = candidates.find((a) => shortId(a.id) === suffix);
+  const ad = await prisma.ad.findUnique({ where: { id: queue[0] } });
   if (!ad) {
-    await bot.api.sendMessage(chatId, t(lang, "taskGone"), { reply_markup: mainMenu(lang) });
+    await setPending(userId, null);
+    await bot.api.sendMessage(chatId, t(lang, "watchNoAds"), { reply_markup: mainMenu(lang) });
     return;
   }
-  await completeTask(bot, chatId, tgUserId, ad.id, lang, currentBotId);
+  const { text, keyboard } = await buildCarouselCard(ad, lang, tgUserId, currentBotId);
+  await bot.api.sendMessage(chatId, text, { reply_markup: keyboard });
+  await setPending(userId, { mode: "watch_carousel", type, queue, index: 0 });
 }
 
-async function completeTask(bot: TelegramBot, chatId: number, tgUserId: string, adId: string, lang: Lang, currentBotId: string) {
+type PayoutResult = { ok: true; workerCut: number; newBalance: number } | { ok: false; reason: "gone" | "own" | "not_done" | "already_claimed" };
+
+// Atomic payout core shared by the carousel's verify handler. Verification
+// (Telegram membership / link-timer token) must already have passed before
+// this is called — it only re-checks the ad is still claimable and pays out.
+async function payoutTask(tgUserId: string, adId: string, currentBotId: string): Promise<PayoutResult> {
   const ad = await prisma.ad.findUnique({ where: { id: adId } });
-  if (!ad || ad.status !== "ACTIVE" || Number(ad.remaining) < Number(ad.cpc)) {
-    await bot.api.sendMessage(chatId, t(lang, "taskGone"), { reply_markup: mainMenu(lang) });
-    return;
-  }
-  if (ad.userId === tgUserId) {
-    await bot.api.sendMessage(chatId, t(lang, "taskOwnCampaign"), { reply_markup: mainMenu(lang) });
-    return;
-  }
-  if (ad.type === "TELEGRAM") {
-    try {
-      const member = await bot.api.getChatMember(ad.content, Number(tgUserId));
-      if (!["creator", "administrator", "member"].includes(member.status)) {
-        await bot.api.sendMessage(chatId, t(lang, "taskNotJoined", { channel: ad.content }));
-        return;
-      }
-    } catch {
-      await bot.api.sendMessage(chatId, t(lang, "taskVerifyFailed"));
-      return;
-    }
-  }
+  if (!ad || ad.status !== "ACTIVE" || Number(ad.remaining) < Number(ad.cpc)) return { ok: false, reason: "gone" };
+  if (ad.userId === tgUserId) return { ok: false, reason: "own" };
 
   // Ensure the FK targets of the atomic batch below exist first — upserting
   // inside prisma.$transaction([...]) isn't necessary for these two (they're
@@ -858,12 +872,117 @@ async function completeTask(bot: TelegramBot, chatId: number, tgUserId: string, 
         : []),
     ]);
   } catch {
-    await bot.api.sendMessage(chatId, t(lang, "taskAlreadyClaimed"), { reply_markup: mainMenu(lang) });
-    return;
+    return { ok: false, reason: "already_claimed" };
   }
 
   const updatedWorker = results[2] as { balance: number };
-  await bot.api.sendMessage(chatId, t(lang, "taskRewarded", { amount: fmt(workerCut), balance: fmt(Number(updatedWorker.balance)) }), { reply_markup: mainMenu(lang) });
+  return { ok: true, workerCut, newBalance: Number(updatedWorker.balance) };
+}
+
+async function isAdVerifiedByUser(bot: TelegramBot, ad: any, tgUserId: string): Promise<boolean> {
+  if (ad.type === "TELEGRAM") {
+    return isChannelMember(bot, ad.content, tgUserId);
+  }
+  const click = await prisma.adClick.findUnique({ where: { adId_userId: { adId: ad.id, userId: tgUserId } } });
+  return !!click?.verified;
+}
+
+async function handleCarouselCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
+  const chatId = cq.message?.chat?.id;
+  const messageId = cq.message?.message_id;
+  const tgUserId = String(cq.from.id);
+  const data = String(cq.data || "");
+  if (!chatId || !messageId) {
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  const user = await ensureUser(botRow.id, tgUserId, botRow);
+  const lang = asLang(user.language);
+  const pending = user.pendingAction as PendingAction | null;
+
+  if (data === "wcx") {
+    await setPending(user.id, null);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    await bot.api.editMessageText(chatId, messageId, t(lang, "carouselCancelled")).catch(() => null);
+    await bot.api.sendMessage(chatId, t(lang, "mainMenuTitle"), { reply_markup: mainMenu(lang) });
+    return;
+  }
+
+  if (pending?.mode !== "watch_carousel") {
+    await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "taskGone"), show_alert: true }).catch(() => null);
+    return;
+  }
+
+  const [action, shortAdId] = data.split("|");
+  const currentAdId = pending.queue[pending.index];
+  if (!currentAdId || shortId(currentAdId) !== shortAdId) {
+    await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "taskGone"), show_alert: true }).catch(() => null);
+    return;
+  }
+
+  if (action === "wcv") {
+    const ad = await prisma.ad.findUnique({ where: { id: currentAdId } });
+    if (!ad || ad.status !== "ACTIVE") {
+      await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "taskGone"), show_alert: true }).catch(() => null);
+      return;
+    }
+    if (ad.userId === tgUserId) {
+      await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "taskOwnCampaign"), show_alert: true }).catch(() => null);
+      return;
+    }
+    const verified = await isAdVerifiedByUser(bot, ad, tgUserId);
+    if (!verified) {
+      await bot.api.answerCallbackQuery(cq.id, { text: t(lang, "carouselNotDoneAlert"), show_alert: true }).catch(() => null);
+      return;
+    }
+    const result = await payoutTask(tgUserId, currentAdId, botRow.id);
+    if (!result.ok) {
+      const alertText = result.reason === "already_claimed" ? t(lang, "taskAlreadyClaimed") : result.reason === "own" ? t(lang, "taskOwnCampaign") : t(lang, "taskGone");
+      await bot.api.answerCallbackQuery(cq.id, { text: alertText, show_alert: true }).catch(() => null);
+      return;
+    }
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    await bot.api.editMessageText(chatId, messageId, t(lang, "carouselSuccess", { amount: fmt(result.workerCut), balance: fmt(result.newBalance) })).catch(() => null);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await advanceCarousel(bot, chatId, messageId, user.id, pending, lang, botRow.id, tgUserId);
+    return;
+  }
+
+  if (action === "wcn") {
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    await advanceCarousel(bot, chatId, messageId, user.id, pending, lang, botRow.id, tgUserId);
+    return;
+  }
+
+  await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+}
+
+async function advanceCarousel(
+  bot: TelegramBot,
+  chatId: number,
+  messageId: number,
+  userId: string,
+  pending: Extract<PendingAction, { mode: "watch_carousel" }>,
+  lang: Lang,
+  currentBotId: string,
+  tgUserId: string
+) {
+  const nextIndex = pending.index + 1;
+  if (nextIndex >= pending.queue.length) {
+    await setPending(userId, null);
+    await bot.api.editMessageText(chatId, messageId, t(lang, "carouselDone")).catch(() => null);
+    await bot.api.sendMessage(chatId, t(lang, "mainMenuTitle"), { reply_markup: mainMenu(lang) });
+    return;
+  }
+  const nextAdId = pending.queue[nextIndex];
+  const ad = await prisma.ad.findUnique({ where: { id: nextAdId } });
+  if (!ad || ad.status !== "ACTIVE" || (Number(ad.cpc) > 0 && Number(ad.remaining) < Number(ad.cpc))) {
+    await advanceCarousel(bot, chatId, messageId, userId, { ...pending, index: nextIndex }, lang, currentBotId, tgUserId);
+    return;
+  }
+  const { text, keyboard } = await buildCarouselCard(ad, lang, tgUserId, currentBotId);
+  await setPending(userId, { ...pending, index: nextIndex });
+  await bot.api.editMessageText(chatId, messageId, text, { reply_markup: keyboard }).catch(() => null);
 }
 
 async function confirmAd(bot: TelegramBot, chatId: number, user: any, pending: Extract<PendingAction, { mode: "reviewing_ad" }>, lang: Lang) {

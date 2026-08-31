@@ -86,11 +86,30 @@ model Transaction {
   botId      String? // which bot this happened through — set for TASK_REWARD/PLATFORM_PROFIT (the bot the click occurred in) and OWNER_WITHDRAWAL (which bot's commission); null for wallet-level DEPOSIT/WITHDRAWAL, which aren't bot-scoped
   amount     Float
   currency   String // USDT, TRX, TON, LTC, SOL, ...
-  type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT | PLATFORM_PROFIT | OWNER_WITHDRAWAL
-  status     String // PENDING | COMPLETED | FAILED
+  type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT | PLATFORM_PROFIT | OWNER_WITHDRAWAL | PENALTY
+  status     String // PENDING | COMPLETED | FAILED | REJECTED
   txHash     String? // NOWPayments payment_id, used for IPN idempotency
   created_at DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
 
   @@unique([txHash])
+}
+
+// Per-user click/timer state for the "زيارة الموقع (15 ثانية)" anti-cheat
+// gate on non-Telegram ads (LINK/YOUTUBE/TWITTER/TIKTOK/FACEBOOK/INSTAGRAM).
+// The public /watch/[token] countdown page reads/writes this row (token =
+// this row's id); the carousel's "✅ تحقق من الإنجاز" handler only pays out
+// once verified is true. Re-clicking the "visit" button resets issuedAt and
+// verified via upsert on the (adId, userId) unique key, so a stale timer
+// can't be replayed after it expires.
+model AdClick {
+  id         String   @id @default(uuid())
+  adId       String
+  userId     String
+  botId      String
+  issuedAt   DateTime @default(now())
+  verified   Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  @@unique([adId, userId])
 }

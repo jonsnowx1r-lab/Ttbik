@@ -83,11 +83,19 @@ export const STR: Dict = {
 
   watchNoAds: { ar: "لا حملات متاحة على هذه المنصة حالياً.", en: "No campaigns available on this platform right now." },
   watchForcedLabel: { ar: "🌟 عرض من المنصة", en: "🌟 Platform promotion" },
-  watchAdLabel: { ar: "{platform}\nالمكافأة: {reward}", en: "{platform}\nReward: {reward}" },
-  watchLinkLine: { ar: "\nالرابط: {link}", en: "\nLink: {link}" },
-  watchConfirmLine: { ar: "\nللتأكيد بعد إتمام المهمة، اضغط الزر: ✅ {id}", en: "\nTo confirm after completing the task, tap: ✅ {id}" },
-  watchTapConfirm: { ar: "اضغط زر التأكيد المطابق بعد إتمام المهمة:", en: "Tap the matching confirm button after completing the task:" },
-  watchBackOnly: { ar: "للرجوع:", en: "Back to menu:" },
+
+  // Single-ad InlineKeyboard carousel (owner instruction, 2026-08-31 — a
+  // deliberate, explicit exception to the reply-keyboard-only rule for this
+  // one screen only).
+  carouselAdTitle: { ar: "🎯 {platform}", en: "🎯 {platform}" },
+  carouselReward: { ar: "💰 المكافأة: {reward}", en: "💰 Reward: {reward}" },
+  carouselVerify: { ar: "✅ تحقق من الإنجاز", en: "✅ Verify completion" },
+  carouselNext: { ar: "➡️ الإعلان التالي", en: "➡️ Next ad" },
+  carouselExit: { ar: "❌ إلغاء/خروج", en: "❌ Cancel/Exit" },
+  carouselNotDoneAlert: { ar: "⚠️ لم تقم بالإجراء المطلوب بعد، يرجى الاستكمال ثم الضغط مجدداً", en: "⚠️ You haven't completed the action yet — finish it, then tap again." },
+  carouselSuccess: { ar: "🎉 تم إضافة {amount} لرصيدك بنجاح!\nرصيدك الآن: {balance}.", en: "🎉 {amount} added to your balance!\nYour balance is now: {balance}." },
+  carouselCancelled: { ar: "تم إلغاء التصفح.", en: "Browsing cancelled." },
+  carouselDone: { ar: "🎉 لا مزيد من الإعلانات المتاحة حالياً.", en: "🎉 No more ads available right now." },
 
   taskGone: { ar: "هذه المهمة لم تعد متاحة.", en: "This task is no longer available." },
   taskOwnCampaign: { ar: "لا يمكنك إتمام حملتك الخاصة.", en: "You can't complete your own campaign." },
