@@ -229,7 +229,7 @@ function mainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
     .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).row()
+    .text(t(lang, "btnFaq")).text(backLabel(lang)).row()
     .resized();
 }
 function walletMenu(lang: Lang): Keyboard {
@@ -292,7 +292,7 @@ function ownerMainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
     .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).row()
+    .text(t(lang, "btnFaq")).text(backLabel(lang)).row()
     .text("💼 أرباحي والسحب").text("📊 إحصائيات البوت").row()
     .text("📣 إذاعة لمستخدمي البوت").text("📢 قناة الاشتراك الإجباري")
     .resized();
