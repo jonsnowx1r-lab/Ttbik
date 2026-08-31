@@ -44,6 +44,7 @@ model User {
   balance        Float         @default(0.0)
   depositAddress String?
   referredBy     String?
+  language       String        @default("ar") // "ar" | "en" — persisted UI language preference
   // Tracks a mid-flight multi-step conversation (e.g. "creating an ad,
   // waiting for the budget"). Vercel serverless functions don't keep
   // in-memory state between requests, so this has to live in the DB —
