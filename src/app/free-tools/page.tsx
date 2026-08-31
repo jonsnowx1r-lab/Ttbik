@@ -24,6 +24,24 @@ const TOOLS = [
   },
 ];
 
+// Catalog services (from قسم "الرد والدعم") priced at $0 — full source-code
+// templates, delivered instantly on their own /service/[slug] page since
+// price_usd = 0 skips the paid order flow entirely. Listed here too so
+// "مجاني" actually means findable in the free section, not just labeled
+// as free while still living under the paid catalog.
+const FREE_BOTS = [
+  {
+    href: "/service/faq-bot",
+    title: "بوت الأسئلة الشائعة",
+    desc: "بوت يجيب تلقائياً على الأسئلة المتكررة لعملائك من قائمة تجهزها أنت — كود مصدري كامل تملكه.",
+  },
+  {
+    href: "/service/auto-reply-bot",
+    title: "بوت الرد الآلي",
+    desc: "بوت تليجرام يرد تلقائياً على استفسارات عملائك على مدار الساعة — كود مصدري كامل تملكه.",
+  },
+];
+
 export default function FreeToolsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
@@ -56,6 +74,24 @@ export default function FreeToolsPage() {
             </span>
             <h2 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{tool.title}</h2>
             <p className="mt-1 text-sm text-slate-500">{tool.desc}</p>
+          </Link>
+        ))}
+      </div>
+
+      <h2 className="mt-10 text-lg font-extrabold text-slate-900">🤖 بوتات جاهزة مجانية</h2>
+      <p className="mt-1 text-sm text-slate-600">كود مصدري كامل تملكه، تنزّله وتستضيفه بنفسك — بلا أي مقابل.</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {FREE_BOTS.map((bot) => (
+          <Link
+            key={bot.href}
+            href={bot.href}
+            className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <span className="inline-block rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+              مجاني
+            </span>
+            <h2 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{bot.title}</h2>
+            <p className="mt-1 text-sm text-slate-500">{bot.desc}</p>
           </Link>
         ))}
       </div>

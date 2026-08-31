@@ -128,9 +128,11 @@ export default function StorefrontBrowser({
                         <p className="mt-2 text-sm text-slate-500">{s.short_desc_ar}</p>
                       </div>
                       <div className="mt-4 flex items-center justify-between">
-                        <span className="text-lg font-extrabold text-brand-700">{formatUsd(s.price_usd)}</span>
+                        <span className={`text-lg font-extrabold ${s.price_usd === 0 ? "text-emerald-700" : "text-brand-700"}`}>
+                          {formatUsd(s.price_usd)}
+                        </span>
                         <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                          جرّب النسخة المحدودة
+                          {s.price_usd === 0 ? "احصل عليه الآن" : "جرّب النسخة المحدودة"}
                         </span>
                       </div>
                     </Link>
