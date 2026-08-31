@@ -44,8 +44,8 @@ export const STR: Dict = {
   langCurrent: { ar: "اختر لغتك المفضّلة:", en: "Choose your preferred language:" },
   langSet: { ar: "✅ تم تعيين اللغة إلى العربية.", en: "✅ Language set to English." },
   faqBody: {
-    ar: "❓ الأسئلة الشائعة:\n\n• كيف أربح؟ اضغط «شاهد واربح»، اختر منصة، وأتمّ المهام المتاحة.\n• كيف أعلن؟ اضغط «ضع إعلانك»، حدد ميزانيتك وسعر النقرة.\n• كيف أودع/أسحب؟ من «المحفظة».\n• هل التحقق حقيقي؟ نعم لقنوات تلجرام فقط (لا يوجد API مجاني للتحقق من متابعة/تغريد على منصات أخرى).",
-    en: "❓ FAQ:\n\n• How do I earn? Tap \"Watch & Earn\", pick a platform, complete available tasks.\n• How do I advertise? Tap \"Create Ad\", set your budget and cost-per-click.\n• How do I deposit/withdraw? From \"Wallet\".\n• Is verification real? Yes, for Telegram channels only (no free API exists to verify a follow/retweet on other platforms).",
+    ar: "❓ الأسئلة الشائعة:\n\n• كيف أربح؟ اضغط «شاهد واربح»، اختر منصة، وأتمّ المهام المتاحة.\n• كيف أعلن؟ اضغط «ضع إعلانك»، حدد ميزانيتك وسعر النقرة.\n• كيف أودع/أسحب؟ من «المحفظة».\n• هل التحقق حقيقي؟ نعم — لكل المنصات. قنوات تلجرام تُتحقق فوراً ومباشرة، وبقية المنصات (رابط، يوتيوب، تويتر، تيك توك، فيسبوك، انستغرام) تمر بنظام مراقبة إلزامي في الخلفية (عدّاد زمني لا يمكن تجاوزه) قبل تفعيل زر التأكيد، إلى جانب أنظمة حماية إضافية لرصد الحسابات المكررة ومراجعة دورية لمن يغادر القنوات بعد وقت قصير.\n\nهل تريد بوتاً كهذا لنفسك؟ اضغط الزر أدناه.",
+    en: "❓ FAQ:\n\n• How do I earn? Tap \"Watch & Earn\", pick a platform, complete available tasks.\n• How do I advertise? Tap \"Create Ad\", set your budget and cost-per-click.\n• How do I deposit/withdraw? From \"Wallet\".\n• Is verification real? Yes — for every platform. Telegram channels are checked instantly and directly; every other platform (link, YouTube, Twitter, TikTok, Facebook, Instagram) goes through a mandatory background monitoring gate (a timer that can't be skipped) before the confirm button unlocks, plus additional protection against duplicate accounts and periodic review of anyone who leaves a channel shortly after joining.\n\nWant a bot like this for yourself? Tap the button below.",
   },
 
   withdrawAmountPrompt: { ar: "أرسل المبلغ المراد سحبه بالدولار (الحد الأدنى ${min}):", en: "Send the amount to withdraw in USD (minimum ${min}):" },
@@ -115,7 +115,10 @@ export const STR: Dict = {
   carouselVerify: { ar: "✅ تحقق من الإنجاز", en: "✅ Verify completion" },
   carouselNext: { ar: "➡️ الإعلان التالي", en: "➡️ Next ad" },
   carouselExit: { ar: "❌ إلغاء/خروج", en: "❌ Cancel/Exit" },
-  carouselNotDoneAlert: { ar: "⚠️ لم تقم بالإجراء المطلوب بعد، يرجى الاستكمال ثم الضغط مجدداً", en: "⚠️ You haven't completed the action yet — finish it, then tap again." },
+  carouselNotDoneAlert: {
+    ar: "⚠️ لم تكتمل مدة المراقبة بعد. إن كنت فتحت الرابط للتو، انتظر حتى ينتهي العدّاد في الصفحة ثم اضغط «متابعة» هناك، ثم أعد الضغط هنا.",
+    en: "⚠️ The monitoring window hasn't finished yet. If you just opened the link, wait for the countdown on that page to finish and tap \"Continue\" there, then tap this button again.",
+  },
   carouselSuccess: { ar: "🎉 تم إضافة {amount} لرصيدك بنجاح!\nرصيدك الآن: {balance}.", en: "🎉 {amount} added to your balance!\nYour balance is now: {balance}." },
   carouselCancelled: { ar: "تم إلغاء التصفح.", en: "Browsing cancelled." },
   carouselDone: { ar: "🎉 لا مزيد من الإعلانات المتاحة حالياً.", en: "🎉 No more ads available right now." },

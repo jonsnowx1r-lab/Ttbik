@@ -227,7 +227,7 @@ function mainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
     .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).text(t(lang, "btnWantOwnBot")).row()
+    .text(t(lang, "btnFaq")).row()
     .resized();
 }
 function walletMenu(lang: Lang): Keyboard {
@@ -290,7 +290,7 @@ function ownerMainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
     .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).text(t(lang, "btnWantOwnBot")).row()
+    .text(t(lang, "btnFaq")).row()
     .text("💼 أرباحي والسحب").text("📊 إحصائيات البوت").row()
     .text("📣 إذاعة لمستخدمي البوت").text("📢 قناة الاشتراك الإجباري")
     .resized();
@@ -480,7 +480,8 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     return;
   }
   if (text === t(lang, "btnFaq")) {
-    await bot.api.sendMessage(chatId, t(lang, "faqBody"), { reply_markup: mainMenu(lang) });
+    const faqKb = new Keyboard().text(t(lang, "btnWantOwnBot")).row().text(backLabel(lang)).resized();
+    await bot.api.sendMessage(chatId, t(lang, "faqBody"), { reply_markup: faqKb });
     return;
   }
   if (text === t(lang, "btnWantOwnBot")) {
