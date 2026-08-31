@@ -2,7 +2,6 @@ import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase";
 import type { Category, Service } from "@/types";
 import StorefrontBrowser from "@/components/StorefrontBrowser";
-import { BOT_TEMPLATES } from "@/lib/botTemplates";
 
 export const revalidate = 30;
 
@@ -49,16 +48,6 @@ export default async function HomePage() {
             </Link>
           </div>
         </div>
-      </section>
-
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-12 sm:grid-cols-3">
-        {BOT_TEMPLATES.map((t) => (
-          <Link key={t.id} href={`/bots/${t.id}`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md">
-            <div className="text-2xl">{t.icon}</div>
-            <h2 className="mt-2 font-bold text-slate-900">{t.name}</h2>
-            <p className="mt-1 text-sm text-slate-500">{t.tagline}</p>
-          </Link>
-        ))}
       </section>
 
       {visible.length > 0 && <StorefrontBrowser categories={visible} services={services} />}

@@ -1,43 +1,78 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { BOT_TEMPLATES } from "@/lib/botTemplates";
+"use client";
 
-export const metadata: Metadata = {
-  title: "منشئ البوتات المستضافة | سوق تولز",
-  description:
-    "شغّل بوت تليجرام حقيقي بتوكنك على قوالب جاهزة: شبكة إعلانات (اربح واعلن)، حملات، متجر، عيادة، منشآت طبية.",
-};
+import { useState } from "react";
 
-export default function BotsPage() {
+export default function BotsDeployPage() {
+  const [token, setToken] = useState("");
+  const [template, setTemplate] = useState("AD_BOT");
+  const [ownerId, setOwnerId] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleDeploy(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setStatus(null);
+
+    try {
+      const res = await fetch("/api/bots/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, template, ownerId }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setStatus(`✅ ${data.message}`);
+      } else {
+        setStatus(`❌ خطأ: ${data.error}`);
+      }
+    } catch (err: any) {
+      setStatus(`❌ فشل الاتصال بالخادم: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
-      <p className="text-xs font-bold text-brand-700">قسم الأدوات — استضافة بوتات</p>
-      <h1 className="mt-2 text-3xl font-extrabold text-slate-900">منشئ البوتات العامل</h1>
-      <p className="mt-3 max-w-2xl text-slate-600">
-        لا نبيع ملفاً ولا كوداً للتحميل. تضع توكن البوت من BotFather، تختار قالباً، ونشغّله على خادم الموقع.
-        القوائم والمحفظة والمهام تعمل داخل تليجرام؛ روابط الدفع والإيداع تُولَّد من سوق تولز بعد طلب معتمد.
-      </p>
-      <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {BOT_TEMPLATES.map((t) => (
-          <Link
-            key={t.id}
-            href={`/bots/${t.id}`}
-            className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div className={`flex h-28 items-center justify-center bg-gradient-to-br text-5xl text-white ${t.color}`}>
-              {t.icon}
-            </div>
-            <div className="p-5">
-              <h2 className="font-bold text-slate-900 group-hover:text-brand-700">{t.name}</h2>
-              <p className="mt-1 text-xs font-semibold text-brand-700">{t.tagline}</p>
-              <p className="mt-2 text-sm text-slate-500 line-clamp-3">{t.desc}</p>
-              <span className="mt-4 inline-block rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
-                افتح المنشئ
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
+    <main className="mx-auto max-w-xl px-6 py-12 font-sans" dir="rtl">
+      <h1 className="mb-6 text-center text-2xl font-bold">تنشيط بوت تلجرام آلياً</h1>
+      <form onSubmit={handleDeploy} className="space-y-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium">Bot Token من BotFather</label>
+          <input
+            type="text"
+            required
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+            className="w-full rounded border p-2 font-mono text-sm text-black"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">معرّف المالك (Telegram User ID)</label>
+          <input
+            type="text"
+            required
+            value={ownerId}
+            onChange={(e) => setOwnerId(e.target.value.replace(/\D/g, ""))}
+            placeholder="مثال: 987654321"
+            className="w-full rounded border p-2 font-mono text-sm text-black"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">اختر قالب البوت</label>
+          <select value={template} onChange={(e) => setTemplate(e.target.value)} className="w-full rounded border bg-white p-2 text-black">
+            <option value="AD_BOT">بوت الإعلانات والمهام</option>
+            <option value="STORE">بوت متجر إلكتروني</option>
+            <option value="HOSPITAL">بوت المشافي والمواعيد</option>
+          </select>
+        </div>
+        <button type="submit" disabled={loading} className="w-full rounded bg-blue-600 py-2 font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+          {loading ? "جاري ربط وتفعيل البوت..." : "تفعيل البوت على تلجرام فوراً"}
+        </button>
+      </form>
+      {status && <div className="mt-4 whitespace-pre-wrap rounded bg-gray-100 p-3 text-sm">{status}</div>}
+    </main>
   );
 }

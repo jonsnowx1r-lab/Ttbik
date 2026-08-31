@@ -1,0 +1,88 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  BOT_OWNER
+  SUPER_ADMIN
+}
+
+enum AdType {
+  LINK
+  TELEGRAM
+  YOUTUBE
+  TWITTER
+  TIKTOK
+  FACEBOOK
+  INSTAGRAM
+}
+
+model Bot {
+  id            String   @id @default(uuid())
+  token         String   @unique
+  ownerId       String // Telegram User ID of the bot creator
+  template      String // "AD_BOT" | "STORE" | "HOSPITAL"
+  totalRevenue  Float    @default(0.0)
+  ownerBalance  Float    @default(0.0) // creator's withdrawable commission
+  isActive      Boolean  @default(true)
+  webhookSecret String // Telegram setWebhook secret_token — verified on every incoming update so a guessed bot id alone can't forge updates
+  created_at    DateTime @default(now())
+  ads           Ad[]
+}
+
+model User {
+  id             String        @id // Telegram User ID
+  botId          String
+  role           Role          @default(USER)
+  balance        Float         @default(0.0)
+  depositAddress String?
+  referredBy     String?
+  // Tracks a mid-flight multi-step conversation (e.g. "creating an ad,
+  // waiting for the budget"). Vercel serverless functions don't keep
+  // in-memory state between requests, so this has to live in the DB —
+  // not part of Gemini's original schema, added because grammy's
+  // in-memory session middleware would silently lose state on cold starts.
+  pendingAction  Json?
+  created_at     DateTime      @default(now())
+  ads            Ad[]
+  transactions   Transaction[]
+}
+
+model Ad {
+  id          String   @id @default(uuid())
+  userId      String // advertiser
+  botId       String // bot this campaign was created in
+  type        AdType
+  content     String // target link/channel/video/handle
+  totalBudget Float
+  cpc         Float // cost per click/task, min $0.02
+  ownerCut    Float // 30% platform
+  creatorCut  Float // 20% bot creator
+  workerCut   Float // 50% worker
+  remaining   Float
+  status      String   @default("ACTIVE") // ACTIVE | EXPIRED
+  created_at  DateTime @default(now())
+  bot         Bot      @relation(fields: [botId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Transaction {
+  id         String   @id @default(uuid())
+  userId     String
+  amount     Float
+  currency   String // USDT, TRX, TON, LTC, SOL, ...
+  type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT
+  status     String // PENDING | COMPLETED | FAILED
+  txHash     String? // NOWPayments payment_id, used for IPN idempotency
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([txHash])
+}
