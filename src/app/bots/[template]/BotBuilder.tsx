@@ -29,6 +29,7 @@ export default function BotBuilder({
   const [publicCode, setPublicCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [launchedWithoutMerchant, setLaunchedWithoutMerchant] = useState(false);
   const preview = useMemo(() => welcome || template.defaults.welcome, [welcome, template.defaults.welcome]);
 
   async function launch() {
@@ -38,6 +39,7 @@ export default function BotBuilder({
     setBotLink(null);
     setPublicCode(null);
     setCopied(false);
+    setLaunchedWithoutMerchant(false);
     try {
       const trimmed = token.trim();
       if (!TOKEN_RE.test(trimmed)) {
@@ -65,6 +67,9 @@ export default function BotBuilder({
       setResult(`${data.message}\n${data.bot?.bot_username || ""}\nرمز البوت: ${code}`);
       if (uname) setBotLink(`https://t.me/${uname}`);
       if (code) setPublicCode(code);
+      if (template.id === "store" && !merchantTgId.trim()) {
+        setLaunchedWithoutMerchant(true);
+      }
     } catch (e: any) {
       setError(e.message || "خطأ");
     } finally {
@@ -164,6 +169,11 @@ export default function BotBuilder({
         {result && (
           <div className="space-y-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm">
             <pre className="whitespace-pre-wrap">{result}</pre>
+            {launchedWithoutMerchant && (
+              <p className="rounded-lg bg-amber-100 px-2 py-1.5 text-xs text-amber-900">
+                البوت يعمل في وضع اختبار: أي عضو يستطيع إدارة المتجر. عيّن آيدي التاجر من لوحة الإدارة قبل الإطلاق العام.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {botLink && (
                 <a
