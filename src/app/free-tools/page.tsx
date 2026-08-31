@@ -30,7 +30,21 @@ export default function FreeToolsPage() {
       <h1 className="text-2xl font-extrabold text-slate-900">أدوات مجانية</h1>
       <p className="mt-2 text-slate-600">بلا تسجيل، بلا حدود استخدام، ومجانية بالكامل — استخدمها كما تشاء.</p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <a
+        href="https://literium.ai.studio"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-8 flex items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"
+      >
+        <div>
+          <span className="inline-block rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-bold text-brand-700">إعلان</span>
+          <h2 className="mt-2 font-bold text-slate-900">Literium AI Studio</h2>
+          <p className="mt-1 text-sm text-slate-600">literium.ai.studio</p>
+        </div>
+        <span className="shrink-0 text-brand-700">←</span>
+      </a>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {TOOLS.map((tool) => (
           <Link
             key={tool.href}

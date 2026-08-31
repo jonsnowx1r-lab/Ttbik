@@ -57,8 +57,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/" className="flex items-center gap-2 text-base font-extrabold text-brand-800">
                 <Logo className="h-6 w-6" /> سوق تولز
               </a>
-              <p className="text-sm text-slate-500">
-                💳 تحويل بنكي · USDT &nbsp;·&nbsp; ⚡ تسليم فوري بعد الموافقة &nbsp;·&nbsp; 💬 دعم عبر تليجرام
+              <p className="flex items-center gap-4 text-sm text-slate-500">
+                <a href="/how-it-works" className="hover:text-brand-700">كيف يعمل الموقع؟</a>
+                <a href="/free-tools" className="hover:text-brand-700">أدوات مجانية</a>
+                <a href="/order/lookup" className="hover:text-brand-700">تتبع طلبي</a>
               </p>
             </div>
             <div className="mt-6 flex flex-col items-center justify-between gap-3 border-t border-slate-100 pt-6 text-xs text-slate-400 sm:flex-row">

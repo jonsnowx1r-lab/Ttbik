@@ -4,5 +4,6 @@ export function generateOrderCode(): string {
 }
 
 export function formatUsd(amount: number): string {
+  if (amount === 0) return "مجاني";
   return `$${amount.toFixed(2)}`;
 }

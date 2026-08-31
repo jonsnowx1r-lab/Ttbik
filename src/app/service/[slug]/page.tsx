@@ -93,7 +93,32 @@ export default async function ServicePage({ params }: { params: { slug: string }
               )}
             </div>
           )}
-          <OrderForm serviceId={service.id} priceUsd={service.price_usd} />
+          {service.price_usd === 0 ? (
+            // Free service — no payment reference to collect, so the paid
+            // OrderForm flow (pick a payment method, submit a transfer
+            // reference, wait for admin approval) doesn't apply here.
+            // Deliver immediately, same as the owner's direct-access card.
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <span className="inline-block rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">مجاني</span>
+              <h3 className="mt-2 font-bold text-slate-900">احصل عليه الآن — مجاناً</h3>
+              {service.delivery_type === "link" && service.delivery_content ? (
+                <a
+                  href={service.delivery_content}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 block w-full break-all rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-brand-700"
+                >
+                  فتح رابط التسليم
+                </a>
+              ) : service.delivery_content ? (
+                <p className="mt-3 text-sm text-slate-700">{service.delivery_content}</p>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">لا يوجد رابط تسليم ثابت لهذه الخدمة بعد.</p>
+              )}
+            </div>
+          ) : (
+            <OrderForm serviceId={service.id} priceUsd={service.price_usd} />
+          )}
         </div>
       </div>
     </div>
