@@ -160,6 +160,11 @@ export default function BotBuilder({
           <div>
             <label className="text-sm font-bold">{template.id === "clinic" ? "الخدمات (سطر لكل خدمة)" : "المنتجات (سطر لكل منتج)"}</label>
             <textarea value={products} onChange={(e) => setProducts(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />
+            <p className="mt-1 text-xs text-slate-500">
+              {template.id === "clinic"
+                ? "قائمة أولية تظهر في «خدماتنا». يمكن تركها فارغة أو تعديلها لاحقاً من لوحة الإدارة."
+                : "قائمة أولية اختيارية — يمكن إضافة/تعديل المنتجات لاحقاً من داخل البوت بزر «متجري» (بعد تعيين آيدي التاجر)."}
+            </p>
           </div>
         )}
         <button disabled={busy} className="w-full rounded-xl bg-brand-700 py-3 text-sm font-bold text-white disabled:opacity-50">
