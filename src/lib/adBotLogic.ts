@@ -286,9 +286,11 @@ const ADMIN_MENU = new Keyboard()
 // separate, exclusive role — per owner instruction (2026-08-31): "لوحة
 // المستخدم العادي هي ذاتها، أضف أزرار الأدمن المنشئ عليها، ولا تفصل
 // وظائف لوحة المستخدم عن لوحة الأدمن." So the owner's keyboard is the
-// regular end-user menu with four extra creator-only rows appended, not a
-// standalone admin screen that locks them out of ضع إعلانك/شاهد واربح/
-// المحفظة. The four extra rows stay Arabic-only (like the Super Admin
+// regular end-user menu, not a standalone admin screen that locks them out
+// of ضع إعلانك/شاهد واربح/المحفظة — with one extra "🛠 لوحة المشرف" button
+// that opens the 4 bot-management rows as a one-tap-away sub-menu (owner
+// feedback, 2026-08-31: keep the everyday keyboard the same size as a
+// regular user's). Those 4 rows stay Arabic-only (like the Super Admin
 // panel) — can be translated later if a non-Arabic-speaking creator needs
 // it. This does NOT apply to SUPER_ADMIN, whose panel stays fully separate
 // per their own explicit instruction ("أنا لست مستخدماً ولست منشئاً").
@@ -298,9 +300,18 @@ function ownerMainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnWatchEarn")).text(t(lang, "btnWallet")).row()
     .text(t(lang, "btnReferrals")).text(t(lang, "btnStats")).row()
     .text(t(lang, "btnLanguage")).text(t(lang, "btnFaq")).row()
-    .text(backLabel(lang)).row()
+    .text(t(lang, "btnOwnerPanel"))
+    .resized();
+}
+// Sub-menu behind "🛠 لوحة المشرف" — keeps the owner's everyday keyboard the
+// same size as a regular user's, with the 4 bot-management rows tucked one
+// tap away instead of always taking up screen space (owner feedback,
+// 2026-08-31).
+function ownerPanelMenu(lang: Lang): Keyboard {
+  return new Keyboard()
     .text("💼 أرباحي والسحب").text("📊 إحصائيات البوت").row()
-    .text("📣 إذاعة لمستخدمي البوت").text("📢 قناة الاشتراك الإجباري")
+    .text("📣 إذاعة لمستخدمي البوت").text("📢 قناة الاشتراك الإجباري").row()
+    .text(backLabel(lang))
     .resized();
 }
 
@@ -315,6 +326,7 @@ function topLevelTexts(lang: Lang): string[] {
     t(lang, "btnLanguage"),
     t(lang, "btnFaq"),
     t(lang, "btnWantOwnBot"),
+    t(lang, "btnOwnerPanel"),
   ];
 }
 function isBack(lang: Lang, text: string): boolean {
@@ -726,6 +738,10 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   }
 
   // --- Bot Owner panel (Arabic-only, gated to this bot's registered ownerId) ---
+  if (text === t(lang, "btnOwnerPanel") && tgUserId === botRow.ownerId) {
+    await bot.api.sendMessage(chatId, t(lang, "ownerPanelTitle"), { reply_markup: ownerPanelMenu(lang) });
+    return;
+  }
   if (text === "💼 أرباحي والسحب" && tgUserId === botRow.ownerId) {
     const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
     await setPending(user.id, { mode: "owner_withdraw_address" });

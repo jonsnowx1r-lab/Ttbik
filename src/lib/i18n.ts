@@ -12,6 +12,8 @@ type Dict = Record<string, { ar: string; en: string }>;
 export const STR: Dict = {
   btnCreateAd: { ar: "➕ ضع إعلانك", en: "➕ Create Ad" },
   btnMyAds: { ar: "📢 إعلاناتي", en: "📢 My Ads" },
+  btnOwnerPanel: { ar: "🛠 لوحة المشرف", en: "🛠 Admin Panel" },
+  ownerPanelTitle: { ar: "🛠 لوحة المشرف — إدارة بوتك:", en: "🛠 Admin Panel — manage your bot:" },
   btnWatchEarn: { ar: "👀 شاهد واربح", en: "👀 Watch & Earn" },
   btnWallet: { ar: "💰 المحفظة", en: "💰 Wallet" },
   btnReferrals: { ar: "🙌 الإحالات", en: "🙌 Referrals" },
