@@ -112,6 +112,10 @@ export const STR: Dict = {
   // one screen only).
   carouselAdTitle: { ar: "🎯 {platform}", en: "🎯 {platform}" },
   carouselReward: { ar: "💰 المكافأة: {reward}", en: "💰 Reward: {reward}" },
+  carouselTimerNotice: {
+    ar: "⏱ بعد فتح الرابط ستظهر لك صفحة بها عدّاد {seconds} ثانية — انتظر حتى ينتهي، اضغط «متابعة» هناك، ثم عد واضغط «تحقق من الإنجاز» هنا. الضغط على «تحقق» قبل انتهاء العدّاد لن يُحتسب.",
+    en: "⏱ After you open the link, a page with a {seconds}-second countdown will appear — wait for it to finish, tap \"Continue\" there, then come back and tap \"Verify completion\" here. Tapping Verify before the countdown ends won't count.",
+  },
   carouselVerify: { ar: "✅ تحقق من الإنجاز", en: "✅ Verify completion" },
   carouselNext: { ar: "➡️ الإعلان التالي", en: "➡️ Next ad" },
   carouselExit: { ar: "❌ إلغاء/خروج", en: "❌ Cancel/Exit" },

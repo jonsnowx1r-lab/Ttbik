@@ -122,14 +122,16 @@ type PendingAction =
 // exempted from the reply-keyboard-only rule per explicit owner instruction
 // (2026-08-31): the carousel is InlineKeyboard-only, everything else in the
 // bot stays reply-keyboard-only as before.
+const WATCH_TIMER_SECONDS = 15;
+
 const CAROUSEL_ACTION_LABEL: Record<AdTypeStr, { ar: string; en: string }> = {
   LINK: { ar: "🔗 زيارة الموقع (15 ثانية)", en: "🔗 Visit site (15s)" },
   TELEGRAM: { ar: "📢 انضمام للقناة / المجموعة", en: "📢 Join channel/group" },
-  YOUTUBE: { ar: "▶️ مشاهدة الفيديو / اشتراك", en: "▶️ Watch/Subscribe" },
-  TWITTER: { ar: "🐤 متابعة الحساب", en: "🐤 Follow account" },
-  TIKTOK: { ar: "🎵 متابعة الحساب", en: "🎵 Follow account" },
-  FACEBOOK: { ar: "📘 متابعة الصفحة", en: "📘 Follow page" },
-  INSTAGRAM: { ar: "📸 متابعة الحساب", en: "📸 Follow account" },
+  YOUTUBE: { ar: "▶️ مشاهدة الفيديو / اشتراك (15 ثانية)", en: "▶️ Watch/Subscribe (15s)" },
+  TWITTER: { ar: "🐤 متابعة الحساب (15 ثانية)", en: "🐤 Follow account (15s)" },
+  TIKTOK: { ar: "🎵 متابعة الحساب (15 ثانية)", en: "🎵 Follow account (15s)" },
+  FACEBOOK: { ar: "📘 متابعة الصفحة (15 ثانية)", en: "📘 Follow page (15s)" },
+  INSTAGRAM: { ar: "📸 متابعة الحساب (15 ثانية)", en: "📸 Follow account (15s)" },
 };
 
 function round2(n: number): number {
@@ -1046,6 +1048,7 @@ async function buildCarouselCard(ad: any, lang: Lang, tgUserId: string, currentB
   const lines = [
     isForced ? t(lang, "watchForcedLabel") : t(lang, "carouselAdTitle", { platform: TYPE_LABEL[type][lang] }),
     !isForced ? t(lang, "carouselReward", { reward: fmt(Number(ad.workerCut)) }) : null,
+    type !== "TELEGRAM" ? t(lang, "carouselTimerNotice", { seconds: String(WATCH_TIMER_SECONDS) }) : null,
   ].filter((l): l is string => !!l);
   return { text: lines.join("\n"), keyboard: kb };
 }
