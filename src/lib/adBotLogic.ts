@@ -37,6 +37,13 @@ import { t, type Lang, DEFAULT_LANG } from "@/lib/i18n";
  * i18n: end-user screens are AR/EN via src/lib/i18n.ts, persisted on
  * User.language. The Super Admin panel stays Arabic-only — a single-
  * operator surface, not worth doubling for.
+ *
+ * Panel scoping (owner instruction, 2026-08-31): SUPER_ADMIN's panel is
+ * fully separate and exclusive — never the regular end-user menu, by their
+ * own explicit choice ("أنا لست مستخدماً ولست منشئاً، أنا المالك"). A bot's
+ * own creator is different: they're also a real participant in their own
+ * bot, so ownerMainMenu() is the regular end-user menu with four extra
+ * creator-only rows appended, not a separate exclusive screen.
  */
 
 const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_TELEGRAM_ID || "";
@@ -266,16 +273,28 @@ const ADMIN_MENU = new Keyboard()
   .text("➕ شحن رصيد").row()
   .text("🔙 القائمة الرئيسية")
   .resized();
-// Bot Owner panel is Arabic-only for now too (like the Super Admin panel) —
-// a scope call given the size of this build; can be translated later if a
-// non-Arabic-speaking bot creator actually needs it.
-const OWNER_MENU = new Keyboard()
-  .text("💼 أرباحي والسحب").row()
-  .text("📊 إحصائيات البوت").row()
-  .text("📣 إذاعة لمستخدمي البوت").row()
-  .text("📢 قناة الاشتراك الإجباري").row()
-  .text("🔙 القائمة الرئيسية")
-  .resized();
+// A bot's own creator is also a full participant in their own bot — not a
+// separate, exclusive role — per owner instruction (2026-08-31): "لوحة
+// المستخدم العادي هي ذاتها، أضف أزرار الأدمن المنشئ عليها، ولا تفصل
+// وظائف لوحة المستخدم عن لوحة الأدمن." So the owner's keyboard is the
+// regular end-user menu with four extra creator-only rows appended, not a
+// standalone admin screen that locks them out of ضع إعلانك/شاهد واربح/
+// المحفظة. The four extra rows stay Arabic-only (like the Super Admin
+// panel) — can be translated later if a non-Arabic-speaking creator needs
+// it. This does NOT apply to SUPER_ADMIN, whose panel stays fully separate
+// per their own explicit instruction ("أنا لست مستخدماً ولست منشئاً").
+function ownerMainMenu(lang: Lang): Keyboard {
+  return new Keyboard()
+    .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
+    .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
+    .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
+    .text(t(lang, "btnFaq")).row()
+    .text("💼 أرباحي والسحب").row()
+    .text("📊 إحصائيات البوت").row()
+    .text("📣 إذاعة لمستخدمي البوت").row()
+    .text("📢 قناة الاشتراك الإجباري")
+    .resized();
+}
 
 function topLevelTexts(lang: Lang): string[] {
   return [t(lang, "btnCreateAd"), t(lang, "btnWatchEarn"), t(lang, "btnWallet"), t(lang, "btnReferrals"), t(lang, "btnStats"), t(lang, "btnLanguage"), t(lang, "btnFaq")];
@@ -304,14 +323,16 @@ async function sendSuperAdminPanel(bot: TelegramBot, chatId: number) {
 
 // Shared by /start and /admin — a bot's own creator (ctx.from.id === bot.ownerId)
 // is recognized the same way, regardless of whether they type /admin or
-// just /start; they never see the regular end-user menu either.
-async function sendOwnerPanel(bot: TelegramBot, chatId: number, botRow: BotRow) {
+// just /start. Sends the earnings/referral summary with the merged
+// user+owner keyboard (ownerMainMenu) so they land back on a fully
+// functional menu, not an admin-only dead end.
+async function sendOwnerPanel(bot: TelegramBot, chatId: number, botRow: BotRow, lang: Lang) {
   const fresh = await prisma.bot.findUnique({ where: { id: botRow.id } });
   const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
   await bot.api.sendMessage(
     chatId,
-    `🛠 لوحة تحكم منشئ البوت\n\nرصيد أرباحك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\nرصيد قيد الحجز (48 ساعة): ${fmt(Number(fresh?.pendingBalance || 0))}\n\n🎁 رابط إحالة منشئي بوتات آخرين (تربح 5% من صافي أرباح المنصة من كل بوت يُفعَّل عبره):\n${site}/bots?ref=${botRow.ownerId}`,
-    { reply_markup: OWNER_MENU }
+    `🛠 أنت منشئ هذا البوت\n\nرصيد أرباحك الجاهز للسحب: ${fmt(Number(fresh?.ownerBalance || 0))}\nرصيد قيد الحجز (48 ساعة): ${fmt(Number(fresh?.pendingBalance || 0))}\n\n🎁 رابط إحالة منشئي بوتات آخرين (تربح 5% من صافي أرباح المنصة من كل بوت يُفعَّل عبره):\n${site}/bots?ref=${botRow.ownerId}`,
+    { reply_markup: ownerMainMenu(lang) }
   );
 }
 
@@ -369,7 +390,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       return;
     }
     if (tgUserId === botRow.ownerId) {
-      await sendOwnerPanel(bot, chatId, botRow);
+      await sendOwnerPanel(bot, chatId, botRow, lang);
       return;
     }
     await bot.api.sendMessage(chatId, t(lang, "welcome"), { reply_markup: mainMenu(lang) });
@@ -378,7 +399,8 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
 
   if (text === "/admin") {
     if (tgUserId === botRow.ownerId && tgUserId !== SUPER_ADMIN_ID) {
-      await sendOwnerPanel(bot, chatId, botRow);
+      const ownerUser = await ensureUser(botRow.id, tgUserId, botRow);
+      await sendOwnerPanel(bot, chatId, botRow, asLang(ownerUser.language));
       return;
     }
     if (tgUserId !== SUPER_ADMIN_ID) {
@@ -393,22 +415,19 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   const lang = asLang(user.language);
   const pending = user.pendingAction as PendingAction | null;
 
-  // Universal back button (either language's label). For the platform owner
-  // or a bot's own creator this must return to THEIR panel, never the
-  // regular end-user menu — ADMIN_MENU/OWNER_MENU reuse the same "🔙"
-  // label, so without this check pressing it would leak the ordinary menu
-  // right back in.
+  // Universal back button (either language's label). SUPER_ADMIN's "🔙"
+  // (ADMIN_MENU) must return to THEIR panel, never the regular end-user
+  // menu. A bot owner's "🔙" doesn't need special-casing any more — their
+  // keyboard (ownerMainMenu) already includes the regular menu, so falling
+  // through to the normal branch below is correct.
   if (isBack(lang, text)) {
     await setPending(user.id, null);
     if (tgUserId === SUPER_ADMIN_ID) {
       await sendSuperAdminPanel(bot, chatId);
       return;
     }
-    if (tgUserId === botRow.ownerId) {
-      await sendOwnerPanel(bot, chatId, botRow);
-      return;
-    }
-    await bot.api.sendMessage(chatId, t(lang, "mainMenuTitle"), { reply_markup: mainMenu(lang) });
+    const homeMenu = tgUserId === botRow.ownerId ? ownerMainMenu(lang) : mainMenu(lang);
+    await bot.api.sendMessage(chatId, t(lang, "mainMenuTitle"), { reply_markup: homeMenu });
     return;
   }
 
@@ -588,7 +607,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await bot.api.sendMessage(
       chatId,
       `✅ تم إرسال طلب سحب ${fmt(amount)} إلى العنوان: ${pending.address}\nسيتم التحويل خلال 24-48 ساعة بعد المراجعة.`,
-      { reply_markup: OWNER_MENU }
+      { reply_markup: ownerMainMenu(lang) }
     );
     if (SUPER_ADMIN_ID) {
       const auditNote = isAudit ? "\n🔺 يتجاوز 20$ — يتطلب تدقيقاً." : "";
@@ -610,7 +629,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await bot.api.sendMessage(
       chatId,
       `📊 إحصائيات بوتك:\nعدد المستخدمين: ${usersCount}\nعدد المهام المكتملة: ${tasksCompleted}\nإجمالي قيمة الإعلانات: ${fmt(Number(adsAgg._sum.totalBudget || 0))}`,
-      { reply_markup: OWNER_MENU }
+      { reply_markup: ownerMainMenu(lang) }
     );
     return;
   }
@@ -632,7 +651,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       }
     }
     await setPending(user.id, null);
-    await bot.api.sendMessage(chatId, `تم الإرسال: ${sent} نجح، ${failed} فشل.`, { reply_markup: OWNER_MENU });
+    await bot.api.sendMessage(chatId, `تم الإرسال: ${sent} نجح، ${failed} فشل.`, { reply_markup: ownerMainMenu(lang) });
     return;
   }
   if (text === "📢 قناة الاشتراك الإجباري" && tgUserId === botRow.ownerId) {
@@ -649,7 +668,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     const channel = cancel ? null : text.trim().replace(/^@/, "");
     await prisma.bot.update({ where: { id: botRow.id }, data: { requiredChannel: channel } });
     await setPending(user.id, null);
-    await bot.api.sendMessage(chatId, cancel ? "✅ تم إلغاء الاشتراك الإجباري." : `✅ تم تفعيل الاشتراك الإجباري في القناة @${channel}.`, { reply_markup: OWNER_MENU });
+    await bot.api.sendMessage(chatId, cancel ? "✅ تم إلغاء الاشتراك الإجباري." : `✅ تم تفعيل الاشتراك الإجباري في القناة @${channel}.`, { reply_markup: ownerMainMenu(lang) });
     return;
   }
 
@@ -721,17 +740,15 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   }
 
   // Unrecognized input falls back to whichever menu belongs to this
-  // sender — never the regular end-user menu for the platform owner or a
-  // bot's own creator.
+  // sender — SUPER_ADMIN never sees the regular end-user menu; a bot
+  // owner's menu already includes it, so it's the same fallback message
+  // with their merged keyboard.
   if (tgUserId === SUPER_ADMIN_ID) {
     await sendSuperAdminPanel(bot, chatId);
     return;
   }
-  if (tgUserId === botRow.ownerId) {
-    await sendOwnerPanel(bot, chatId, botRow);
-    return;
-  }
-  await bot.api.sendMessage(chatId, t(lang, "chooseUnknown"), { reply_markup: mainMenu(lang) });
+  const fallbackMenu = tgUserId === botRow.ownerId ? ownerMainMenu(lang) : mainMenu(lang);
+  await bot.api.sendMessage(chatId, t(lang, "chooseUnknown"), { reply_markup: fallbackMenu });
 }
 
 async function consumeCreateAdStep(bot: TelegramBot, chatId: number, user: any, pending: Extract<PendingAction, { mode: "create_ad" }>, text: string, lang: Lang) {
