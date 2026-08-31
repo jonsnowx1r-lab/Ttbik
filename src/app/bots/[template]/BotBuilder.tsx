@@ -18,6 +18,7 @@ export default function BotBuilder({
   const [orderCode, setOrderCode] = useState(initialOrderCode);
   const [welcome, setWelcome] = useState(template.defaults.welcome);
   const [faq, setFaq] = useState(template.defaults.faq);
+  const [currencyName, setCurrencyName] = useState(template.defaults.currencyName);
   const [products, setProducts] = useState(
     template.id === "clinic" ? "استشارة عامة\nفحص دوري" : "منتج تجريبي — 10 نقاط"
   );
@@ -52,6 +53,7 @@ export default function BotBuilder({
           orderCode,
           welcome,
           faq,
+          currencyName: currencyName.trim() || template.defaults.currencyName,
           products: template.id === "store" || template.id === "clinic" ? products : "",
           merchantTgId: template.id === "store" ? merchantTgId.trim() : undefined,
         }),
@@ -97,7 +99,7 @@ export default function BotBuilder({
             <Link href="/how-it-works" className="font-semibold text-brand-700 underline">
               اطلب خدمة «إنشاء بوت مستضاف» أولاً وشاهد كيف تحصل عليه
             </Link>
-            . بدون طلب موافق لا يُشغّل البوت. يُملأ تلقائياً من ?order= في الرابط بعد الموافقة.
+            . بدون طلب موافق لا يُشغّل البوت. يُملأ تلقائياً من ?order= في الرابط بعد الموافقة. طلب واحد = بوت واحد فقط.
           </p>
         </div>
         <div>
@@ -128,6 +130,19 @@ export default function BotBuilder({
             )}
           </div>
         )}
+        <div>
+          <label className="text-sm font-bold">اسم العملة / الرصيد داخل البوت</label>
+          <input
+            value={currencyName}
+            onChange={(e) => setCurrencyName(e.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            placeholder={template.defaults.currencyName}
+            maxLength={24}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            يظهر في رسائل الرصيد (مثال: نقطة، رصيد، $). لا يؤثر على الدفع الحقيقي من الموقع.
+          </p>
+        </div>
         <div>
           <label className="text-sm font-bold">الترحيب</label>
           <textarea value={welcome} onChange={(e) => setWelcome(e.target.value)} rows={4} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />
