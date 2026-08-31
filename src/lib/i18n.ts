@@ -28,6 +28,8 @@ export const STR: Dict = {
   btnLangAr: { ar: "🇸🇦 العربية", en: "🇸🇦 Arabic" },
   btnLangEn: { ar: "🇬🇧 English", en: "🇬🇧 English" },
   btnSharePhone: { ar: "📱 مشاركة رقم الهاتف", en: "📱 Share phone number" },
+  btnWantOwnBot: { ar: "ℹ️ أريد بوتاً مماثلاً", en: "ℹ️ I want a bot like this" },
+  btnProceedPurchase: { ar: "💳 متابعة للشراء", en: "💳 Proceed to purchase" },
 
   welcome: { ar: "🚀 مرحباً بك في منصة الإعلانات! اختر من القائمة أدناه:", en: "🚀 Welcome to the ads platform! Choose from the menu below:" },
   adminNote: { ar: "\n\n🛠 أنت مالك المنصة — أرسل /admin لفتح لوحة التحكم.", en: "\n\n🛠 You're the platform owner — send /admin to open the control panel." },
@@ -131,6 +133,24 @@ export const STR: Dict = {
   },
 
   depositChoose: { ar: "اختر مبلغ الإيداع وعملتك المفضّلة (USDT, TRX, TON, LTC, SOL...) في الصفحة:\n{link}", en: "Choose your deposit amount and preferred currency (USDT, TRX, TON, LTC, SOL...) on the page:\n{link}" },
+
+  // "أريد بوتاً مماثلاً" — the paid bot-purchase flow (owner spec,
+  // 2026-08-31). Deliberately says only what a buyer needs to decide: the
+  // 50% user payout as a selling point, not the internal creator/platform
+  // split or referral mechanics.
+  wantOwnBotInfo: {
+    ar: "ℹ️ إنشاء بوتك الخاص\n\nيمكنك امتلاك بوت إعلانات وربح خاص بك، يعمل بنفس نظام هذا البوت بالكامل:\n\n📌 كيف يعمل؟\n• مستخدمو بوتك يربحون 50% من قيمة كل مهمة يكملونها (مشاهدة إعلان، الانضمام لقناة، وغيرها).\n• يمكنهم أيضاً إنشاء إعلاناتهم الخاصة داخل بوتك.\n• أنت كمالك للبوت تحصل على عمولة من كل نشاط يحدث داخله، قابلة للسحب بانتظام.\n\n💰 السعر: 100$ لمرة واحدة فقط (بلا اشتراك متكرر) — تفعيل فوري بعد التحقق من التحويل.\n\nللمتابعة اضغط الزر أدناه:",
+    en: "ℹ️ Create your own bot\n\nYou can own your own ads-and-earnings bot, running on the exact same system as this one:\n\n📌 How it works?\n• Your bot's users earn 50% of the value of every task they complete (watching an ad, joining a channel, etc.).\n• They can also create their own ad campaigns inside your bot.\n• As the bot owner, you earn a commission on every activity inside it, withdrawable regularly.\n\n💰 Price: a one-time $100 (no recurring subscription) — instant activation once your transfer is verified.\n\nTap below to continue:",
+  },
+  purchaseBankInfo: {
+    ar: "💳 لإتمام الشراء ({amount}$)، حوّل المبلغ عبر إحدى الطرق التالية:\n\n🏦 تحويل بنكي:\nالمستفيد: {holder}\nرقم الحساب: {account}\n\n💵 أو USDT ({usdtNet}):\n{usdtAddr}\n\nبعد التحويل، أرسل هنا اسمك أو رقم/مرجع عملية التحويل للمراجعة:",
+    en: "💳 To complete the purchase (${amount}), transfer via one of the following:\n\n🏦 Bank transfer:\nBeneficiary: {holder}\nAccount number: {account}\n\n💵 Or USDT ({usdtNet}):\n{usdtAddr}\n\nAfter transferring, send your name or the transfer reference here for review:",
+  },
+  purchaseRefEmptyError: { ar: "أرسل اسمك أو رقم مرجع التحويل.", en: "Send your name or the transfer reference." },
+  purchaseSubmitted: {
+    ar: "✅ تم إرسال طلبك للمراجعة. بعد التحقق من التحويل سيصلك كود التفعيل وخطوات إنشاء بوتك خلال 24 ساعة.",
+    en: "✅ Your request has been sent for review. Once your transfer is verified, you'll receive an activation code and setup steps within 24 hours.",
+  },
 };
 
 export function t(lang: Lang, key: keyof typeof STR, vars?: Record<string, string | number>): string {

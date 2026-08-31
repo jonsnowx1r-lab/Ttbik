@@ -6,6 +6,7 @@ export default function BotsDeployPage() {
   const [token, setToken] = useState("");
   const [template, setTemplate] = useState("AD_BOT");
   const [ownerId, setOwnerId] = useState("");
+  const [activationCode, setActivationCode] = useState("");
   const [ref, setRef] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +26,7 @@ export default function BotsDeployPage() {
       const res = await fetch("/api/bots/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, template, ownerId, ref: ref || undefined }),
+        body: JSON.stringify({ token, template, ownerId, ref: ref || undefined, activationCode: activationCode || undefined }),
       });
 
       const data = await res.json();
@@ -71,6 +72,18 @@ export default function BotsDeployPage() {
             placeholder="مثال: 987654321"
             className="w-full rounded border p-2 font-mono text-sm text-black"
           />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">كود التفعيل</label>
+          <input
+            type="text"
+            required
+            value={activationCode}
+            onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
+            placeholder="احصل عليه من داخل أي بوت على المنصة عبر زر «أريد بوتاً مماثلاً»"
+            className="w-full rounded border p-2 font-mono text-sm text-black"
+          />
+          <p className="mt-1 text-xs text-gray-500">مرتبط بآيدي المالك الذي أدخلته أعلاه تحديداً — لا يعمل مع آيدي آخر.</p>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium">اختر قالب البوت</label>

@@ -155,3 +155,20 @@ model AdClick {
 
   @@unique([adId, userId])
 }
+
+// A paid "أريد بوتاً مماثلاً" request (owner spec, 2026-08-31): buying a
+// license to deploy your own bot via /bots, instead of that page being
+// open to anyone. Flow: buyer submits a bank-transfer reference from
+// inside any deployed bot -> SUPER_ADMIN reviews with موافقة شراء/رفض شراء
+// -> approval generates `code` and DMs it to the buyer -> /bots/deploy
+// requires that exact code, tied to the same buyerId, and flips status to
+// REDEEMED so it can't be reused for a second bot.
+model BotPurchase {
+  id                String   @id @default(uuid())
+  buyerId           String // Telegram ID of the purchaser — must match the ownerId used at redemption
+  code              String?  @unique // generated only once approved; null while PENDING/REJECTED
+  amount            Float    @default(100.0)
+  status            String   @default("PENDING") // PENDING | APPROVED | REDEEMED | REJECTED
+  transferReference String?
+  created_at        DateTime @default(now())
+}

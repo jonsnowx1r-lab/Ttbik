@@ -1,4 +1,5 @@
 import { Bot as TelegramBot, Keyboard, InlineKeyboard } from "grammy";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { Bot as BotRow, Prisma } from "@prisma/client";
 import { t, type Lang, DEFAULT_LANG } from "@/lib/i18n";
@@ -114,7 +115,8 @@ type PendingAction =
   | { mode: "owner_channel_setup" }
   | { mode: "owner_withdraw_address" }
   | { mode: "owner_withdraw_amount"; address: string }
-  | { mode: "watch_carousel"; type: AdTypeStr; queue: string[]; index: number };
+  | { mode: "watch_carousel"; type: AdTypeStr; queue: string[]; index: number }
+  | { mode: "purchase_bot_reference" };
 
 // Per-platform inline "action" button label for the شاهد واربح carousel —
 // exempted from the reply-keyboard-only rule per explicit owner instruction
@@ -225,7 +227,7 @@ function mainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
     .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).row()
+    .text(t(lang, "btnFaq")).text(t(lang, "btnWantOwnBot")).row()
     .resized();
 }
 function walletMenu(lang: Lang): Keyboard {
@@ -288,14 +290,23 @@ function ownerMainMenu(lang: Lang): Keyboard {
     .text(t(lang, "btnCreateAd")).text(t(lang, "btnWatchEarn")).row()
     .text(t(lang, "btnWallet")).text(t(lang, "btnReferrals")).row()
     .text(t(lang, "btnStats")).text(t(lang, "btnLanguage")).row()
-    .text(t(lang, "btnFaq")).row()
+    .text(t(lang, "btnFaq")).text(t(lang, "btnWantOwnBot")).row()
     .text("💼 أرباحي والسحب").text("📊 إحصائيات البوت").row()
     .text("📣 إذاعة لمستخدمي البوت").text("📢 قناة الاشتراك الإجباري")
     .resized();
 }
 
 function topLevelTexts(lang: Lang): string[] {
-  return [t(lang, "btnCreateAd"), t(lang, "btnWatchEarn"), t(lang, "btnWallet"), t(lang, "btnReferrals"), t(lang, "btnStats"), t(lang, "btnLanguage"), t(lang, "btnFaq")];
+  return [
+    t(lang, "btnCreateAd"),
+    t(lang, "btnWatchEarn"),
+    t(lang, "btnWallet"),
+    t(lang, "btnReferrals"),
+    t(lang, "btnStats"),
+    t(lang, "btnLanguage"),
+    t(lang, "btnFaq"),
+    t(lang, "btnWantOwnBot"),
+  ];
 }
 function isBack(lang: Lang, text: string): boolean {
   return text === t("ar", "btnBack") || text === t("en", "btnBack");
@@ -472,6 +483,27 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await bot.api.sendMessage(chatId, t(lang, "faqBody"), { reply_markup: mainMenu(lang) });
     return;
   }
+  if (text === t(lang, "btnWantOwnBot")) {
+    await setPending(user.id, null);
+    const infoKb = new Keyboard().text(t(lang, "btnProceedPurchase")).row().text(backLabel(lang)).resized();
+    await bot.api.sendMessage(chatId, t(lang, "wantOwnBotInfo"), { reply_markup: infoKb });
+    return;
+  }
+  if (text === t(lang, "btnProceedPurchase")) {
+    await setPending(user.id, { mode: "purchase_bot_reference" });
+    await bot.api.sendMessage(
+      chatId,
+      t(lang, "purchaseBankInfo", {
+        amount: "100",
+        holder: process.env.BANK_HOLDER || "-",
+        account: process.env.BANK_ACCOUNT_NUMBER || "-",
+        usdtNet: process.env.USDT_NETWORK || "TRC20",
+        usdtAddr: process.env.USDT_ADDRESS || "-",
+      }),
+      { reply_markup: amountEntryMenu(lang) }
+    );
+    return;
+  }
   if (text === t(lang, "btnDeposit")) {
     await sendDepositOptions(bot, chatId, user.id, lang);
     return;
@@ -522,6 +554,15 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
       `📊 إحصائيات المنصة:\nعدد البوتات: ${botsCount}\nعدد المستخدمين: ${usersCount}\nأرباح المنصة التراكمية: ${fmt(Number(revenueAgg._sum.totalRevenue || 0))}\n💼 المحفظة المركزية — طلبات سحب معلّقة: ${fmt(Number(pendingWithdrawalsAgg._sum.amount || 0))}`,
       { reply_markup: ADMIN_MENU }
     );
+    return;
+  }
+  // Admin plain-text bot-purchase approval: "موافقة شراء <id>" / "رفض شراء <id>"
+  // — checked before the generic withdrawal approval below since both
+  // start with the same "موافقة "/"رفض " prefix.
+  if (tgUserId === SUPER_ADMIN_ID && (text.startsWith("موافقة شراء ") || text.startsWith("رفض شراء "))) {
+    const approve = text.startsWith("موافقة شراء ");
+    const idSuffix = text.split(" ")[2]?.trim();
+    if (idSuffix) await decideBotPurchase(bot, chatId, idSuffix, approve);
     return;
   }
   // Admin plain-text withdrawal approval: "موافقة <id>" / "رفض <id>"
@@ -734,6 +775,27 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
   if (pending?.mode === "admin_broadcast" && tgUserId === SUPER_ADMIN_ID) {
     await runBroadcast(bot, chatId, text);
     await setPending(user.id, null);
+    return;
+  }
+  if (pending?.mode === "purchase_bot_reference") {
+    if (!text.trim()) {
+      await bot.api.sendMessage(chatId, t(lang, "purchaseRefEmptyError"));
+      return;
+    }
+    const purchase = await prisma.botPurchase.create({
+      data: { buyerId: user.id, amount: 100, status: "PENDING", transferReference: text.trim() },
+    });
+    await setPending(user.id, null);
+    const homeMenu = tgUserId === botRow.ownerId ? ownerMainMenu(lang) : mainMenu(lang);
+    await bot.api.sendMessage(chatId, t(lang, "purchaseSubmitted"), { reply_markup: homeMenu });
+    if (SUPER_ADMIN_ID) {
+      await bot.api
+        .sendMessage(
+          Number(SUPER_ADMIN_ID),
+          `🛒 طلب شراء بوت جديد\nالمشتري: ${user.id}\nالمبلغ: $100\nمرجع التحويل: ${text.trim()}\n\nللموافقة أرسل: موافقة شراء ${shortId(purchase.id)}\nللرفض أرسل: رفض شراء ${shortId(purchase.id)}`
+        )
+        .catch(() => null);
+    }
     return;
   }
 
@@ -1335,6 +1397,41 @@ async function decideWithdrawal(bot: TelegramBot, chatId: number, txIdSuffix: st
     await prisma.user.update({ where: { id: tx.userId }, data: { balance: round2(Number(user?.balance || 0) + Number(tx.amount)) } });
     await prisma.transaction.update({ where: { id: tx.id }, data: { status: "FAILED" } });
     await bot.api.sendMessage(chatId, "❌ رُفض الطلب وأُعيد المبلغ للمستخدم.");
+  }
+}
+
+function generatePurchaseCode(): string {
+  return crypto.randomBytes(6).toString("hex").toUpperCase();
+}
+
+// SUPER_ADMIN's "موافقة شراء <id>" / "رفض شراء <id>" — the manual gate on
+// the $100 "أريد بوتاً مماثلاً" flow (owner spec, 2026-08-31). Approval
+// mints the one-time code that /api/bots/deploy requires, tied to this
+// buyer's Telegram ID specifically, and DMs it with the activation steps.
+async function decideBotPurchase(bot: TelegramBot, chatId: number, idSuffix: string, approve: boolean) {
+  const candidates = await prisma.botPurchase.findMany({ where: { status: "PENDING" }, take: 200 });
+  const purchase = candidates.find((p) => shortId(p.id) === idSuffix);
+  if (!purchase) {
+    await bot.api.sendMessage(chatId, "الطلب غير موجود أو عولج مسبقاً.");
+    return;
+  }
+  if (approve) {
+    const code = generatePurchaseCode();
+    await prisma.botPurchase.update({ where: { id: purchase.id }, data: { status: "APPROVED", code } });
+    const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+    await bot.api
+      .sendMessage(
+        Number(purchase.buyerId),
+        `✅ تمت الموافقة على عملية الشراء!\n\nكود التفعيل الخاص بك:\n${code}\n\nخطوات تفعيل بوتك:\n1. أنشئ بوتاً جديداً عبر @BotFather واحصل على التوكن.\n2. افتح: ${site}/bots\n3. ضع توكن بوتك، آيديك (${purchase.buyerId})، وكود التفعيل أعلاه.\n4. اضغط "تفعيل البوت" — سيعمل بوتك فوراً.`
+      )
+      .catch(() => null);
+    await bot.api.sendMessage(chatId, `✅ تمت الموافقة وأُرسل كود التفعيل للمشتري ${purchase.buyerId}.`);
+  } else {
+    await prisma.botPurchase.update({ where: { id: purchase.id }, data: { status: "REJECTED" } });
+    await bot.api
+      .sendMessage(Number(purchase.buyerId), "❌ عذراً، لم يتم التحقق من عملية التحويل. تواصل مع الدعم لإعادة المحاولة.")
+      .catch(() => null);
+    await bot.api.sendMessage(chatId, "❌ تم رفض الطلب وإشعار المشتري.");
   }
 }
 
