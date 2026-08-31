@@ -15,6 +15,12 @@ export async function POST(req: NextRequest) {
     }
 
     let targetId: string | undefined = botId;
+    if (!targetId && process.env.SUPER_ADMIN_TELEGRAM_ID) {
+      // Default target: the platform's own bot, owned by SUPER_ADMIN_TELEGRAM_ID
+      // — distinct from any other bots deployed on the platform.
+      const superAdminBot = await prisma.bot.findFirst({ where: { ownerId: process.env.SUPER_ADMIN_TELEGRAM_ID } });
+      if (superAdminBot) targetId = superAdminBot.id;
+    }
     if (!targetId) {
       const all = await prisma.bot.findMany({ select: { id: true } });
       if (all.length !== 1) {
