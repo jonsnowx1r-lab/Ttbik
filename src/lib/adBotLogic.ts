@@ -850,7 +850,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await setPending(user.id, { mode: "owner_channel_setup" });
     await bot.api.sendMessage(
       chatId,
-      `القناة الحالية: ${botRow.requiredChannel || "غير مفعّلة"}\n\nأرسل معرف القناة أو رابطها (مثال: @MyChannel أو https://t.me/MyChannel) لتفعيل الاشتراك الإجباري، أو أرسل "إلغاء" لإلغاء الاشتراك الإجباري:`,
+      `القناة الحالية: ${botRow.requiredChannel || "غير مفعّلة"}\n\nأرسل معرف القناة أو رابطها (مثال: @MyChannel أو https://t.me/MyChannel) لتفعيل الاشتراك الإجباري، أو أرسل "إلغاء" لإلغاء الاشتراك الإجباري.\n\n⚠️ تذكير: يجب إضافة البوت كمشرف (Admin) في تلك القناة، وإلا لن يتمكن من التحقق من انضمام الأعضاء.`,
       { reply_markup: amountEntryMenu("ar") }
     );
     return;
