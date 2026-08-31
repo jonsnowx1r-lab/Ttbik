@@ -49,12 +49,20 @@ import {
  * in-memory per-user state.
  */
 
-type Platform = "link" | "telegram" | "youtube" | "facebook" | "instagram" | "twitter";
+type Platform = "link" | "telegram" | "youtube" | "facebook" | "instagram" | "twitter" | "tiktok";
 type TwitterSubType = "retweet" | "follow";
 type CreateStep = "subtype" | "description" | "target" | "budget" | "cpc";
 
 const MIN_CPC = 0.02;
 const BACK = "🔙 رجوع";
+
+// Revenue split on every completed task (owner decision 2026-08-31): the
+// worker no longer keeps the full cpc — a cut goes to the bot creator (as
+// an incentive to bring users) and a cut to the platform. The worker share
+// absorbs any rounding remainder so the three cuts always sum exactly to cpc.
+const WORKER_SHARE = 0.5;
+const CREATOR_SHARE = 0.2;
+const PLATFORM_SHARE = 0.3;
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   link: "🔗 لينك",
@@ -63,6 +71,7 @@ const PLATFORM_LABEL: Record<Platform, string> = {
   facebook: "📘 فيسبوك",
   instagram: "📸 انستغرام",
   twitter: "🐦 تويتر",
+  tiktok: "🎵 تيك توك",
 };
 const LABEL_TO_PLATFORM: Record<string, Platform> = Object.fromEntries(
   (Object.keys(PLATFORM_LABEL) as Platform[]).map((p) => [PLATFORM_LABEL[p], p])
@@ -74,6 +83,7 @@ const PLATFORM_STEPS: Record<Platform, CreateStep[]> = {
   youtube: ["description", "target", "budget", "cpc"],
   facebook: ["description", "target", "budget", "cpc"],
   instagram: ["description", "target", "budget", "cpc"],
+  tiktok: ["description", "target", "budget", "cpc"],
   twitter: ["subtype", "description", "target", "budget", "cpc"],
 };
 
@@ -93,6 +103,7 @@ const PLATFORM_MENU_KB = {
     [PLATFORM_LABEL.link, PLATFORM_LABEL.telegram],
     [PLATFORM_LABEL.youtube, PLATFORM_LABEL.facebook],
     [PLATFORM_LABEL.instagram, PLATFORM_LABEL.twitter],
+    [PLATFORM_LABEL.tiktok],
     [BACK],
   ],
   resize_keyboard: true,
@@ -107,7 +118,8 @@ type PendingAction =
   | { mode: "create_campaign"; platform: Platform; stepIndex: number; collected: Collected }
   | { mode: "reviewing_campaign"; platform: Platform; collected: Collected };
 
-const TOP_BUTTONS = ["الإعلان", "المحفظة", "الإحالات", "📊 الإحصائيات", "🌐 اللغة", "الأسئلة الشائعة", "سحب"];
+const TOP_BUTTONS = ["الإعلان", "المحفظة", "الإحالات", "📊 الإحصائيات", "🌐 اللغة", "الأسئلة الشائعة", "سحب", "💼 أرباحي"];
+const MIN_CREATOR_WITHDRAWAL = 1;
 
 function fmt(n: number): string {
   return `$${n.toFixed(2)}`;
@@ -221,7 +233,10 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
   }
 
   if (text === "إيداع 💰") {
-    await tgSend(bot.bot_token, chatId, `اشترِ رصيداً (بعد مراجعة يدوية من المالك):\n${depositLink(bot, user.id)}`, { reply_markup: WALLET_KB });
+    const note = process.env.NOWPAYMENTS_API_KEY
+      ? "اختر «الدفع بعملة رقمية» في الصفحة لإضافة الرصيد تلقائياً فور التأكيد، أو التحويل اليدوي إن فضّلت."
+      : "التحويل يُراجع يدوياً قبل إضافة الرصيد.";
+    await tgSend(bot.bot_token, chatId, `أودع رصيداً:\n${depositLink(bot, user.id)}\n${note}`, { reply_markup: WALLET_KB });
     return;
   }
 
@@ -353,6 +368,16 @@ export async function handleAdNetworkUpdate(bot: HostedBot, template: BotTemplat
     return;
   }
 
+  if (text === "💼 أرباحي") {
+    await handleCreatorEarnings(bot, template, user, chatId);
+    return;
+  }
+
+  if (text.startsWith("سحب أرباحي:")) {
+    await handleCreatorWithdrawRequest(bot, template, user, chatId, text);
+    return;
+  }
+
   // Multi-step campaign creation — consumes bot_members.pending_action.
   if (pending?.mode === "create_campaign") {
     const { platform, stepIndex, collected } = pending;
@@ -419,11 +444,33 @@ async function sendWatchList(bot: HostedBot, template: BotTemplate, platform: Pl
   // Per-task cards keep inline buttons on purpose: a reply keyboard button
   // can only send text back, it cannot open an external URL — only an
   // inline button's `url` field can, so this one case stays inline.
+  // Forced global platform ad (owner decision 2026-08-31): roughly 1-in-5
+  // views on this platform shows one unpaid promo for the platform owner's
+  // own channel/service, clearly labeled as such — never disguised as a
+  // normal paid task, and never carrying a reward button since no advertiser
+  // budget backs it.
+  const { data: platformAds } = await db
+    .from("platform_ads")
+    .select("id, platform, description, target")
+    .eq("platform", platform)
+    .eq("is_active", true);
+  const platformAd = platformAds && platformAds.length > 0 && Math.random() < 0.2 ? platformAds[Math.floor(Math.random() * platformAds.length)] : null;
+  if (platformAd) {
+    const desc = platformAd.description ? `\n${platformAd.description}` : "";
+    await tgSend(bot.bot_token, chatId, `🌟 عرض من المنصة${desc}`, {
+      reply_markup: { inline_keyboard: [[{ text: "فتح الرابط", url: platformAd.target }]] },
+    });
+  }
+
+  // Per-task cards keep inline buttons on purpose: a reply keyboard button
+  // can only send text back, it cannot open an external URL — only an
+  // inline button's `url` field can, so this one case stays inline.
   for (const t of tasks) {
     const subLabel = t.sub_type === "retweet" ? " (إعادة تغريد)" : t.sub_type === "follow" ? " (متابعة)" : "";
     const desc = t.description ? `\n${t.description}` : "";
     const isTelegram = t.platform === "telegram";
-    await tgSend(bot.bot_token, chatId, `${PLATFORM_LABEL[platform]}${subLabel}${desc}\nالمكافأة: ${fmt(t.cpc)}`, {
+    const { workerCut } = splitCpc(Number(t.cpc));
+    await tgSend(bot.bot_token, chatId, `${PLATFORM_LABEL[platform]}${subLabel}${desc}\nالمكافأة: ${fmt(workerCut)}`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: isTelegram ? "افتح القناة" : "فتح الرابط", url: isTelegram ? `https://t.me/${t.target.replace(/^@/, "")}` : t.target }],
@@ -435,10 +482,24 @@ async function sendWatchList(bot: HostedBot, template: BotTemplate, platform: Pl
   await sendMenu(bot, template, chatId, "بعد إتمام مهمة اضغط زر التأكيد أسفل بطاقتها. للرجوع للقائمة الرئيسية:");
 }
 
+// Splits cpc into worker/creator/platform cuts. The worker share absorbs
+// the rounding remainder so the three numbers always sum exactly to cpc
+// (e.g. cpc=$0.02 -> worker $0.01, creator $0.004->rounds separately, so we
+// compute creator/platform first, then worker = cpc - creator - platform).
+function splitCpc(cpc: number) {
+  const creatorCut = round2(cpc * CREATOR_SHARE);
+  const platformCut = round2(cpc * PLATFORM_SHARE);
+  const workerCut = round2(cpc - creatorCut - platformCut);
+  return { workerCut, creatorCut, platformCut };
+}
+
 async function completeTask(bot: HostedBot, template: BotTemplate, task: any, user: TgUser, chatId: number, member: any) {
   const db = supabaseAdmin();
   const cpc = Number(task.cpc);
-  const { error: dupError } = await db.from("ad_task_completions").insert({ task_id: task.id, tg_user_id: String(user.id), amount: cpc });
+  const { workerCut, creatorCut, platformCut } = splitCpc(cpc);
+  const { error: dupError } = await db
+    .from("ad_task_completions")
+    .insert({ task_id: task.id, tg_user_id: String(user.id), amount: workerCut, creator_cut: creatorCut, platform_cut: platformCut });
   if (dupError) {
     await sendMenu(bot, template, chatId, "استفدت من هذه المهمة مسبقاً.");
     return;
@@ -448,8 +509,64 @@ async function completeTask(bot: HostedBot, template: BotTemplate, task: any, us
     .from("ad_tasks")
     .update({ budget_remaining: newRemaining, status: newRemaining < cpc ? "exhausted" : task.status })
     .eq("id", task.id);
-  const newPoints = round2(Number(member.points || 0) + cpc);
+  const newPoints = round2(Number(member.points || 0) + workerCut);
   await db.from("bot_members").update({ points: newPoints }).eq("bot_id", bot.id).eq("tg_user_id", String(user.id));
-  await logPointsTx(bot.id, String(user.id), "task_reward", cpc, `${PLATFORM_LABEL[task.platform as Platform]} ${task.target}`);
-  await sendMenu(bot, template, chatId, `أُضيف ${fmt(cpc)}! رصيدك الآن: ${fmt(newPoints)}.`);
+  await logPointsTx(bot.id, String(user.id), "task_reward", workerCut, `${PLATFORM_LABEL[task.platform as Platform]} ${task.target}`);
+
+  const { data: botRow } = await db.from("hosted_bots").select("owner_balance").eq("id", bot.id).maybeSingle();
+  await db.from("hosted_bots").update({ owner_balance: round2(Number(botRow?.owner_balance || 0) + creatorCut) }).eq("id", bot.id);
+
+  const { data: ledger } = await db.from("platform_ledger").select("total_revenue").eq("id", true).maybeSingle();
+  await db.from("platform_ledger").update({ total_revenue: round2(Number(ledger?.total_revenue || 0) + platformCut) }).eq("id", true);
+
+  await sendMenu(bot, template, chatId, `أُضيف ${fmt(workerCut)}! رصيدك الآن: ${fmt(newPoints)}.`);
+}
+
+// Bot creator (tenant owner) earnings — 20% of every completed task's cpc
+// on their bot (owner decision 2026-08-31). Gated the same way the store
+// template gates "متجري": config.creator_tg_id must be set by the creator
+// via BotBuilder/admin and match the Telegram user asking, otherwise the
+// section refuses (unset = no one can withdraw platform funds by accident).
+async function handleCreatorEarnings(bot: HostedBot, template: BotTemplate, user: TgUser, chatId: number) {
+  const creatorId = bot.config?.creator_tg_id ? String(bot.config.creator_tg_id) : null;
+  if (!creatorId) {
+    await sendMenu(bot, template, chatId, "لم يُحدَّد منشئ لهذا البوت بعد. عيّن «آيدي تليجرام لمنشئ البوت» من صفحة إنشاء البوت أو لوحة الإدارة أولاً.");
+    return;
+  }
+  if (creatorId !== String(user.id)) {
+    await sendMenu(bot, template, chatId, "هذا القسم مخصَّص لمنشئ البوت فقط.");
+    return;
+  }
+  const db = supabaseAdmin();
+  const { data: botRow } = await db.from("hosted_bots").select("owner_balance").eq("id", bot.id).maybeSingle();
+  const balance = Number(botRow?.owner_balance || 0);
+  await sendMenu(
+    bot,
+    template,
+    chatId,
+    `💼 أرباحك كمنشئ هذا البوت: ${fmt(balance)}\n(20% من كل نقرة مكتملة على حملات هذا البوت)\n\nللسحب أرسل: سحب أرباحي: المبلغ (الحد الأدنى $${MIN_CREATOR_WITHDRAWAL})`
+  );
+}
+
+async function handleCreatorWithdrawRequest(bot: HostedBot, template: BotTemplate, user: TgUser, chatId: number, text: string) {
+  const creatorId = bot.config?.creator_tg_id ? String(bot.config.creator_tg_id) : null;
+  if (!creatorId || creatorId !== String(user.id)) {
+    await sendMenu(bot, template, chatId, "هذا القسم مخصَّص لمنشئ البوت فقط.");
+    return;
+  }
+  const amount = Number(text.split(":")[1]?.replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(amount) || amount < MIN_CREATOR_WITHDRAWAL) {
+    await sendMenu(bot, template, chatId, `الحد الأدنى للسحب $${MIN_CREATOR_WITHDRAWAL}. الصيغة: سحب أرباحي: المبلغ`);
+    return;
+  }
+  const db = supabaseAdmin();
+  const { data: botRow } = await db.from("hosted_bots").select("owner_balance").eq("id", bot.id).maybeSingle();
+  const balance = Number(botRow?.owner_balance || 0);
+  if (amount > balance) {
+    await sendMenu(bot, template, chatId, `رصيدك ${fmt(balance)} فقط، لا يمكن سحب ${fmt(amount)}.`);
+    return;
+  }
+  await db.from("hosted_bots").update({ owner_balance: round2(balance - amount) }).eq("id", bot.id);
+  await db.from("bot_owner_withdrawals").insert({ bot_id: bot.id, amount: round2(amount), status: "pending" });
+  await sendMenu(bot, template, chatId, `تم إرسال طلب سحب ${fmt(amount)}. سيُراجَع يدوياً من مالك المنصة.`);
 }

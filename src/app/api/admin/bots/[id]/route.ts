@@ -26,5 +26,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     await db.from("hosted_bots").update({ config }).eq("id", bot.id);
     return NextResponse.json({ ok: true, merchant_tg_id: merchantTgId || null });
   }
+  if (action === "set_creator") {
+    const creatorTgId = String(body.creatorTgId || "").trim();
+    const config = { ...(bot.config || {}), creator_tg_id: creatorTgId || null };
+    await db.from("hosted_bots").update({ config }).eq("id", bot.id);
+    return NextResponse.json({ ok: true, creator_tg_id: creatorTgId || null });
+  }
   return NextResponse.json({ error: "إجراء غير معروف" }, { status: 400 });
 }

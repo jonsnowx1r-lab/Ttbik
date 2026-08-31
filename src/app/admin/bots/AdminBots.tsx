@@ -10,6 +10,7 @@ export default function AdminBots() {
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcastBusy, setBroadcastBusy] = useState(false);
   const [merchantInputs, setMerchantInputs] = useState<Record<string, string>>({});
+  const [creatorInputs, setCreatorInputs] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/bots");
@@ -60,6 +61,18 @@ export default function AdminBots() {
     await load();
   }
 
+  async function setCreator(id: string) {
+    const creatorTgId = (creatorInputs[id] || "").trim();
+    const res = await fetch(`/api/admin/bots/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "set_creator", creatorTgId }),
+    });
+    const data = await res.json();
+    setMsg(res.ok ? "تم تحديد منشئ البوت" : data.error || "فشل");
+    await load();
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="mb-6 flex items-center justify-between gap-3">
@@ -98,6 +111,18 @@ export default function AdminBots() {
                   <Link href={`/admin/bots/${b.id}/withdrawals`} className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs text-white">
                     طلبات السحب
                   </Link>
+                  <span className="flex items-center gap-1 rounded-xl bg-slate-100 px-2 py-1 text-xs">
+                    <input
+                      value={creatorInputs[b.id] ?? b.config?.creator_tg_id ?? ""}
+                      onChange={(e) => setCreatorInputs((m) => ({ ...m, [b.id]: e.target.value }))}
+                      placeholder="آيدي منشئ البوت"
+                      className="w-32 rounded-lg border border-slate-300 px-2 py-1 font-mono text-xs"
+                    />
+                    <button onClick={() => setCreator(b.id)} className="rounded-lg bg-slate-700 px-2 py-1 text-white">
+                      حفظ
+                    </button>
+                  </span>
+                  <span className="rounded-xl bg-slate-100 px-2 py-1.5 text-xs text-slate-600">عمولة: ${Number(b.owner_balance || 0).toFixed(2)}</span>
                 </>
               )}
               {b.template_type === "store" && (

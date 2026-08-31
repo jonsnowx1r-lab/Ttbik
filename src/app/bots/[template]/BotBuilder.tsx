@@ -23,6 +23,7 @@ export default function BotBuilder({
     template.id === "clinic" ? "استشارة عامة\nفحص دوري" : "منتج تجريبي — 10 نقاط"
   );
   const [merchantTgId, setMerchantTgId] = useState("");
+  const [creatorTgId, setCreatorTgId] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [botLink, setBotLink] = useState<string | null>(null);
@@ -58,6 +59,7 @@ export default function BotBuilder({
           currencyName: currencyName.trim() || template.defaults.currencyName,
           products: template.id === "store" || template.id === "clinic" ? products : "",
           merchantTgId: template.id === "store" ? merchantTgId.trim() : undefined,
+          creatorTgId: template.id === "ad-network" ? creatorTgId.trim() : undefined,
         }),
       });
       const data = await res.json();
@@ -131,6 +133,26 @@ export default function BotBuilder({
             ) : (
               <p className="mt-1 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
                 بدون آيدي تاجر البوت يبقى في وضع اختبار — أي عضو يستطيع إدارة المتجر. عيّن آيدي حقيقي قبل الإطلاق العام.
+              </p>
+            )}
+          </div>
+        )}
+        {template.id === "ad-network" && (
+          <div>
+            <label className="text-sm font-bold">آيدي تليجرام لمنشئ البوت (اختياري)</label>
+            <input
+              value={creatorTgId}
+              onChange={(e) => setCreatorTgId(e.target.value.replace(/\D/g, ""))}
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm font-mono"
+              placeholder="123456789"
+            />
+            {creatorTgId.trim() ? (
+              <p className="mt-1 text-xs text-emerald-700">
+                فقط هذا الحساب يستطيع فتح «💼 أرباحي» وطلب سحب عمولتك (20% من كل مهمة مكتملة). يُغيَّر لاحقاً من لوحة الإدارة.
+              </p>
+            ) : (
+              <p className="mt-1 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+                بدون آيدي منشئ، عمولتك تتراكم لكن لا يمكن لأحد سحبها حتى تعيّنه. عيّنه الآن أو لاحقاً من لوحة الإدارة.
               </p>
             )}
           </div>

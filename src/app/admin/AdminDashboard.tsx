@@ -46,9 +46,14 @@ export default function AdminDashboard() {
         <h1 className="text-xl font-extrabold text-slate-900">
           لوحة التحكم — {pending.length} طلب بانتظار المراجعة
         </h1>
-        <Link href="/admin/bots" className="rounded-full bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900">
-          البوتات المستضافة
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/admin/platform" className="rounded-full bg-indigo-700 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-800">
+            لوحة المالك الأكبر
+          </Link>
+          <Link href="/admin/bots" className="rounded-full bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900">
+            البوتات المستضافة
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-4">

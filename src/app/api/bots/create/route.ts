@@ -107,6 +107,11 @@ export async function POST(req: NextRequest) {
     const mid = String(body.merchantTgId || "").replace(/\D/g, "").trim();
     if (mid) config.merchant_tg_id = mid;
   }
+  // ad-network creator identity gate for "💼 أرباحي" (optional at create)
+  if (template.id === "ad-network") {
+    const cid = String(body.creatorTgId || "").replace(/\D/g, "").trim();
+    if (cid) config.creator_tg_id = cid;
+  }
 
   const row = {
     public_code: publicCode,

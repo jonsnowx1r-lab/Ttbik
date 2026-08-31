@@ -216,6 +216,62 @@ create table if not exists public.facility_bookings (
   created_at timestamptz not null default now()
 );
 
+-- Real automated crypto deposits via NOWPayments (owner decision 2026-08-31:
+-- proceeding with a real multi-chain custodial wallet). external_id stores
+-- the NOWPayments invoice/payment id so the IPN webhook can be replayed
+-- safely without crediting the same deposit twice — Telegram-style webhooks
+-- are not guaranteed exactly-once, and NOWPayments' IPN is no exception.
+alter table public.bot_wallet_tx add column if not exists external_id text;
+create unique index if not exists bot_wallet_tx_external_id_key on public.bot_wallet_tx (external_id) where external_id is not null;
+
+-- Multi-tenant revenue-split model (owner decision 2026-08-31, after
+-- reviewing an external architecture proposal): every completed ad-network
+-- task now splits its cpc three ways instead of paying the worker 100% —
+-- 50% worker / 20% bot creator / 30% platform. owner_balance is the bot
+-- creator's withdrawable commission; platform_ledger is a single informational
+-- row tracking the platform's cut (not a real custodial balance — the real
+-- money already sits in the owner's own payment-processor account from every
+-- deposit, this is just a running total for the admin stats dashboard).
+alter table public.hosted_bots add column if not exists owner_balance numeric not null default 0;
+alter table public.ad_task_completions add column if not exists creator_cut numeric not null default 0;
+alter table public.ad_task_completions add column if not exists platform_cut numeric not null default 0;
+
+create table if not exists public.platform_ledger (
+  id boolean primary key default true,
+  total_revenue numeric not null default 0,
+  constraint platform_ledger_single_row check (id)
+);
+insert into public.platform_ledger (id, total_revenue) values (true, 0) on conflict (id) do nothing;
+
+-- Bot creator commission withdrawal requests — mirrors bot_wallet_tx's
+-- pending/approved/rejected pattern but scoped to hosted_bots.owner_balance
+-- (a bot creator's earnings) instead of an individual bot_members row.
+create table if not exists public.bot_owner_withdrawals (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.hosted_bots(id) on delete cascade,
+  amount numeric not null,
+  status text not null default 'pending', -- pending | approved | rejected
+  payout_address text,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+-- Super Admin's own forced global ads, shown across every tenant bot's
+-- "شاهد إعلان" listing (owner decision 2026-08-31). These are unpaid
+-- promotional insertions for the platform owner's own channel/service, not
+-- real paid campaigns — there is no advertiser budget behind them, so no
+-- reward is paid out for viewing one (paying a fake reward with no funding
+-- source would just be inventing money); they're clearly labeled as a
+-- platform promotion, never disguised as a normal paid task.
+create table if not exists public.platform_ads (
+  id uuid primary key default gen_random_uuid(),
+  platform text not null,
+  description text,
+  target text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
 alter table public.hosted_bots enable row level security;
 alter table public.bot_members enable row level security;
 alter table public.bot_wallet_tx enable row level security;
@@ -230,6 +286,9 @@ alter table public.facility_shifts enable row level security;
 alter table public.facility_bookings enable row level security;
 alter table public.ad_tasks enable row level security;
 alter table public.ad_task_completions enable row level security;
+alter table public.platform_ledger enable row level security;
+alter table public.bot_owner_withdrawals enable row level security;
+alter table public.platform_ads enable row level security;
 
 -- Same lesson as earlier in this project: RLS alone does not grant access.
 -- These tables were created via SQL Editor, so service_role (used by every
@@ -241,7 +300,8 @@ grant select, insert, update, delete on
   public.bot_ads, public.bot_appointments, public.bot_ad_views,
   public.store_products, public.marketplace_listings,
   public.locations, public.medical_facilities, public.facility_shifts, public.facility_bookings,
-  public.ad_tasks, public.ad_task_completions
+  public.ad_tasks, public.ad_task_completions,
+  public.platform_ledger, public.bot_owner_withdrawals, public.platform_ads
 to service_role;
 
 -- Purchasable service unlocking access to /bots (the hosted-bot builder).
