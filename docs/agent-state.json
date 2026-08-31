@@ -3,7 +3,7 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5474059563,
   "last_actor": "grok",
-  "updated_at": "2026-08-31T05:17:00Z",
+  "updated_at": "2026-08-31T05:20:00Z",
   "mode": "work-cycle",
   "open": [
     "store bot merchant-identity gate — create form accepts optional merchant_tg_id; admin UI exists; engine gate active. Still must set a real merchant_tg_id per store bot before any public launch.",
@@ -42,6 +42,7 @@
     "BotBuilder success UI: direct t.me open link after launch (a5d29e0)",
     "BotBuilder client-side token format validation before create (75bbd00)",
     "BotBuilder success UI: one-click copy public_code (0fc344f)",
-    "BotBuilder success UI: store test-mode warning when launched without merchant_tg_id (1e81c03)"
+    "BotBuilder success UI: store test-mode warning when launched without merchant_tg_id (1e81c03)",
+    "BotBuilder: store/clinic initial products-services list clarified as optional — can manage later from bot/admin (e985afd)"
   ]
 }
