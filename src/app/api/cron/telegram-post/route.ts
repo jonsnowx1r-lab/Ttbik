@@ -42,17 +42,31 @@ async function getPaidTopics(): Promise<{ name: string; url: string }[]> {
   }
 }
 
-type BotPromo = { label: string; intro: string; price: string; botLink: string };
+type BotPromo = { label: string; intro: string; price: string; botLink: string; cta: string };
 
 // AD_BOT/MARRIAGE_BOT are never sold or self-served on the website — manual
 // price/payment/approval only (docs/AGENT_BUS.md Product rules, owner
 // directive 2026-09-03). Offered here purely as awareness, and only once
-// the owner has actually set a live demo-bot username + a public admin
-// contact; silently skipped otherwise so this route never errors or posts
-// a link that doesn't exist.
+// the owner has set the right username(s); silently skipped otherwise so
+// this route never errors or posts a link that doesn't exist.
+//
+// The two templates route "I want to buy one" completely differently —
+// this is NOT the channel's own posting bot (TELEGRAM_BOT_TOKEN, which
+// just sends this cron's messages and runs no AD_BOT/MARRIAGE_BOT
+// template logic at all):
+// - AD_BOT already has a self-serve purchase flow built into every AD_BOT
+//   instance (src/lib/adBotLogic.ts's "أريد بوتاً مماثلاً" button → $100
+//   bank-transfer flow → owner's manual approval). PROMO_AD_BOT_USERNAME
+//   must be the @username of an AD_BOT-template bot the owner already has
+//   running (e.g. their own admin/management instance) — the promo post
+//   just points there and tells people to tap that button; no separate
+//   contact link needed.
+// - MARRIAGE_BOT has no such in-bot flow (src/lib/matchBotLogic.ts never
+//   offers it) — a MARRIAGE_BOT promo therefore ALSO needs
+//   ADMIN_CONTACT_USERNAME (the owner's own personal Telegram username) as
+//   the only way to actually reach someone about it, so both must be set
+//   together or this promo type is skipped.
 function getBotPromos(): BotPromo[] {
-  const admin = process.env.ADMIN_CONTACT_USERNAME;
-  if (!admin) return [];
   const promos: BotPromo[] = [];
   if (process.env.PROMO_AD_BOT_USERNAME) {
     promos.push({
@@ -60,14 +74,16 @@ function getBotPromos(): BotPromo[] {
       intro: "📢 عندك قناة أو مجموعة على تليجرام؟ فعّل بوت إعلانات ومهام خاصاً بك يوزّع أرباح المشاهدة تلقائياً بين المستخدمين والمنصة.",
       price: "100$ (تحويل بنكي)",
       botLink: `https://t.me/${process.env.PROMO_AD_BOT_USERNAME}`,
+      cta: "التفعيل يتم يدوياً فقط: افتح البوت واضغط زر «أريد بوتاً مماثلاً» من القائمة، ثم اتبع الخطوات — لا تفعيل تلقائي ولا كود مجاني.",
     });
   }
-  if (process.env.PROMO_MARRIAGE_BOT_USERNAME) {
+  if (process.env.PROMO_MARRIAGE_BOT_USERNAME && process.env.ADMIN_CONTACT_USERNAME) {
     promos.push({
       label: "بوت التعارف والزواج الشرعي",
       intro: "💍 منصة تعارف وزواج شرعي كاملة، كبوت تليجرام خاص بك تديره بنفسك.",
       price: "حسب الاتفاق مع الإدارة",
       botLink: `https://t.me/${process.env.PROMO_MARRIAGE_BOT_USERNAME}`,
+      cta: `هذا القالب لا يُفعَّل من داخل البوت — للشراء والتفاصيل تواصل مباشرة: https://t.me/${process.env.ADMIN_CONTACT_USERNAME}`,
     });
   }
   return promos;
@@ -81,10 +97,11 @@ async function writeGenericPost(topic: { name: string; url: string }): Promise<s
   }
 }
 
-// Price and the admin contact link are fixed here, never left to the AI —
-// a wrong price or a missing/garbled admin link in a public channel post
-// is the one mistake this route must never make. Groq only writes the
-// opening hook line; if it fails, the default intro line is used instead.
+// Price and the CTA (bot button vs. personal contact — see getBotPromos)
+// are fixed here, never left to the AI — a wrong price or a broken/missing
+// link in a public channel post is the one mistake this route must never
+// make. Groq only writes the opening hook line; if it fails, the default
+// intro line is used instead.
 async function buildBotPromoText(promo: BotPromo): Promise<string> {
   let hook = promo.intro;
   try {
@@ -96,8 +113,7 @@ async function buildBotPromoText(promo: BotPromo): Promise<string> {
   } catch {
     // keep default intro
   }
-  const admin = process.env.ADMIN_CONTACT_USERNAME;
-  return `${hook}\n\n🔗 جرّب نموذجاً حياً هنا: ${promo.botLink}\n💰 السعر: ${promo.price} — التفعيل والدفع يتمّان يدوياً فقط عبر التواصل المباشر مع الإدارة، لا تفعيل تلقائي على الموقع ولا كود مجاني.\n👤 للشراء والتفاصيل: https://t.me/${admin}`;
+  return `${hook}\n\n🔗 هنا: ${promo.botLink}\n💰 السعر: ${promo.price}\n${promo.cta}`;
 }
 
 export async function GET(req: NextRequest) {
