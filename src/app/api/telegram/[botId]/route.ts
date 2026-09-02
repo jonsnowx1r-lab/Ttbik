@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bot as TelegramBot } from "grammy";
 import { prisma } from "@/lib/prisma";
 import { handleAdBotUpdate } from "@/lib/adBotLogic";
+import { handleMarriageBotUpdate } from "@/lib/matchBotLogic";
 
 export async function POST(req: NextRequest, { params }: { params: { botId: string } }) {
   try {
@@ -20,6 +21,8 @@ export async function POST(req: NextRequest, { params }: { params: { botId: stri
     if (body) {
       if (botRow.template === "AD_BOT") {
         await handleAdBotUpdate(bot, botRow, body);
+      } else if (botRow.template === "MARRIAGE_BOT") {
+        await handleMarriageBotUpdate(bot, botRow, body);
       } else {
         // STORE / HOSPITAL: the owner's blueprint only ever specified AD_BOT
         // logic in detail — these templates get a minimal working /start so

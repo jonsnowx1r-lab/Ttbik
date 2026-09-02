@@ -7,6 +7,7 @@ export default function BotsDeployPage() {
   const [template, setTemplate] = useState("AD_BOT");
   const [ownerId, setOwnerId] = useState("");
   const [activationCode, setActivationCode] = useState("");
+  const [password, setPassword] = useState("");
   const [ref, setRef] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +27,7 @@ export default function BotsDeployPage() {
       const res = await fetch("/api/bots/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, template, ownerId, ref: ref || undefined, activationCode: activationCode || undefined }),
+        body: JSON.stringify({ token, template, ownerId, ref: ref || undefined, activationCode: activationCode || undefined, password: password || undefined }),
       });
 
       const data = await res.json();
@@ -74,25 +75,39 @@ export default function BotsDeployPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium">كود التفعيل</label>
-          <input
-            type="text"
-            required
-            value={activationCode}
-            onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
-            placeholder="احصل عليه من داخل أي بوت على المنصة عبر زر «أريد بوتاً مماثلاً»"
-            className="w-full rounded border p-2 font-mono text-sm text-black"
-          />
-          <p className="mt-1 text-xs text-gray-500">مرتبط بآيدي المالك الذي أدخلته أعلاه تحديداً — لا يعمل مع آيدي آخر.</p>
-        </div>
-        <div>
           <label className="mb-1 block text-sm font-medium">اختر قالب البوت</label>
           <select value={template} onChange={(e) => setTemplate(e.target.value)} className="w-full rounded border bg-white p-2 text-black">
             <option value="AD_BOT">بوت الإعلانات والمهام</option>
             <option value="STORE">بوت متجر إلكتروني</option>
             <option value="HOSPITAL">بوت المشافي والمواعيد</option>
+            <option value="MARRIAGE_BOT">بوت التعارف والزواج الشرعي</option>
           </select>
         </div>
+        {template === "MARRIAGE_BOT" ? (
+          <div>
+            <label className="mb-1 block text-sm font-medium">كلمة السر</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded border p-2 font-mono text-sm text-black"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="mb-1 block text-sm font-medium">كود التفعيل</label>
+            <input
+              type="text"
+              required
+              value={activationCode}
+              onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
+              placeholder="احصل عليه من داخل أي بوت على المنصة عبر زر «أريد بوتاً مماثلاً»"
+              className="w-full rounded border p-2 font-mono text-sm text-black"
+            />
+            <p className="mt-1 text-xs text-gray-500">مرتبط بآيدي المالك الذي أدخلته أعلاه تحديداً — لا يعمل مع آيدي آخر.</p>
+          </div>
+        )}
         <button type="submit" disabled={loading} className="w-full rounded bg-blue-600 py-2 font-bold text-white hover:bg-blue-700 disabled:opacity-50">
           {loading ? "جاري ربط وتفعيل البوت..." : "تفعيل البوت على تلجرام فوراً"}
         </button>

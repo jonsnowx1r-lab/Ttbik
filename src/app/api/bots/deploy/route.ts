@@ -5,28 +5,41 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, template, ownerId, ref, activationCode } = await req.json();
+    const { token, template, ownerId, ref, activationCode, password } = await req.json();
 
-    // Gate on a paid, admin-approved activation code (owner spec,
-    // 2026-08-31) — /bots was previously open to anyone with a token and an
-    // ID, letting every bot user turn themselves into a "creator" for
-    // free. The code is minted only once السوبر أدمن approves a $100
-    // bank-transfer request (see decideBotPurchase in adBotLogic.ts) and is
-    // tied to that specific buyer's Telegram ID, so it can't be reused for
-    // someone else's ownerId or for a second bot. The platform owner
-    // themself is exempt — they approve their own codes anyway.
-    const isSuperAdmin = process.env.SUPER_ADMIN_TELEGRAM_ID && String(ownerId) === process.env.SUPER_ADMIN_TELEGRAM_ID;
+    // MARRIAGE_BOT (owner spec, 2026-09-02): a separate, simple static-
+    // password gate — deliberately NOT the AD_BOT's paid activation-code/
+    // BotPurchase system, which only makes sense for the ad-network's
+    // sell-activation-codes-to-third-party-creators model. This template
+    // isn't sold to third parties (yet), so a single password set by the
+    // owner in MARRIAGE_BOT_CREATOR_PASSWORD is all it needs.
     let purchase: { id: string } | null = null;
-    if (!isSuperAdmin) {
-      const code = String(activationCode || "").trim().toUpperCase();
-      if (!code) {
-        return NextResponse.json({ success: false, error: "كود التفعيل مطلوب. اطلبه من داخل أي بوت على المنصة عبر زر «أريد بوتاً مماثلاً»." }, { status: 400 });
+    if (template === "MARRIAGE_BOT") {
+      const expected = process.env.MARRIAGE_BOT_CREATOR_PASSWORD;
+      if (!expected || String(password || "") !== expected) {
+        return NextResponse.json({ success: false, error: "كلمة السر غير صحيحة." }, { status: 400 });
       }
-      const found = await prisma.botPurchase.findUnique({ where: { code } });
-      if (!found || found.status !== "APPROVED" || found.buyerId !== String(ownerId)) {
-        return NextResponse.json({ success: false, error: "كود التفعيل غير صالح أو غير مطابق لآيدي المالك المُدخل." }, { status: 400 });
+    } else {
+      // Gate on a paid, admin-approved activation code (owner spec,
+      // 2026-08-31) — /bots was previously open to anyone with a token and
+      // an ID, letting every bot user turn themselves into a "creator" for
+      // free. The code is minted only once السوبر أدمن approves a $100
+      // bank-transfer request (see decideBotPurchase in adBotLogic.ts) and
+      // is tied to that specific buyer's Telegram ID, so it can't be reused
+      // for someone else's ownerId or for a second bot. The platform owner
+      // themself is exempt — they approve their own codes anyway.
+      const isSuperAdmin = process.env.SUPER_ADMIN_TELEGRAM_ID && String(ownerId) === process.env.SUPER_ADMIN_TELEGRAM_ID;
+      if (!isSuperAdmin) {
+        const code = String(activationCode || "").trim().toUpperCase();
+        if (!code) {
+          return NextResponse.json({ success: false, error: "كود التفعيل مطلوب. اطلبه من داخل أي بوت على المنصة عبر زر «أريد بوتاً مماثلاً»." }, { status: 400 });
+        }
+        const found = await prisma.botPurchase.findUnique({ where: { code } });
+        if (!found || found.status !== "APPROVED" || found.buyerId !== String(ownerId)) {
+          return NextResponse.json({ success: false, error: "كود التفعيل غير صالح أو غير مطابق لآيدي المالك المُدخل." }, { status: 400 });
+        }
+        purchase = found;
       }
-      purchase = found;
     }
 
     const tempBot = new Bot(token);
