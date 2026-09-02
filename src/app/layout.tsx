@@ -50,7 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <a href="/" className="flex shrink-0 items-center gap-2 text-lg font-extrabold text-brand-800">
               <Logo className="h-7 w-7" /> سوق تولز
             </a>
-            <nav className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm font-semibold text-slate-600 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm font-semibold text-slate-600 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <a href="/#categories" className="rounded-full px-3 py-1.5 transition hover:bg-brand-50 hover:text-brand-700">
                 الأقسام
               </a>
@@ -66,13 +66,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/order/lookup" className="rounded-full px-3 py-1.5 transition hover:bg-brand-50 hover:text-brand-700">
                 تتبع طلبي
               </a>
-              <a
-                href="/admin"
-                className="mr-1 shrink-0 rounded-full bg-brand-700 px-3.5 py-1.5 text-white transition hover:bg-brand-800"
-              >
-                {isOwner ? "لوحة التحكم" : "دخول المالك"}
-              </a>
             </nav>
+            {/* Deliberately OUTSIDE the scrollable nav above — this button
+                (admin login / dashboard access) was getting scrolled out of
+                view entirely on narrow mobile screens, with no visible
+                affordance that the nav even scrolls. Pinned here so it's
+                always reachable without swiping. */}
+            <a
+              href="/admin"
+              className="shrink-0 rounded-full bg-brand-700 px-3.5 py-1.5 text-sm font-bold text-white transition hover:bg-brand-800"
+            >
+              {isOwner ? "لوحة التحكم" : "دخول المالك"}
+            </a>
           </div>
         </header>
         <div className="mx-auto max-w-6xl px-4 py-2">
