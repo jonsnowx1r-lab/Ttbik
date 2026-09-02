@@ -9,6 +9,12 @@ export const metadata: Metadata = {
   title: "سوق تولز — سوق الخدمات الرقمية المصغّرة",
   description:
     "سوق تولز: منصة لبيع خدمات وأدوات رقمية جاهزة (بوتات، أدوات ذكاء اصطناعي، أتمتة) بأسعار رمزية وتسليم فوري.",
+  other: {
+    // Monetag (3nbf4.com) site-ownership verification — meta-tag method,
+    // an alternative to the sw_1.js service-worker file also present at
+    // the site root. Do not remove; required for the ad network's checks.
+    monetag: "36da4061f0ef04286fa5040bef5547dc",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
