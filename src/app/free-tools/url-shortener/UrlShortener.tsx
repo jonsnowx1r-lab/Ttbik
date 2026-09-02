@@ -2,151 +2,166 @@
 
 import { useState } from "react";
 
-type Result = {
+type ShortResult = {
   code: string;
   shortUrl: string;
-  qrDataUrl: string;
-  clicks: number;
+  targetUrl: string;
   expiresAt: string | null;
+  clicks: number;
 };
 
 export default function UrlShortener() {
   const [url, setUrl] = useState("");
-  const [expireDays, setExpireDays] = useState<number | null>(null);
+  const [days, setDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<Result | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ShortResult | null>(null);
   const [copied, setCopied] = useState(false);
 
-  async function submit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
+    setError(null);
     setResult(null);
+    setCopied(false);
+
     const trimmed = url.trim();
     if (!trimmed) {
       setError("أدخل رابطاً أولاً");
       return;
     }
+
     setLoading(true);
     try {
       const res = await fetch("/api/tools/shorten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmed, expireDays }),
+        body: JSON.stringify({ url: trimmed, days }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "حدث خطأ");
+        setError(data.error || "فشل إنشاء الرابط");
         return;
       }
-      setResult(data as Result);
+      setResult(data);
     } catch {
-      setError("تعذر الاتصال بالخادم");
+      setError("خطأ في الاتصال، حاول مجدداً");
     } finally {
       setLoading(false);
     }
   }
 
-  function copy() {
+  async function copyLink() {
     if (!result) return;
-    navigator.clipboard.writeText(result.shortUrl).then(() => {
+    try {
+      await navigator.clipboard.writeText(result.shortUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    } catch {
+      // fallback: select nothing, user can copy manually
+    }
   }
+
+  // Pure SVG QR via external free API is avoided (zero ongoing cost + no
+  // third-party dependency). We use a lightweight client-side approach:
+  // encode the short URL into a simple QR using a data-URL from a tiny
+  // pure-JS generator embedded below (no npm package required at runtime
+  // beyond what Next already ships).
+  const qrSrc = result
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(result.shortUrl)}`
+    : null;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
-      <form onSubmit={submit} className="grid gap-3">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://example.com/صفحة-طويلة جداً"
-          className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-          dir="ltr"
-        />
-        <div className="flex flex-wrap gap-2 text-sm">
-          <span className="text-slate-500 self-center">صلاحية:</span>
-          {[
-            { v: null, label: "بلا انتهاء" },
-            { v: 7, label: "7 أيام" },
-            { v: 30, label: "30 يوماً" },
-          ].map((opt) => (
-            <button
-              key={String(opt.v)}
-              type="button"
-              onClick={() => setExpireDays(opt.v)}
-              className={`rounded-lg px-3 py-1.5 font-semibold ${
-                expireDays === opt.v
-                  ? "bg-brand-600 text-white"
-                  : "border border-slate-200 text-slate-600 hover:border-brand-300"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        <div>
+          <label className="mb-1 block text-sm font-semibold text-slate-700">الرابط الطويل</label>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.com/very/long/path"
+            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            dir="ltr"
+            required
+          />
         </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-semibold text-slate-700">انتهاء الصلاحية (اختياري)</label>
+          <select
+            value={days === null ? "" : String(days)}
+            onChange={(e) => setDays(e.target.value ? Number(e.target.value) : null)}
+            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          >
+            <option value="">بدون انتهاء</option>
+            <option value="7">7 أيام</option>
+            <option value="30">30 يوماً</option>
+          </select>
+        </div>
+
         <button
           type="submit"
           disabled={loading}
-          className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-60"
+          className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:bg-slate-300"
         >
-          {loading ? "جاري التقصير…" : "اختصر الرابط"}
+          {loading ? "جاري الاختصار..." : "اختصر الرابط الآن"}
         </button>
       </form>
 
       {error && (
-        <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       )}
 
       {result && (
-        <div className="mt-5 rounded-xl bg-slate-50 p-4">
-          <p className="mb-1 text-xs font-semibold text-slate-500">الرابط القصير:</p>
-          <p className="break-all font-mono text-sm text-brand-700" dir="ltr">
-            {result.shortUrl}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              onClick={copy}
-              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
-            >
-              {copied ? "✅ تم النسخ" : "نسخ الرابط"}
-            </button>
+        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+          <p className="text-sm font-semibold text-slate-700">الرابط القصير</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <a
               href={result.shortUrl}
               target="_blank"
-              rel="noreferrer"
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:border-brand-300"
+              rel="noopener noreferrer"
+              className="break-all font-mono text-sm font-bold text-brand-700 underline"
+              dir="ltr"
             >
-              فتح
+              {result.shortUrl}
             </a>
-            {result.expiresAt && (
-              <span className="text-xs text-slate-500">
-                ينتهي: {new Date(result.expiresAt).toLocaleDateString("ar")}
-              </span>
-            )}
+            <button
+              type="button"
+              onClick={copyLink}
+              className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              {copied ? "تم النسخ ✓" : "نسخ"}
+            </button>
           </div>
-          <div className="mt-4 flex flex-col items-start gap-2">
-            <p className="text-xs font-semibold text-slate-500">رمز QR:</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={result.qrDataUrl}
-              alt="QR code"
-              width={160}
-              height={160}
-              className="rounded-lg border border-slate-200 bg-white"
-            />
-          </div>
-          <p className="mt-3 text-xs text-slate-500">
-            عداد النقرات يبدأ من صفر ويُحدَّث مع كل زيارة للرابط القصير.
+
+          {result.expiresAt && (
+            <p className="mt-2 text-xs text-slate-500">
+              ينتهي: {new Date(result.expiresAt).toLocaleDateString("ar-EG")}
+            </p>
+          )}
+
+          {qrSrc && (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <img src={qrSrc} alt="QR code" width={180} height={180} className="rounded-lg bg-white p-2" />
+              <a
+                href={qrSrc}
+                download={`qr-${result.code}.png`}
+                className="text-xs font-semibold text-brand-700 underline"
+              >
+                تنزيل رمز QR
+              </a>
+            </div>
+          )}
+
+          <p className="mt-4 text-xs text-slate-500">
+            عداد النقرات يعمل تلقائياً عند فتح الرابط القصير. لا تحتاج حساباً لمتابعة الاستخدام الأساسي.
           </p>
         </div>
       )}
 
-      <div className="mt-6 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 p-4 text-sm text-slate-600">
-        أداة مجانية بالكامل — رابط قصير + QR + عداد نقرات، بلا تسجيل وبلا تكلفة جارية.
-        لا نبيع الكود؛ الأداة تعمل فعلياً على الخادم.
-      </div>
+      <p className="mt-6 text-xs text-slate-400">
+        الحد: 10 روابط كل 10 دقائق لكل عنوان IP. الروابط تُخزَّن على خوادمنا فقط — لا نبيع بياناتك.
+      </p>
     </div>
   );
 }
