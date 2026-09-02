@@ -69,3 +69,62 @@ new Prisma models, only ADD a sibling branch to the shared dispatcher files
 first before touching any shared file.
 
 Status: done (item 1 shipped a3e266984b204cb6673e2f9da8fab698ffa37f3a)
+
+## O2 — 2026-09-04 — Add the site's ad slot to your 3 pages (owner directive)
+
+Small, purely additive task — no schema change, no logic change, just one
+ad placement per page. The owner activated real Adsterra ad codes across
+the site (header, footer, most free-tools pages, service pages, etc.) and
+wants your ShortLink/DigitalCard pages included too. This is explicitly
+owner-authorized to touch your files — normally Claude wouldn't edit your
+territory without asking, but the owner asked directly for this one.
+
+### Add exactly this, once, to each of these 3 files
+```tsx
+import AdSlot from "@/components/AdSlot";
+// ...
+<AdSlot position="in-content" label="<a short Arabic label describing where this is>" />
+```
+- `src/app/free-tools/digital-card/page.tsx` — place it right after the
+  `<DigitalCardForm />` block, same pattern as
+  `src/app/free-tools/image-optimizer/page.tsx` already uses (read that
+  file for the exact reference pattern).
+- `src/app/free-tools/url-shortener/page.tsx` — same idea, right after
+  `<UrlShortener />`.
+- `src/app/c/[slug]/page.tsx` — **place it OUTSIDE and below the card's own
+  rounded-border container**, near/after the existing "أنشئ بطاقتك المجانية
+  على سوق تولز" attribution line at the very bottom — never inside the
+  card's own styled box. This page renders someone else's personal/business
+  card publicly; the ad must never look like it's part of that person's own
+  content or something they added themselves.
+
+### Warnings — read before touching anything, to avoid breaking the build
+1. **`AdSlot` is a Server Component** (it reads a cookie via `next/headers`
+   internally). A Client Component (`"use client"`) can render `<AdSlot />`
+   only if it receives it already-built as a prop from a Server Component
+   parent — it can NOT `import AdSlot from "@/components/AdSlot"` directly
+   inside a `"use client"` file; that fails the Next.js build (not just
+   `tsc`, so run `npm run build`, not only the typecheck, before pushing).
+   All 3 files above are plain Server Component pages (no `"use client"` at
+   the top), so a direct import works fine there — this warning only
+   matters if you end up wanting the ad inside `DigitalCardForm.tsx` or
+   `UrlShortener.tsx` themselves (both client components) instead of their
+   parent `page.tsx`. If so, pass it down as a prop the way
+   `src/app/bots/page.tsx` → `BotsDeployForm.tsx` does — read that pair as
+   the reference for the prop-passing pattern.
+2. **Do not modify** `src/components/AdSlot.tsx`, `AdsterraSlot.tsx`,
+   `AdsterraBanner.tsx`, `AdsterraNative.tsx`, or `src/lib/categoryTheme.ts`
+   — shared ad infra, Claude-owned. Import and use `AdSlot` exactly as
+   shown; nothing there needs changing for this task.
+3. **`position` must be exactly** `"header-banner"`, `"in-content"`, or
+   `"footer-banner"` — those are the only 3 keys wired to a real ad unit.
+   Any other string silently renders nothing to real visitors (only an
+   owner-only dashed placeholder), with no error to warn you.
+4. No new env var, no new dependency — the ad network is already fully
+   live elsewhere on the site (you can see it working today on
+   `/free-tools/image-optimizer` or the site header/footer).
+5. Purely additive — must not change any ShortLink/DigitalCard schema,
+   API route, or existing behavior. `npx tsc --noEmit` clean and
+   `npm run build` green before pushing, same as always.
+
+Status: open

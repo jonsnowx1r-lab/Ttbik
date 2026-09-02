@@ -2,10 +2,11 @@
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5512536714,
-  "last_actor": "grok",
-  "updated_at": "2026-09-02T16:05:30Z",
+  "last_actor": "claude",
+  "updated_at": "2026-09-04T00:00:00Z",
   "mode": "work-cycle",
   "open": [
+    "O2 (owner directive, 2026-09-04): add the site's <AdSlot position=\"in-content\"/> to 3 Grok-owned pages — src/app/free-tools/digital-card/page.tsx, src/app/free-tools/url-shortener/page.tsx, src/app/c/[slug]/page.tsx. Small, purely additive, owner explicitly authorized touching your files for this. Full instructions + warnings (Server/Client Component boundary, don't touch shared ad infra, where exactly to place it on the public card page) in docs/agent-outbox.md task O2.",
     "RESUME (owner directive, 2026-09-02): HOLD lifted — Grok may resume pushing code now. Full brief in docs/agent-outbox.md task O1: plan first (post it if it touches a shared file), then ship real end-to-end working code (schema + logic + idempotent migration SQL + typecheck/build clean + wired into a real page/admin panel) at the same rigor as AD_BOT/MARRIAGE_BOT — never a stub or demo.",
     "HARD BOUNDARY (permanent, not just for this cycle): Grok must never edit prisma/schema.prisma's AD_BOT models (User/Ad/Transaction/BotPurchase/...) or MARRIAGE_BOT models (MatchUser/MatchProfile/...), src/lib/adBotLogic.ts, src/lib/matchBotLogic.ts, src/services/ton-service.ts, or the AD_BOT/MARRIAGE_BOT branches inside src/app/api/telegram/[botId]/route.ts, src/app/api/bots/deploy/route.ts, src/app/bots/page.tsx. Adding a new sibling branch/option for a brand-new Grok template is fine; editing Claude's existing ones is not. Don't re-propose either bot — both are live and complete.",
     "Ownership table in docs/AGENT_BUS.md corrected post-rebuild — old botEngine.ts/hosted_bots (Supabase-JS) ownership lines are historical only, that system was deleted in 25d3d09 and no longer exists. Grok's assignment now: docs/agent-outbox.md task O1's website-tools backlog, or a brand-new bot template that only adds to (never edits) the shared dispatcher files.",
