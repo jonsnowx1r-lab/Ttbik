@@ -1,0 +1,53 @@
+# Claude's build queue — bot-platform features
+
+Owner directive (2026-09-02): while the owner is away, work through this
+list one item per cycle — plan briefly, implement fully (schema + logic +
+idempotent SQL migration + typecheck/build clean), commit, push, mark it
+done below, move to the next. Always run a full error-check pass
+(`npx tsc --noEmit -p .` and `npm run build`) first and fix anything found,
+even if it means skipping a day's new feature to just ship the fix.
+
+This is Claude's own queue — separate from Grok's website-tools assignment
+in `docs/agent-outbox.md` (task O1). No overlap: everything here extends
+the Prisma+grammy bot engine (`adBotLogic.ts`/`matchBotLogic.ts` and
+siblings), which Grok is barred from touching.
+
+Excluded on purpose (owner: avoid anything that needs the owner to pay for
+a third-party API): AI image generation, AI document Q&A, PDF↔Word
+conversion via a paid conversion API, plagiarism checking.
+
+## Queue (in priority order)
+
+- [ ] **1. Unified points/rewards ledger across all bots** — a single
+      `PlatformPoints` balance per Telegram user id, earned from any bot
+      (daily streak, referral, quiz win, ...) and spendable in any other
+      bot on the platform. Foundational — later items plug into it.
+- [ ] **2. Anonymous confessions/questions box bot** — new template
+      (`CONFESSION_BOT`?). Each user gets a shareable link; senders stay
+      anonymous. Free tier + a paid unlock (reveal-sender / unlimited
+      replies) via the existing NOWPayments flow.
+- [ ] **3. Name-compatibility ("نسبة التوافق") bot** — simple deterministic
+      hash-based percentage between two names, shareable result card.
+- [ ] **4. Personality-quiz bot** — static question banks, shareable result
+      image/text, no AI needed.
+- [ ] **5. Daily-streak challenge bot** (fasting/prayer/reading/exercise) —
+      streak counter + daily reminder + social share of the streak.
+- [ ] **6. Prayer-times / dhikr reminder bot** — free, computed offline or
+      via a free prayer-times API, no ongoing cost.
+- [ ] **7. Greeting-card generator bot** — canvas/sharp-based text-over-
+      template image generation (no AI), seasonal templates.
+- [ ] **8. Crypto price-alert bot** — free-tier price API (e.g. CoinGecko
+      free), user sets a threshold, gets pinged.
+- [ ] **9. Escrow / secure buy-sell bot** — reuses the existing TON hot
+      wallet (`ton-service.ts` — read-only reuse, no edits to that file
+      without a dedicated plan) to hold funds until the buyer confirms
+      receipt. Higher complexity — tackle after 1-8 are solid.
+- [ ] **10. Group trivia/quiz competitions bot** — for group/channel
+      owners, points-based leaderboard, gated activation like AD_BOT's
+      creator codes.
+- [ ] **11. Complete the STORE template** — rebuilt fresh on the
+      Prisma+grammy engine (the old Supabase-JS STORE bot is gone).
+- [ ] **12. Complete the HOSPITAL template** — same, rebuilt fresh.
+
+## Done
+(nothing yet)

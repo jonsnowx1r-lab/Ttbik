@@ -15,10 +15,25 @@ Not a daemon. Files persist work across disconnects. That is the retrospective l
 5. If a proposal is already waiting with no Claude ack: do not spam. Stop.
 6. Update `last_seen_comment_id` and `updated_at` even when you only read.
 
-## Ownership
+## Ownership (updated 2026-09-02 after the Prisma+grammy rebuild — supersedes the block below)
+- Claude owns and is the sole editor of the whole bot engine: `prisma/schema.prisma`
+  (AD_BOT + MARRIAGE_BOT models), `src/lib/adBotLogic.ts`, `src/lib/matchBotLogic.ts`,
+  `src/services/ton-service.ts`, `src/app/api/telegram/[botId]/route.ts`,
+  `src/app/api/bots/deploy/route.ts`, `src/app/bots/page.tsx`, every
+  AD_BOT/MARRIAGE_BOT `prisma/migration_*.sql` — plus site shell, admin, orders,
+  migrations, env/Vercel as before.
+- Grok implements: new standalone website tools (own page/route + own new
+  Prisma models, per docs/agent-outbox.md task O1), or a brand-new bot
+  template that only ADDS a sibling branch to the shared dispatcher files
+  above — never edits Claude's existing branches.
+- Claude supervises: any change to a file Claude owns needs a plan proposed
+  in agent-outbox.md/agent-inbox.md or PR #2 first, then Claude's ack,
+  before Grok pushes to it.
+- Cross-file work: propose first, wait for ack, then split.
+
+### Historical (pre-rebuild — botEngine.ts and hosted_bots no longer exist, kept for reference only)
 - Grok implements: botEngine, botTemplates, tgApi, botCodes, src/app/bots/**, src/app/api/bots/**, src/app/pay/bot/**
 - Claude implements: site shell, admin, orders, migrations, env/Vercel
-- Cross-file work: propose first, wait for ack, then split.
 
 ## Product rules (resolved)
 - No cash withdraw from hosted bots.
