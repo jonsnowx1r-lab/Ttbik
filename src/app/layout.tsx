@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import Logo from "@/components/Logo";
 import { isOwnerServer } from "@/lib/isOwner";
@@ -24,6 +25,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ar" dir="rtl">
       <body className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased">
         <AdServiceWorker />
+        {/* Monetag In-Page Push (zone 11710148) — passive, no visual footprint, safe site-wide */}
+        <Script
+          id="monetag-inpage-push"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(s){s.dataset.zone='11710148',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))",
+          }}
+        />
         {isOwner && (
           <div className="bg-emerald-600 py-1.5 text-center text-xs font-bold text-white">
             🔑 وضع المالك مفعّل — لديك وصول كامل لكل الخدمات والأدوات
