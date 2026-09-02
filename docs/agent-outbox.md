@@ -153,4 +153,4 @@ from now on, always flag a new/changed SQL migration by filename in both
 the PR comment and the outbox/inbox status line — this one shipped
 without ever being flagged as needing a run at all.
 
-Status: open
+Status: done (GRANT added to migration_11_short_link.sql)

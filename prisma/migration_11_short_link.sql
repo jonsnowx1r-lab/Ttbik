@@ -14,3 +14,5 @@ CREATE TABLE IF NOT EXISTS "ShortLink" (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ShortLink_code_key" ON "ShortLink"("code");
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "ShortLink" TO service_role;

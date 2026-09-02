@@ -1,19 +1,21 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5514839305,
-  "last_actor": "claude",
-  "updated_at": "2026-09-04T00:00:00Z",
+  "last_seen_comment_id": 5514995528,
+  "last_actor": "grok",
+  "updated_at": "2026-09-03T01:15:00Z",
   "mode": "work-cycle",
   "open": [
     "G5 ack (2026-09-04): stateless v1 approved (no schema, no CvDraft model). Do NOT use @react-pdf/renderer, jsPDF's text API, or pdfkit — known weak Arabic RTL/bidi support. Use window.print() (preferred, zero new deps) or html2canvas+jsPDF (image wrap only, for one-click auto-download). Must visually verify actual Arabic text renders correctly (RTL, letters joined) before calling it shipped. Full detail in docs/agent-inbox.md G5 ack.",
     "RESUME (owner directive, 2026-09-02): HOLD lifted — Grok may resume pushing code now. Full brief in docs/agent-outbox.md task O1: plan first (post it if it touches a shared file), then ship real end-to-end working code (schema + logic + idempotent migration SQL + typecheck/build clean + wired into a real page/admin panel) at the same rigor as AD_BOT/MARRIAGE_BOT — never a stub or demo.",
     "HARD BOUNDARY (permanent, not just for this cycle): Grok must never edit prisma/schema.prisma's AD_BOT models (User/Ad/Transaction/BotPurchase/...) or MARRIAGE_BOT models (MatchUser/MatchProfile/...), src/lib/adBotLogic.ts, src/lib/matchBotLogic.ts, src/services/ton-service.ts, or the AD_BOT/MARRIAGE_BOT branches inside src/app/api/telegram/[botId]/route.ts, src/app/api/bots/deploy/route.ts, src/app/bots/page.tsx. Adding a new sibling branch/option for a brand-new Grok template is fine; editing Claude's existing ones is not. Don't re-propose either bot — both are live and complete.",
     "Ownership table in docs/AGENT_BUS.md corrected post-rebuild — old botEngine.ts/hosted_bots (Supabase-JS) ownership lines are historical only, that system was deleted in 25d3d09 and no longer exists. Grok's assignment now: docs/agent-outbox.md task O1's website-tools backlog, or a brand-new bot template that only adds to (never edits) the shared dispatcher files.",
-    "O1 backlog remaining after G4 + O2 + G5 ack: (4) simple Arabic contracts/invoices, (5) crypto converter (TON marketing), (6) image compress already live",
-    "Owner must run prisma/migration_12_digital_card.sql once in Supabase SQL Editor (CREATE TABLE IF NOT EXISTS + GRANT service_role)."
+    "O1 backlog remaining after G4 + O2 + G5 ack: (3) Arabic CV + PDF (G5 ready to ship), (4) simple Arabic contracts/invoices, (5) crypto converter (TON marketing), (6) image compress already live",
+    "Owner must run prisma/migration_12_digital_card.sql once in Supabase SQL Editor (CREATE TABLE IF NOT EXISTS + GRANT service_role).",
+    "Owner: if ShortLink table already exists without GRANT, run standalone: GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"ShortLink\" TO service_role;"
   ],
   "resolved": [
+    "O3: missing GRANT on migration_11_short_link.sql fixed — GRANT SELECT/INSERT/UPDATE/DELETE TO service_role added.",
     "O2 AdSlot: added <AdSlot position=\"in-content\"/> to digital-card/page.tsx, url-shortener/page.tsx, and c/[slug]/page.tsx (outside card box). SHAs 580de22 / f6ecf3b / abc2a98.",
     "G4 digital business card shipped full: DigitalCard model, migration_12_digital_card.sql, POST /api/tools/card (editToken via crypto.randomBytes(24)), GET /c/[slug] + views++, /free-tools/digital-card UI, listed on free-tools + sitemap. Claude ack'd plan with editToken entropy fix — applied.",
     "G3 URL shortener shipped full: ShortLink model, migration_11_short_link.sql, POST /api/tools/shorten, GET /s/[code], /free-tools/url-shortener, listed on free-tools page. Claude ack'd plan; owner must run migration_11 once in Supabase SQL Editor.",
