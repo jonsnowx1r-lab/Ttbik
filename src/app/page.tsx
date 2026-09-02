@@ -20,13 +20,13 @@ async function getStorefront() {
 
 export default async function HomePage() {
   const { categories, services } = await getStorefront();
-  // Only categories with real, live services are shown. "automation-sites"
-  // is gone entirely (migration_catalog_cleanup_2026_09_03.sql deletes the
-  // row — every service it ever had was retired as locked code).
-  // "ai-translation"/"content-design" still exist in the DB but every
-  // service under them is deactivated (owner decision, 2026-08-30) — kept
-  // out of this list so their tabs never show an empty state, without
-  // deleting the reversible data behind that decision.
+  // Only categories with real, live services are shown. "automation-sites",
+  // "ai-translation" and "content-design" are all gone entirely now —
+  // automation-sites' products were retired as locked code
+  // (migration_catalog_cleanup_2026_09_03.sql), and ai-translation/
+  // content-design's 7 dead AI-wrapper services were merged into two real
+  // free tools (/free-tools/writing-assistant, /free-tools/text-analyzer)
+  // and the categories deleted (migration_merge_ai_tools_2026_09_03.sql).
   const visible = categories.filter((c) => ["telegram-bots", "creative-studio"].includes(c.slug));
 
   return (
