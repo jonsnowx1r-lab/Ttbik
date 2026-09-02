@@ -42,6 +42,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const existing = await prisma.bot.findUnique({ where: { token } });
+    if (existing) {
+      return NextResponse.json({ success: false, error: "هذا التوكن مُفعّل بالفعل على المنصة. أنشئ توكن جديد من BotFather إن كنت تريد بوتاً إضافياً، أو تواصل مع الدعم إن كانت هذه محاولة تفعيل فاشلة سابقة." }, { status: 400 });
+    }
+
     const tempBot = new Bot(token);
     const botInfo = await tempBot.api.getMe();
 
@@ -51,9 +56,20 @@ export async function POST(req: NextRequest) {
     // adBotLogic.ts. Self-referral is meaningless, so it's dropped here.
     const referredByOwnerId = ref && String(ref).trim() && String(ref).trim() !== String(ownerId) ? String(ref).trim() : null;
 
+    // Webhook is set up BEFORE the Bot row is created (owner spec fix,
+    // 2026-09-02): a pre-generated id lets us build the webhook URL without
+    // the row existing yet, so a failed/rejected setWebhook call (bad
+    // token, Telegram outage) never leaves an orphaned row behind that
+    // would then block every retry with "Unique constraint on token".
+    const botId = crypto.randomUUID();
     const webhookSecret = crypto.randomBytes(32).toString("hex");
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+    const webhookUrl = `${siteUrl}/api/telegram/${botId}`;
+    await tempBot.api.setWebhook(webhookUrl, { secret_token: webhookSecret });
+
     const newBot = await prisma.bot.create({
       data: {
+        id: botId,
         token,
         template: template || "AD_BOT",
         ownerId: String(ownerId),
@@ -61,10 +77,6 @@ export async function POST(req: NextRequest) {
         referredByOwnerId,
       },
     });
-
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
-    const webhookUrl = `${siteUrl}/api/telegram/${newBot.id}`;
-    await tempBot.api.setWebhook(webhookUrl, { secret_token: webhookSecret });
 
     if (purchase) {
       await prisma.botPurchase.update({ where: { id: purchase.id }, data: { status: "REDEEMED" } });
@@ -76,6 +88,9 @@ export async function POST(req: NextRequest) {
       botId: newBot.id,
     });
   } catch (error: any) {
+    if (error?.code === "P2002") {
+      return NextResponse.json({ success: false, error: "هذا التوكن مُفعّل بالفعل على المنصة." }, { status: 400 });
+    }
     return NextResponse.json({ success: false, error: error.message || "Deployment failed" }, { status: 400 });
   }
 }
