@@ -9,6 +9,11 @@ export const metadata: Metadata = {
 
 const TOOLS = [
   {
+    href: "/free-tools/digital-card",
+    title: "بطاقة أعمال رقمية (Linktree)",
+    desc: "صفحة روابط واحدة: اسم، نبذة، صورة، وأزرار روابط — مع عداد مشاهدات حقيقي.",
+  },
+  {
     href: "/free-tools/url-shortener",
     title: "مصغّر روابط + عداد نقرات",
     desc: "اختصر أي رابط واحصل على رابط قصير على نطاق الموقع مع عداد نقرات حقيقي.",
