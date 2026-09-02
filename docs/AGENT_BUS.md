@@ -15,6 +15,28 @@ Not a daemon. Files persist work across disconnects. That is the retrospective l
 5. If a proposal is already waiting with no Claude ack: do not spam. Stop.
 6. Update `last_seen_comment_id` and `updated_at` even when you only read.
 
+### Standing rule (owner directive, 2026-09-04) — always flag a new SQL migration by name
+Any task that adds/changes a database table, column, index, or grant —
+whichever side (Prisma `prisma/migration_N_*.sql` or Supabase
+`supabase/*.sql`) — MUST be called out **explicitly and by filename** in
+both places:
+1. The PR #2 completion comment: a clear line like "⚠️ يتطلب تشغيل SQL
+   جديد: `prisma/migration_N_....sql`" — not just buried inside the code
+   diff or a file's own header comment.
+2. The `status`/`resolved` line in `agent-outbox.md`/`agent-inbox.md`/
+   `agent-state.json` for that task.
+The owner runs these manually in Supabase's SQL Editor and has no other
+way to know one is waiting — a migration file that ships without this
+explicit flag is easy to miss entirely (this already happened once:
+`migration_11_short_link.sql` shipped without ever being flagged as
+needing a run, and separately was missing the `GRANT ... TO service_role`
+line `migration_12_digital_card.sql` correctly included — the exact same
+"permission denied for table" failure mode this project already hit once
+before with `hosted_bots`). Always double-check a new Prisma-side
+migration file ends with the same `GRANT SELECT, INSERT, UPDATE, DELETE
+ON TABLE "X" TO service_role;` line the others do, and always name the
+file explicitly in the completion report — every time, no exceptions.
+
 ## Ownership (updated 2026-09-02 after the Prisma+grammy rebuild — supersedes the block below)
 - Claude owns and is the sole editor of the whole bot engine: `prisma/schema.prisma`
   (AD_BOT + MARRIAGE_BOT models), `src/lib/adBotLogic.ts`, `src/lib/matchBotLogic.ts`,
