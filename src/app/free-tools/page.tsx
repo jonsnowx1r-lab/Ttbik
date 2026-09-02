@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AdSlot from "@/components/AdSlot";
+import AdsterraNative from "@/components/AdsterraNative";
 import SectionBackdrop from "@/components/SectionBackdrop";
 
 export const metadata: Metadata = {
@@ -103,6 +104,15 @@ export default function FreeToolsPage() {
 
       <div className="mt-8">
         <AdSlot position="in-content" label="بين الأدوات والبوتات" />
+      </div>
+
+      {/* Native Banner — this specific Adsterra unit can only render once
+          per page (its container id is fixed, see AdsterraNative.tsx), so
+          it's placed directly here rather than through the reusable
+          AdSlot, which some pages call twice. This listing page is the
+          best contextual fit for a native ad anyway. */}
+      <div className="mt-6">
+        <AdsterraNative />
       </div>
 
       <h2 className="mt-10 text-lg font-extrabold text-slate-900">🤖 بوتات جاهزة مجانية</h2>
