@@ -4,6 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { handleAdBotUpdate } from "@/lib/adBotLogic";
 import { handleMarriageBotUpdate } from "@/lib/matchBotLogic";
 
+// Default Vercel Hobby function timeout is 10s — raised for headroom since
+// MARRIAGE_BOT's random-chat search now does a brief (~3s) animated
+// "searching" message sequence (see startRandomChat in matchBotLogic.ts)
+// on top of its usual DB work. Doesn't affect any other update — this is
+// just a higher ceiling, not a forced wait.
+export const maxDuration = 20;
+
 export async function POST(req: NextRequest, { params }: { params: { botId: string } }) {
   try {
     const secret = req.headers.get("x-telegram-bot-api-secret-token") || "";

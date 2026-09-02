@@ -657,11 +657,42 @@ async function startRandomChat(bot: TelegramBot, chatId: number, botRow: BotRow,
     data: { userId: tgUserId, botId: botRow.id, status: "WAITING", expiresAt: new Date(Date.now() + RANDOM_CHAT_WINDOW_SECONDS * 1000) },
   });
   await setPending(tgUserId, { mode: "random_waiting" });
-  await bot.api.sendMessage(
-    chatId,
-    "🔍 يتم البحث الآن عن شريك للمحادثة... إن لم يُعثر على أحد خلال دقيقة واحدة، اضغط الزر مجدداً للتحقق.",
-    { reply_markup: new Keyboard().text("🔀 مراسلة عشوائية").row().text(backLabel()).resized() }
-  );
+  await animateSearchingMessage(bot, chatId);
+}
+
+// Brief "live searching" animation (owner request, 2026-09-05): a single
+// static message reads as frozen/empty next to other bots whose search
+// card visibly animates. The search itself is already real — the
+// RandomChatQueue row above was just created — this only adds visual
+// feedback that it's actively happening; it never fakes a search that
+// isn't real. Kept to ~3s of edits (Telegram's editMessageText, not a
+// GIF — text can't literally spin) so the whole request stays well
+// inside the telegram webhook route's execution budget (see
+// `maxDuration` in src/app/api/telegram/[botId]/route.ts) alongside the
+// DB work already happening in this same request. Alternates the two
+// mirrored magnifying-glass emoji (🔍/🔎) with a growing/resetting dot
+// trail for a "still working" feel, then settles on the same
+// informative final text this used to send immediately.
+async function animateSearchingMessage(bot: TelegramBot, chatId: number) {
+  const keyboard = new Keyboard().text("🔀 مراسلة عشوائية").row().text(backLabel()).resized();
+  const msg = await bot.api.sendMessage(chatId, "🔍 جاري البحث عن شريك للمحادثة", { reply_markup: keyboard });
+  const frames = [
+    "🔎 جاري البحث عن شريك للمحادثة.",
+    "🔍 جاري البحث عن شريك للمحادثة..",
+    "🔎 جاري البحث عن شريك للمحادثة...",
+  ];
+  for (const frame of frames) {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    await bot.api.editMessageText(chatId, msg.message_id, frame).catch(() => null);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  await bot.api
+    .editMessageText(
+      chatId,
+      msg.message_id,
+      "🔍 يتم البحث الآن عن شريك للمحادثة... إن لم يُعثر على أحد خلال دقيقة واحدة، اضغط الزر مجدداً للتحقق."
+    )
+    .catch(() => null);
 }
 
 async function endRandomChat(bot: TelegramBot, tgUserId: string, sessionId: string, partnerId: string, reason: "end" | "block") {
