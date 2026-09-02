@@ -5,44 +5,49 @@ import { useState } from "react";
 type Result = {
   code: string;
   shortUrl: string;
-  targetUrl: string;
-  expiresAt: string | null;
+  qrDataUrl: string;
   clicks: number;
+  expiresAt: string | null;
 };
 
 export default function UrlShortener() {
   const [url, setUrl] = useState("");
-  const [days, setDays] = useState<number | null>(null);
+  const [expireDays, setExpireDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [copied, setCopied] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setResult(null);
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setError("أدخل رابطاً أولاً");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/tools/shorten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), days }),
+        body: JSON.stringify({ url: trimmed, expireDays }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "حدث خطأ");
         return;
       }
-      setResult(data);
+      setResult(data as Result);
     } catch {
-      setError("تعذّر الاتصال بالخادم، حاول مجدداً");
+      setError("تعذر الاتصال بالخادم");
     } finally {
       setLoading(false);
     }
   }
 
-  function copyLink() {
+  function copy() {
     if (!result) return;
     navigator.clipboard.writeText(result.shortUrl).then(() => {
       setCopied(true);
@@ -50,50 +55,43 @@ export default function UrlShortener() {
     });
   }
 
-  const qrSrc = result
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=${encodeURIComponent(result.shortUrl)}`
-    : "";
-
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
-      <form onSubmit={handleSubmit} className="grid gap-3">
+      <form onSubmit={submit} className="grid gap-3">
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="الصق الرابط الطويل هنا (https://...)"
-          className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+          placeholder="https://example.com/صفحة-طويلة جداً"
+          className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           dir="ltr"
-          required
         />
-
         <div className="flex flex-wrap gap-2 text-sm">
-          <span className="self-center text-slate-500">صلاحية الرابط:</span>
+          <span className="text-slate-500 self-center">صلاحية:</span>
           {[
-            { v: null, label: "بدون انتهاء" },
+            { v: null, label: "بلا انتهاء" },
             { v: 7, label: "7 أيام" },
             { v: 30, label: "30 يوماً" },
           ].map((opt) => (
             <button
               key={String(opt.v)}
               type="button"
-              onClick={() => setDays(opt.v)}
-              className={`rounded-full px-3 py-1 font-semibold transition ${
-                days === opt.v
+              onClick={() => setExpireDays(opt.v)}
+              className={`rounded-lg px-3 py-1.5 font-semibold ${
+                expireDays === opt.v
                   ? "bg-brand-600 text-white"
-                  : "border border-slate-300 text-slate-600 hover:border-brand-300"
+                  : "border border-slate-200 text-slate-600 hover:border-brand-300"
               }`}
             >
               {opt.label}
             </button>
           ))}
         </div>
-
         <button
           type="submit"
-          disabled={loading || !url.trim()}
-          className="mt-1 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+          disabled={loading}
+          className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-60"
         >
-          {loading ? "جاري التقصير..." : "اختصر الرابط"}
+          {loading ? "جاري التقصير…" : "اختصر الرابط"}
         </button>
       </form>
 
@@ -104,13 +102,12 @@ export default function UrlShortener() {
       {result && (
         <div className="mt-5 rounded-xl bg-slate-50 p-4">
           <p className="mb-1 text-xs font-semibold text-slate-500">الرابط القصير:</p>
-          <p className="break-all font-mono text-base font-bold text-brand-700" dir="ltr">
+          <p className="break-all font-mono text-sm text-brand-700" dir="ltr">
             {result.shortUrl}
           </p>
-
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
-              onClick={copyLink}
+              onClick={copy}
               className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
             >
               {copied ? "✅ تم النسخ" : "نسخ الرابط"}
@@ -121,30 +118,34 @@ export default function UrlShortener() {
               rel="noreferrer"
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:border-brand-300"
             >
-              فتح الرابط
+              فتح
             </a>
+            {result.expiresAt && (
+              <span className="text-xs text-slate-500">
+                ينتهي: {new Date(result.expiresAt).toLocaleDateString("ar")}
+              </span>
+            )}
           </div>
-
-          <div className="mt-5 flex flex-col items-center gap-2 border-t border-slate-200 pt-4">
-            <p className="text-xs font-semibold text-slate-500">رمز QR جاهز للطباعة أو المشاركة</p>
+          <div className="mt-4 flex flex-col items-start gap-2">
+            <p className="text-xs font-semibold text-slate-500">رمز QR:</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={qrSrc}
+              src={result.qrDataUrl}
               alt="QR code"
-              width={180}
-              height={180}
-              className="rounded-lg border border-slate-200 bg-white p-1"
+              width={160}
+              height={160}
+              className="rounded-lg border border-slate-200 bg-white"
             />
-            <p className="text-[11px] text-slate-400">
-              النقرات تُحسب تلقائياً عند استخدام الرابط القصير
-            </p>
           </div>
+          <p className="mt-3 text-xs text-slate-500">
+            عداد النقرات يبدأ من صفر ويُحدَّث مع كل زيارة للرابط القصير.
+          </p>
         </div>
       )}
 
       <div className="mt-6 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 p-4 text-sm text-slate-600">
-        أداة مجانية بالكامل — لا تسجيل، لا حدود يومية معقولة، ولا تكلفة تشغيل. الرابط يعمل
-        مباشرة على نطاق الموقع ويُحتسب عدد النقرات.
+        أداة مجانية بالكامل — رابط قصير + QR + عداد نقرات، بلا تسجيل وبلا تكلفة جارية.
+        لا نبيع الكود؛ الأداة تعمل فعلياً على الخادم.
       </div>
     </div>
   );

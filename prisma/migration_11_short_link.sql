@@ -1,5 +1,5 @@
--- URL shortener (Grok O1/G3, 2026-09-02). Run once in Supabase SQL Editor.
--- Isolated free-tool table; no foreign keys into AD_BOT / MARRIAGE_BOT models.
+-- G3 URL shortener (ShortLink). Idempotent — safe to re-run.
+-- Run once in Supabase SQL Editor after deploy.
 
 CREATE TABLE IF NOT EXISTS "ShortLink" (
     "id"          TEXT NOT NULL,
@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS "ShortLink" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ShortLink_code_key" ON "ShortLink"("code");
 
--- Grant service_role full access (same pattern as other migrations)
+-- Service role needs full access for the Next.js API routes (same pattern as other tables).
 GRANT ALL ON TABLE "ShortLink" TO service_role;
-GRANT SELECT, INSERT, UPDATE ON TABLE "ShortLink" TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE "ShortLink" TO authenticated;
+GRANT SELECT ON TABLE "ShortLink" TO anon;
