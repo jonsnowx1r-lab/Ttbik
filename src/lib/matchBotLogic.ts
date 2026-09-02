@@ -665,14 +665,21 @@ async function startRandomChat(bot: TelegramBot, chatId: number, botRow: BotRow,
 // card visibly animates. The search itself is already real — the
 // RandomChatQueue row above was just created — this only adds visual
 // feedback that it's actively happening; it never fakes a search that
-// isn't real. Kept to ~3s of edits (Telegram's editMessageText, not a
+// isn't real. Kept to ~4s of edits (Telegram's editMessageText, not a
 // GIF — text can't literally spin) so the whole request stays well
 // inside the telegram webhook route's execution budget (see
 // `maxDuration` in src/app/api/telegram/[botId]/route.ts) alongside the
-// DB work already happening in this same request. Alternates the two
-// mirrored magnifying-glass emoji (🔍/🔎) with a growing/resetting dot
-// trail for a "still working" feel, then settles on the same
-// informative final text this used to send immediately.
+// DB work already happening in this same request.
+//
+// Uses a moving block on a fixed-width progress bar (radar-style, back
+// and forth) rather than a growing dot trail: an earlier version just
+// changed the dot count on an otherwise-identical line, and a first
+// round of owner testing (2026-09-05) read that as the line "flickering"
+// rather than an intentional animation — easy to mistake for a rendering
+// glitch. A bar with a block visibly sliding position reads unambiguously
+// as a loading indicator instead.
+const SEARCH_BAR_FRAMES = ["▓░░░░░", "░▓░░░░", "░░▓░░░", "░░░▓░░", "░░░░▓░", "░░░░░▓", "░░░▓░░", "░▓░░░░"];
+
 async function animateSearchingMessage(bot: TelegramBot, chatId: number) {
   // No reply_markup on this message, on purpose: Telegram's Bot API
   // rejects editMessageText with "400: Bad Request: message can't be
@@ -686,23 +693,21 @@ async function animateSearchingMessage(bot: TelegramBot, chatId: number) {
   // keyboard was already showing (mainMenu, or this same waiting keyboard
   // from an earlier press) — that keyboard stays untouched and the button
   // is still right there.
+  const label = "🔍 جاري البحث عن شريك للمحادثة...";
   let msg;
   try {
-    msg = await bot.api.sendMessage(chatId, "🔍 جاري البحث عن شريك للمحادثة");
+    msg = await bot.api.sendMessage(chatId, `${label}\n${SEARCH_BAR_FRAMES[0]}`);
   } catch (e) {
     console.error("[randomChat] initial sendMessage FAILED", e);
     return;
   }
-  const frames = [
-    "🔎 جاري البحث عن شريك للمحادثة.",
-    "🔍 جاري البحث عن شريك للمحادثة..",
-    "🔎 جاري البحث عن شريك للمحادثة...",
-  ];
-  for (const frame of frames) {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    await bot.api.editMessageText(chatId, msg.message_id, frame).catch((e) => console.error("[randomChat] edit FAILED", e));
+  for (const bar of SEARCH_BAR_FRAMES.slice(1)) {
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    await bot.api
+      .editMessageText(chatId, msg.message_id, `${label}\n${bar}`)
+      .catch((e) => console.error("[randomChat] edit FAILED", e));
   }
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  await new Promise((resolve) => setTimeout(resolve, 650));
   await bot.api
     .editMessageText(
       chatId,
