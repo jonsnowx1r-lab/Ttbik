@@ -1,15 +1,20 @@
-const THEMES: Record<string, { gradient: string; Icon: (props: { className?: string }) => JSX.Element }> = {
-  "telegram-bots": { gradient: "from-indigo-500 to-violet-600", Icon: BotIcon },
-  "ai-translation": { gradient: "from-sky-500 to-blue-600", Icon: TranslateIcon },
-  "automation-sites": { gradient: "from-amber-500 to-orange-600", Icon: AutomationIcon },
-  "content-design": { gradient: "from-rose-500 to-pink-600", Icon: ContentIcon },
-};
+import { getCategoryTheme } from "@/lib/categoryTheme";
 
-const DEFAULT_THEME = { gradient: "from-brand-500 to-brand-700", Icon: ToolboxIcon };
+// Icon-only lookup — the actual color (gradient/button/badge/backdrop) now
+// lives in one place, src/lib/categoryTheme.ts, so this banner and every
+// button/badge elsewhere always agree on a category's color.
+const ICONS: Record<string, (props: { className?: string }) => JSX.Element> = {
+  "telegram-bots": BotIcon,
+  bots: BotIcon,
+  "ai-translation": TranslateIcon,
+  "automation-sites": AutomationIcon,
+  "content-design": ContentIcon,
+  "creative-studio": ToolboxIcon,
+};
 
 /** Small inline icon for a category (used in the quick-jump pill nav). */
 export function CategoryIcon({ slug, className }: { slug: string; className?: string }) {
-  const Icon = (THEMES[slug] ?? DEFAULT_THEME).Icon;
+  const Icon = ICONS[slug] ?? ToolboxIcon;
   return <Icon className={className} />;
 }
 
@@ -20,8 +25,8 @@ export function CategoryIcon({ slug, className }: { slug: string; className?: st
  * dependency, consistent look for every visitor.
  */
 export default function CategoryBanner({ slug }: { slug: string }) {
-  const theme = THEMES[slug] ?? DEFAULT_THEME;
-  const Icon = theme.Icon;
+  const theme = getCategoryTheme(slug);
+  const Icon = ICONS[slug] ?? ToolboxIcon;
 
   return (
     <div

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AdSlot from "@/components/AdSlot";
+import SectionBackdrop from "@/components/SectionBackdrop";
 
 export const metadata: Metadata = {
   title: "أدوات مجانية | سوق تولز",
@@ -55,7 +56,8 @@ const FREE_BOTS = [
 
 export default function FreeToolsPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
+    <div className="relative mx-auto max-w-3xl px-4 py-12">
+      <SectionBackdrop tone="free-tools" />
       <h1 className="text-2xl font-extrabold text-slate-900">أدوات مجانية</h1>
       <p className="mt-2 text-slate-600">بلا تسجيل، بلا حدود استخدام، ومجانية بالكامل — استخدمها كما تشاء.</p>
 

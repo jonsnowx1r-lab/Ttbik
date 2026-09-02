@@ -11,13 +11,15 @@ import AdSlotPreview from "@/components/demos/AdSlotPreview";
 import { getDeliveryKind } from "@/lib/deliveryKind";
 import { isOwnerServer } from "@/lib/isOwner";
 import Link from "next/link";
+import { getCategoryTheme } from "@/lib/categoryTheme";
+import SectionBackdrop from "@/components/SectionBackdrop";
 
 export const revalidate = 30;
 
 async function getService(slug: string) {
   const db = supabasePublic();
-  const { data } = await db.from("services").select("*").eq("slug", slug).single();
-  return data as Service | null;
+  const { data } = await db.from("services").select("*, categories(slug)").eq("slug", slug).single();
+  return data as (Service & { categories: { slug: string } | null }) | null;
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
@@ -37,9 +39,12 @@ export default async function ServicePage({ params }: { params: { slug: string }
 
   const isOwner = isOwnerServer();
   const ownerLink = service.tool_route ? `/tools/${service.tool_route}` : null;
+  const categorySlug = service.categories?.slug ?? null;
+  const theme = getCategoryTheme(categorySlug);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10">
+    <div className="relative mx-auto max-w-5xl px-4 py-10">
+      <SectionBackdrop tone={categorySlug} />
       <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
         <div>
           <span className="inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -48,7 +53,9 @@ export default async function ServicePage({ params }: { params: { slug: string }
           <h1 className="mt-3 text-2xl font-extrabold text-slate-900">{service.name_ar}</h1>
           <p className="mt-2 text-slate-600">{service.long_desc_ar || service.short_desc_ar}</p>
           <p className="mt-1 text-xs text-slate-400">{getDeliveryKind(service).detail}</p>
-          <p className="mt-4 text-2xl font-extrabold text-brand-700">{formatUsd(service.price_usd)}</p>
+          <p className={`mt-4 text-2xl font-extrabold ${service.price_usd === 0 ? "text-emerald-700" : theme.badgeText}`}>
+            {formatUsd(service.price_usd)}
+          </p>
 
           <div className="mt-6">
             {service.demo_type === "bot_simulator" && <BotSimulator botName={service.name_ar} />}
@@ -106,7 +113,7 @@ export default async function ServicePage({ params }: { params: { slug: string }
                   href={service.delivery_content}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-3 block w-full break-all rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-brand-700"
+                  className={`mt-3 block w-full break-all rounded-xl px-4 py-2.5 text-center text-sm font-bold text-white ${theme.button}`}
                 >
                   فتح رابط التسليم
                 </a>
@@ -117,7 +124,7 @@ export default async function ServicePage({ params }: { params: { slug: string }
               )}
             </div>
           ) : (
-            <OrderForm serviceId={service.id} priceUsd={service.price_usd} />
+            <OrderForm serviceId={service.id} priceUsd={service.price_usd} categorySlug={categorySlug} />
           )}
         </div>
       </div>

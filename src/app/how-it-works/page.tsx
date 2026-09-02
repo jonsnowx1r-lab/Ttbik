@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import SectionBackdrop from "@/components/SectionBackdrop";
 
 export const metadata: Metadata = {
   title: "كيف يعمل الموقع؟ | سوق تولز",
@@ -46,7 +47,8 @@ const BOT_FAQ = [
 
 export default function HowItWorksPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
+    <div className="relative mx-auto max-w-3xl px-4 py-12">
+      <SectionBackdrop />
       <h1 className="text-2xl font-extrabold text-slate-900">كيف يعمل الموقع؟</h1>
       <p className="mt-2 text-slate-600">
         شرح مباشر لكل خطوة، من اختيار الخدمة حتى استلام وصولك الكامل — بلا غموض.

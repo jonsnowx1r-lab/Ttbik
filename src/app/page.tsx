@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase";
 import type { Category, Service } from "@/types";
 import StorefrontBrowser from "@/components/StorefrontBrowser";
+import SectionBackdrop from "@/components/SectionBackdrop";
 
 export const revalidate = 30;
 
@@ -19,14 +20,19 @@ async function getStorefront() {
 
 export default async function HomePage() {
   const { categories, services } = await getStorefront();
-  // "automation-sites" deliberately excluded — every service that ever
-  // lived under it is now retired (locked-code products), so the tab
-  // would only ever show an empty "لا توجد خدمات" state.
+  // Only categories with real, live services are shown. "automation-sites"
+  // is gone entirely (migration_catalog_cleanup_2026_09_03.sql deletes the
+  // row — every service it ever had was retired as locked code).
+  // "ai-translation"/"content-design" still exist in the DB but every
+  // service under them is deactivated (owner decision, 2026-08-30) — kept
+  // out of this list so their tabs never show an empty state, without
+  // deleting the reversible data behind that decision.
   const visible = categories.filter((c) => ["telegram-bots", "creative-studio"].includes(c.slug));
 
   return (
     <div>
-      <section className="bg-hero-glow bg-white">
+      <section className="relative overflow-hidden bg-hero-glow bg-white">
+        <SectionBackdrop />
         <div className="mx-auto max-w-6xl px-4 pb-10 pt-14 text-center sm:pb-14 sm:pt-20">
           <span className="inline-block rounded-full border border-brand-200 bg-brand-50 px-4 py-1.5 text-xs font-bold text-brand-700">
             أدوات تعمل فعلياً — وليست ملفات للتحميل
@@ -38,7 +44,7 @@ export default async function HomePage() {
             منشئ البوتات يستضيف القالب على الموقع. روابط الإيداع والسحب تُولَّد من هنا وتربط رصيد البوت بتحويل بنكي أو USDT بعد المراجعة.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/bots" className="rounded-full bg-brand-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-800">
+            <Link href="/bots" className="rounded-full bg-indigo-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-800">
               منشئ البوتات
             </Link>
             <Link href="/tools" className="rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">

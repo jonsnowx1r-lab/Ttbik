@@ -6,6 +6,8 @@ import type { Category, Service } from "@/types";
 import { formatUsd } from "@/lib/utils";
 import { getDeliveryKind } from "@/lib/deliveryKind";
 import CategoryBanner, { CategoryIcon } from "@/components/CategoryBanner";
+import SectionBackdrop from "@/components/SectionBackdrop";
+import { getCategoryTheme } from "@/lib/categoryTheme";
 
 /**
  * Sidebar-driven category browser: only the selected category's services
@@ -27,6 +29,7 @@ export default function StorefrontBrowser({
   if (!active) return null;
 
   const activeServices = services.filter((s) => s.category_id === active.id);
+  const theme = getCategoryTheme(active.slug);
 
   // Group by subcategory so a section can grow without becoming one long
   // undifferentiated grid. Services without a subcategory fall into a
@@ -46,30 +49,34 @@ export default function StorefrontBrowser({
 
   const categoryList = (
     <nav className="space-y-1">
-      {categories.map((cat) => (
-        <button
-          key={cat.id}
-          onClick={() => selectCategory(cat.id)}
-          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-            cat.id === active.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          <CategoryIcon slug={cat.slug} className="h-5 w-5 shrink-0" />
-          <span className="flex-1 text-right">{cat.name_ar}</span>
-        </button>
-      ))}
+      {categories.map((cat) => {
+        const catTheme = getCategoryTheme(cat.slug);
+        return (
+          <button
+            key={cat.id}
+            onClick={() => selectCategory(cat.id)}
+            className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+              cat.id === active.id ? catTheme.activeTab : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <CategoryIcon slug={cat.slug} className="h-5 w-5 shrink-0" />
+            <span className="flex-1 text-right">{cat.name_ar}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 
   return (
-    <section id="categories" className="mx-auto max-w-6xl px-4 pb-20">
+    <section id="categories" className="relative mx-auto max-w-6xl px-4 pb-20">
+      <SectionBackdrop tone={active.slug} />
       {/* Mobile: button that opens the sidebar as a slide-in drawer */}
       <button
         onClick={() => setDrawerOpen(true)}
         className="mb-6 flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 lg:hidden"
       >
         <span aria-hidden>☰</span> الأقسام —{" "}
-        <span className="text-brand-700">{active.name_ar}</span>
+        <span className={theme.badgeText}>{active.name_ar}</span>
       </button>
 
       {drawerOpen && (
@@ -124,14 +131,14 @@ export default function StorefrontBrowser({
                         <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
                           {getDeliveryKind(s).label}
                         </span>
-                        <h3 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{s.name_ar}</h3>
+                        <h3 className={`mt-2 font-bold text-slate-900 ${theme.groupHoverText}`}>{s.name_ar}</h3>
                         <p className="mt-2 text-sm text-slate-500">{s.short_desc_ar}</p>
                       </div>
                       <div className="mt-4 flex items-center justify-between">
-                        <span className={`text-lg font-extrabold ${s.price_usd === 0 ? "text-emerald-700" : "text-brand-700"}`}>
+                        <span className={`text-lg font-extrabold ${s.price_usd === 0 ? "text-emerald-700" : theme.badgeText}`}>
                           {formatUsd(s.price_usd)}
                         </span>
-                        <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${s.price_usd === 0 ? "bg-emerald-50 text-emerald-700" : `${theme.badgeBg} ${theme.badgeText}`}`}>
                           {s.price_usd === 0 ? "احصل عليه الآن" : "جرّب النسخة المحدودة"}
                         </span>
                       </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PaymentMethod } from "@/types";
+import { getCategoryTheme } from "@/lib/categoryTheme";
 
 interface PaymentInfo {
   bank: {
@@ -23,10 +24,13 @@ function maskDigits(value: string): string {
 export default function OrderForm({
   serviceId,
   priceUsd,
+  categorySlug,
 }: {
   serviceId: string;
   priceUsd: number;
+  categorySlug?: string | null;
 }) {
+  const theme = getCategoryTheme(categorySlug);
   const router = useRouter();
   const [step, setStep] = useState<"payment" | "form">("payment");
   const [method, setMethod] = useState<PaymentMethod>("crypto_auto");
@@ -101,7 +105,7 @@ export default function OrderForm({
             <button
               onClick={() => setMethod("crypto_auto")}
               className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                method === "crypto_auto" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300"
+                method === "crypto_auto" ? `${theme.border} ${theme.badgeBg} ${theme.badgeText}` : "border-slate-300"
               }`}
             >
               ⚡ دفع فوري (عملات رقمية)
@@ -109,7 +113,7 @@ export default function OrderForm({
             <button
               onClick={() => setMethod("bank")}
               className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                method === "bank" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300"
+                method === "bank" ? `${theme.border} ${theme.badgeBg} ${theme.badgeText}` : "border-slate-300"
               }`}
             >
               تحويل بنكي (ACH/USD)
@@ -131,18 +135,18 @@ export default function OrderForm({
                 <dl className="space-y-1">
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">صاحب الحساب</dt>
-                    <dd className="font-mono text-brand-700">{bank?.holder || "سيتم تزويده قريباً"}</dd>
+                    <dd className={`font-mono ${theme.badgeText}`}>{bank?.holder || "سيتم تزويده قريباً"}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">رقم الحساب</dt>
-                    <dd className="font-mono text-brand-700">
+                    <dd className={`font-mono ${theme.badgeText}`}>
                       {bank?.account ? (revealed ? bank.account : maskDigits(bank.account)) : "-"}
                     </dd>
                   </div>
                   {bank?.routing && (
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">Routing Number</dt>
-                      <dd className="font-mono text-brand-700">
+                      <dd className={`font-mono ${theme.badgeText}`}>
                         {revealed ? bank.routing : maskDigits(bank.routing)}
                       </dd>
                     </div>
@@ -169,7 +173,7 @@ export default function OrderForm({
                 {!revealed && bank?.account && (
                   <button
                     onClick={() => setRevealed(true)}
-                    className="mt-3 text-xs font-semibold text-brand-700 underline"
+                    className={`mt-3 text-xs font-semibold underline ${theme.badgeText}`}
                   >
                     👁️ إظهار الرقم كاملاً
                   </button>
@@ -180,7 +184,7 @@ export default function OrderForm({
 
           <button
             onClick={() => setStep("form")}
-            className="w-full rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-700"
+            className={`w-full rounded-xl px-5 py-2.5 text-sm font-bold text-white ${theme.button}`}
           >
             {method === "crypto_auto" ? "متابعة إلى الدفع ⚡" : "تم الدفع ✅ — متابعة"}
           </button>
@@ -220,7 +224,7 @@ export default function OrderForm({
             <button
               onClick={submit}
               disabled={loading}
-              className="flex-1 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+              className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 ${theme.button}`}
             >
               {loading
                 ? "جارٍ التحويل..."

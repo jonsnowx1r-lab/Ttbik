@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getCategoryTheme } from "@/lib/categoryTheme";
+import SectionBackdrop from "@/components/SectionBackdrop";
+
+const theme = getCategoryTheme("bots");
 
 export default function BotsDeployPage() {
   const [token, setToken] = useState("");
@@ -44,7 +48,8 @@ export default function BotsDeployPage() {
   }
 
   return (
-    <main className="mx-auto max-w-xl px-6 py-12 font-sans" dir="rtl">
+    <main className="relative mx-auto max-w-xl px-6 py-12 font-sans" dir="rtl">
+      <SectionBackdrop tone="bots" />
       <h1 className="mb-6 text-center text-2xl font-bold">تنشيط بوت تلجرام آلياً</h1>
       {ref && (
         <p className="mb-4 rounded bg-emerald-50 p-3 text-center text-sm text-emerald-800">
@@ -110,7 +115,7 @@ export default function BotsDeployPage() {
             <p className="mt-1 text-xs text-gray-500">مرتبط بآيدي المالك الذي أدخلته أعلاه تحديداً — لا يعمل مع آيدي آخر.</p>
           </div>
         )}
-        <button type="submit" disabled={loading} className="w-full rounded bg-blue-600 py-2 font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={loading} className={`w-full rounded py-2 font-bold text-white disabled:opacity-50 ${theme.button}`}>
           {loading ? "جاري ربط وتفعيل البوت..." : "تفعيل البوت على تلجرام فوراً"}
         </button>
       </form>
