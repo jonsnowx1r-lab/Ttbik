@@ -1,5 +1,5 @@
--- G3 URL shortener (ShortLink). Idempotent — safe to re-run.
--- Run once in Supabase SQL Editor after deploy.
+-- ShortLink (URL shortener) — Grok G3 / O1 website tool.
+-- Run once in Supabase SQL Editor. Idempotent.
 
 CREATE TABLE IF NOT EXISTS "ShortLink" (
     "id"          TEXT NOT NULL,
@@ -14,8 +14,3 @@ CREATE TABLE IF NOT EXISTS "ShortLink" (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ShortLink_code_key" ON "ShortLink"("code");
-
--- Service role needs full access for the Next.js API routes (same pattern as other tables).
-GRANT ALL ON TABLE "ShortLink" TO service_role;
-GRANT SELECT, INSERT, UPDATE ON TABLE "ShortLink" TO authenticated;
-GRANT SELECT ON TABLE "ShortLink" TO anon;

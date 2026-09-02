@@ -374,18 +374,15 @@ model RandomChatSession {
 }
 
 // ===================================================================
-// Free website tools (Grok O1 backlog) — isolated models, no overlap
-// with AD_BOT / MARRIAGE_BOT. Zero ongoing cost.
+// Website tools (Grok O1) — isolated models, no overlap with AD_BOT /
+// MARRIAGE_BOT. URL shortener first (G3).
 // ===================================================================
-
-// URL shortener + click counter (G3). Self-hosted, rate-limited,
-// strict http(s) validation only. No third-party shortener bill.
 model ShortLink {
   id          String    @id @default(cuid())
-  code        String    @unique // 7-char base62
+  code        String    @unique // 6-8 char base62
   targetUrl   String
   clicks      Int       @default(0)
   createdAt   DateTime  @default(now())
-  ownerIpHash String?   // light rate-limit fingerprint, no PII
+  ownerIpHash String?   // optional light rate-limit fingerprint, no PII store
   expiresAt   DateTime?
 }

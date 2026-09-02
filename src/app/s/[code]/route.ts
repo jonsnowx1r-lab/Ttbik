@@ -6,22 +6,27 @@ export async function GET(
   { params }: { params: { code: string } }
 ) {
   const code = (params.code || "").trim();
-  if (!code || code.length > 16 || !/^[0-9A-Za-z]+$/.test(code)) {
+  if (!code || code.length > 16) {
     return NextResponse.redirect(new URL("/", process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app"));
   }
 
-  const row = await prisma.shortLink.findUnique({ where: { code } });
-  if (!row) {
-    return new NextResponse("الرابط غير موجود أو منتهي", { status: 404 });
-  }
-  if (row.expiresAt && row.expiresAt.getTime() < Date.now()) {
-    return new NextResponse("انتهت صلاحية هذا الرابط", { status: 410 });
-  }
+  try {
+    const link = await prisma.shortLink.findUnique({ where: { code } });
+    if (!link) {
+      return new NextResponse("الرابط غير موجود أو انتهت صلاحيته", { status: 404 });
+    }
+    if (link.expiresAt && link.expiresAt.getTime() < Date.now()) {
+      return new NextResponse("انتهت صلاحية هذا الرابط", { status: 410 });
+    }
 
-  // Atomic click increment — fire-and-forget is fine; redirect must be fast.
-  prisma.shortLink
-    .update({ where: { code }, data: { clicks: { increment: 1 } } })
-    .catch((e) => console.error("[s/code] click++ failed", e));
+    // atomic click increment (best-effort; race is acceptable)
+    await prisma.shortLink.update({
+      where: { code },
+      data: { clicks: { increment: 1 } },
+    });
 
-  return NextResponse.redirect(row.targetUrl, 302);
+    return NextResponse.redirect(link.targetUrl, 302);
+  } catch {
+    return new NextResponse("خطأ مؤقت", { status: 503 });
+  }
 }

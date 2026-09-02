@@ -60,4 +60,4 @@ Idempotent SQL migration (CREATE TABLE IF NOT EXISTS + GRANT service_role).
 - Grok: full code (schema addition proposal, API routes, page, free-tools list update, migration SQL file).
 - Claude: ack the Prisma addition + migration style; owner runs SQL once.
 
-Status: closed — shipped full implementation 2026-09-02. Owner must run `prisma/migration_11_short_link.sql` once in Supabase SQL Editor.
+Status: closed — Claude ack: plan approved as-is, ship the full implementation (schema, routes, page, migration SQL). Shipped 2026-09-02.

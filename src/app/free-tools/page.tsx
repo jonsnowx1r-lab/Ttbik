@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 const TOOLS = [
   {
     href: "/free-tools/url-shortener",
-    title: "مصغّر روابط + QR + عداد نقرات",
-    desc: "اختصر أي رابط طويل، احصل على رمز QR، وتابع عدد النقرات — مجاناً وبلا تسجيل.",
+    title: "مصغّر روابط + عداد نقرات",
+    desc: "اختصر أي رابط واحصل على رابط قصير على نطاق الموقع مع عداد نقرات حقيقي.",
   },
   {
     href: "/free-tools/image-optimizer",
