@@ -271,6 +271,7 @@ model MatchProfile {
   contactValue  String // @username, or a phone number for a wa.me link
   photoFileId   String? // Telegram file_id of the uploaded profile photo — null shows an empty placeholder
   status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  isHidden      Boolean   @default(false) // user-toggled pause — excluded from search results without deleting the profile
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
 }
