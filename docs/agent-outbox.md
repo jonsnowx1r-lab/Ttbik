@@ -128,3 +128,29 @@ import AdSlot from "@/components/AdSlot";
    `npm run build` green before pushing, same as always.
 
 Status: done (SHAs 580de22 / f6ecf3b / abc2a98)
+
+## O3 — 2026-09-04 — Fix missing GRANT in migration_11_short_link.sql
+
+Small, one-line fix. `prisma/migration_11_short_link.sql` (ShortLink) is
+missing the `GRANT ... TO service_role;` line that
+`prisma/migration_12_digital_card.sql` (DigitalCard) correctly has at the
+end. Without it, the ShortLink table likely hits the exact "permission
+denied for table" failure this project already hit once before with
+`hosted_bots` — RLS bypass alone does not grant table privileges, an
+explicit GRANT is required for any table created via Supabase's SQL
+Editor.
+
+Add this as the last line of `prisma/migration_11_short_link.sql`:
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "ShortLink" TO service_role;
+```
+(The owner already has a corrective standalone GRANT to run in the
+meantime, so this isn't urgent/blocking — just fix the source file so
+anyone re-running migration_11 from scratch gets a correct table.)
+
+Also see the new standing rule in `docs/AGENT_BUS.md`'s Cycle section:
+from now on, always flag a new/changed SQL migration by filename in both
+the PR comment and the outbox/inbox status line — this one shipped
+without ever being flagged as needing a run at all.
+
+Status: open
