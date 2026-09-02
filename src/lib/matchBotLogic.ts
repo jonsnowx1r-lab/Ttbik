@@ -62,7 +62,8 @@ type PendingAction =
   | { mode: "admin_broadcast" }
   | { mode: "admin_lookup" }
   | { mode: "admin_unban" }
-  | { mode: "contact_admin_compose" };
+  | { mode: "contact_admin_compose" }
+  | { mode: "admin_reply"; targetUserId: string; messageId: string };
 
 const SKIP_LABEL = "⏭ غير محدد / لا يهم";
 
@@ -547,7 +548,7 @@ async function handleMatchCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
       await bot.api.answerCallbackQuery(cq.id).catch(() => null);
       return;
     }
-    await handleAdminCallback(bot, chatId, data, cq);
+    await handleAdminCallback(bot, botRow.id, chatId, data, cq);
     return;
   }
 
@@ -771,6 +772,15 @@ async function sendPendingReportsList(bot: TelegramBot, chatId: number, source: 
   }
 }
 
+function inboxMessageKb(messageId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("↩️ رد", `madmin_msgreply|${messageId}`)
+    .text("✅ تحديد كمقروء", `madmin_msgread|${messageId}`)
+    .row()
+    .text("🔇 كتم المرسل", `madmin_msgmute|${messageId}`)
+    .text("⛔ حظر المرسل", `madmin_msgban|${messageId}`);
+}
+
 async function sendInboxMessages(bot: TelegramBot, chatId: number) {
   const messages = await prisma.adminMessage.findMany({ where: { status: "PENDING" }, orderBy: { created_at: "asc" }, take: 20 });
   if (messages.length === 0) {
@@ -780,8 +790,7 @@ async function sendInboxMessages(bot: TelegramBot, chatId: number) {
   for (const m of messages) {
     const senderProfile = await prisma.matchProfile.findUnique({ where: { userId: m.senderId } });
     const text = `📩 رسالة من ${senderProfile?.name || "بلا ملف"} (#${shortId(m.senderId)})\n🆔 ${m.senderId}\n${relativeTime(m.created_at)}\n\n${m.text}`;
-    const kb = new InlineKeyboard().text("✅ تحديد كمقروء", `madmin_msgread|${m.id}`);
-    await bot.api.sendMessage(chatId, text, { reply_markup: kb }).catch(() => null);
+    await bot.api.sendMessage(chatId, text, { reply_markup: inboxMessageKb(m.id) }).catch(() => null);
   }
 }
 
@@ -905,7 +914,7 @@ async function handleAdminMessage(bot: TelegramBot, chatId: number, text: string
   await bot.api.sendMessage(chatId, "🛠 لوحة تحكم مشرف بوت التعارف والزواج.", { reply_markup: adminMenu() });
 }
 
-async function handleAdminCallback(bot: TelegramBot, chatId: number, data: string, cq: any) {
+async function handleAdminCallback(bot: TelegramBot, botId: string, chatId: number, data: string, cq: any) {
   if (data.startsWith("madmin_approve|") || data.startsWith("madmin_reject|")) {
     const approve = data.startsWith("madmin_approve|");
     const userId = data.split("|")[1];
@@ -917,6 +926,37 @@ async function handleAdminCallback(bot: TelegramBot, chatId: number, data: strin
     const msgId = data.split("|")[1];
     await prisma.adminMessage.update({ where: { id: msgId }, data: { status: "READ" } }).catch(() => null);
     await bot.api.answerCallbackQuery(cq.id, { text: "✅ تم التحديد كمقروء" }).catch(() => null);
+    return;
+  }
+  if (data.startsWith("madmin_msgban|") || data.startsWith("madmin_msgmute|")) {
+    const msgId = data.split("|")[1];
+    const inboxMsg = await prisma.adminMessage.findUnique({ where: { id: msgId } });
+    if (!inboxMsg) {
+      await bot.api.answerCallbackQuery(cq.id, { text: "الرسالة غير موجودة." }).catch(() => null);
+      return;
+    }
+    if (data.startsWith("madmin_msgban|")) {
+      await prisma.matchUser.update({ where: { id: inboxMsg.senderId }, data: { isBanned: true } }).catch(() => null);
+      await bot.api.sendMessage(chatId, "⛔ تم حظر المستخدم نهائياً من البوت لتجاوزه التحذير.");
+    } else {
+      await prisma.matchUser.update({ where: { id: inboxMsg.senderId }, data: { mutedUntil: new Date(Date.now() + 24 * 3600 * 1000) } }).catch(() => null);
+      await bot.api.sendMessage(chatId, "🔇 تم كتم المستخدم لمدة 24 ساعة.");
+    }
+    await prisma.adminMessage.update({ where: { id: msgId }, data: { status: "READ" } }).catch(() => null);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("madmin_msgreply|")) {
+    const msgId = data.split("|")[1];
+    const inboxMsg = await prisma.adminMessage.findUnique({ where: { id: msgId } });
+    if (!inboxMsg) {
+      await bot.api.answerCallbackQuery(cq.id, { text: "الرسالة غير موجودة." }).catch(() => null);
+      return;
+    }
+    await ensureMatchUser(botId, String(cq.from.id));
+    await setPending(String(cq.from.id), { mode: "admin_reply", targetUserId: inboxMsg.senderId, messageId: msgId });
+    await bot.api.sendMessage(chatId, "↩️ اكتب ردك الآن وسيصل مباشرة إلى المُرسل:");
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     return;
   }
   if (data.startsWith("mrep_")) {
@@ -979,6 +1019,12 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
       }
       if (adminPending.mode === "admin_unban") {
         await runUnban(bot, chatId, text);
+        return;
+      }
+      if (adminPending.mode === "admin_reply") {
+        await bot.api.sendMessage(Number(adminPending.targetUserId), `↩️ رد من الإدارة:\n\n${text}`).catch(() => null);
+        await prisma.adminMessage.update({ where: { id: adminPending.messageId }, data: { status: "READ" } }).catch(() => null);
+        await bot.api.sendMessage(chatId, "✅ تم إرسال ردك إلى المستخدم.");
         return;
       }
     }
@@ -1180,7 +1226,7 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
     return;
   }
   if (pending?.mode === "contact_admin_compose") {
-    await prisma.adminMessage.create({ data: { senderId: tgUserId, text } });
+    const savedMsg = await prisma.adminMessage.create({ data: { senderId: tgUserId, text } });
     await setPending(tgUserId, null);
     await bot.api.sendMessage(chatId, "✅ تم إرسال رسالتك إلى الإدارة.", { reply_markup: mainMenu() });
     if (SUPER_ADMIN_ID) {
@@ -1188,7 +1234,8 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
       await bot.api
         .sendMessage(
           Number(SUPER_ADMIN_ID),
-          `📩 رسالة جديدة من مستخدم\n\nمن: ${senderProfile?.name || "بلا ملف"} (#${shortId(tgUserId)})\n\n${text}\n\nراجعها من «📥 الرسائل الواردة».`
+          `📩 رسالة جديدة من مستخدم\n\nمن: ${senderProfile?.name || "بلا ملف"} (#${shortId(tgUserId)})\n\n${text}`,
+          { reply_markup: inboxMessageKb(savedMsg.id) }
         )
         .catch(() => null);
     }
