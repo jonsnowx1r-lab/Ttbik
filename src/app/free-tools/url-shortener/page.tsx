@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import UrlShortener from "./UrlShortener";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "مصغّر روابط مجاني + عداد نقرات | سوق تولز",
@@ -20,6 +21,9 @@ export default function UrlShortenerPage() {
       </p>
       <div className="mt-6">
         <UrlShortener />
+      </div>
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل مصغّر الروابط" />
       </div>
     </div>
   );
