@@ -674,19 +674,21 @@ async function startRandomChat(bot: TelegramBot, chatId: number, botRow: BotRow,
 // trail for a "still working" feel, then settles on the same
 // informative final text this used to send immediately.
 async function animateSearchingMessage(bot: TelegramBot, chatId: number) {
-  // Logged instead of silently swallowed (owner report, 2026-09-05: no
-  // animation appeared at all in production) — a blind .catch(() => null)
-  // here means a real failure (wrong permissions, rate limit, whatever it
-  // turns out to be) would be invisible. These console.error lines land in
-  // Vercel's function logs (Project → Deployments → the live deployment →
-  // Logs, or `vercel logs`), which is the only way to see what's actually
-  // happening server-side without live access to this deployment.
-  console.log("[randomChat] animateSearchingMessage: start", { chatId });
-  const keyboard = new Keyboard().text("🔀 مراسلة عشوائية").row().text(backLabel()).resized();
+  // No reply_markup on this message, on purpose: Telegram's Bot API
+  // rejects editMessageText with "400: Bad Request: message can't be
+  // edited" on ANY message that was sent carrying a ReplyKeyboardMarkup
+  // (the persistent bottom keyboard) — confirmed via production logs,
+  // 2026-09-05, where every single edit below failed with exactly that
+  // error. Inline keyboards (see the working carousel in adBotLogic.ts)
+  // don't have this restriction; reply keyboards do. We don't lose the
+  // retry button by dropping it here: the visitor can only reach this
+  // function by having just pressed "🔀 مراسلة عشوائية" on whatever
+  // keyboard was already showing (mainMenu, or this same waiting keyboard
+  // from an earlier press) — that keyboard stays untouched and the button
+  // is still right there.
   let msg;
   try {
-    msg = await bot.api.sendMessage(chatId, "🔍 جاري البحث عن شريك للمحادثة", { reply_markup: keyboard });
-    console.log("[randomChat] initial sendMessage ok", { messageId: msg.message_id });
+    msg = await bot.api.sendMessage(chatId, "🔍 جاري البحث عن شريك للمحادثة");
   } catch (e) {
     console.error("[randomChat] initial sendMessage FAILED", e);
     return;
@@ -696,26 +698,18 @@ async function animateSearchingMessage(bot: TelegramBot, chatId: number) {
     "🔍 جاري البحث عن شريك للمحادثة..",
     "🔎 جاري البحث عن شريك للمحادثة...",
   ];
-  for (const [i, frame] of frames.entries()) {
+  for (const frame of frames) {
     await new Promise((resolve) => setTimeout(resolve, 800));
-    try {
-      await bot.api.editMessageText(chatId, msg.message_id, frame);
-      console.log("[randomChat] edit ok", { frame: i });
-    } catch (e) {
-      console.error("[randomChat] edit FAILED", { frame: i, error: e });
-    }
+    await bot.api.editMessageText(chatId, msg.message_id, frame).catch((e) => console.error("[randomChat] edit FAILED", e));
   }
   await new Promise((resolve) => setTimeout(resolve, 800));
-  try {
-    await bot.api.editMessageText(
+  await bot.api
+    .editMessageText(
       chatId,
       msg.message_id,
       "🔍 يتم البحث الآن عن شريك للمحادثة... إن لم يُعثر على أحد خلال دقيقة واحدة، اضغط الزر مجدداً للتحقق."
-    );
-    console.log("[randomChat] final edit ok");
-  } catch (e) {
-    console.error("[randomChat] final edit FAILED", e);
-  }
+    )
+    .catch((e) => console.error("[randomChat] final edit FAILED", e));
 }
 
 async function endRandomChat(bot: TelegramBot, tgUserId: string, sessionId: string, partnerId: string, reason: "end" | "block") {
