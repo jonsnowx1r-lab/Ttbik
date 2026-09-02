@@ -18,6 +18,20 @@ conversion via a paid conversion API, plagiarism checking.
 
 ## Queue (in priority order)
 
+- [ ] **0. Created-bots tracking panel inside Super Admin** (owner directive,
+      2026-09-03) — a screen in the existing `/admin/platform` Super Admin
+      dashboard (or the SUPER_ADMIN's in-bot `/admin` panel — pick whichever
+      fits the existing admin UI better) listing every `Bot` row: token
+      (masked), owner Telegram id, template, created_at, totalRevenue,
+      isActive. Actions per row: disable (flip `Bot.isActive` — webhook
+      handler must already refuse updates for an inactive bot, verify/add
+      that check), delete (remove the Bot row + cascade its Ads/Users per
+      existing FK behavior — confirm before wiring, this is destructive),
+      and whatever "إزالة" beyond delete turns out to mean once discussed
+      with the owner (e.g. revoke webhook without deleting history?). This
+      exists because AD_BOT/MARRIAGE_BOT are manually sold and manually
+      controlled (see AGENT_BUS.md Product rules) — the owner needs to be
+      able to shut one down without touching the database by hand.
 - [ ] **1. Unified points/rewards ledger across all bots** — a single
       `PlatformPoints` balance per Telegram user id, earned from any bot
       (daily streak, referral, quiz win, ...) and spendable in any other
