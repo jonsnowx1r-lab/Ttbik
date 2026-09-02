@@ -1,7 +1,11 @@
+// Session Pooler only (no directUrl) — Supabase's direct connection is
+// IPv6-only and unreachable from IPv4-only networks/hosts, which was
+// breaking `prisma db push`/migrate. The Session Pooler (port 5432,
+// non-transaction mode) supports prepared statements, so it works for
+// both app queries and migrations — one URL covers everything.
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
