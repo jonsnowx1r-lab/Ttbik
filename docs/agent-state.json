@@ -3,16 +3,17 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5508871088,
   "last_actor": "grok",
-  "updated_at": "2026-09-02T11:37:00Z",
+  "updated_at": "2026-09-02T16:04:00Z",
   "mode": "work-cycle",
   "open": [
     "RESUME (owner directive, 2026-09-02): HOLD lifted — Grok may resume pushing code now. Full brief in docs/agent-outbox.md task O1: plan first (post it if it touches a shared file), then ship real end-to-end working code (schema + logic + idempotent migration SQL + typecheck/build clean + wired into a real page/admin panel) at the same rigor as AD_BOT/MARRIAGE_BOT — never a stub or demo.",
     "HARD BOUNDARY (permanent, not just for this cycle): Grok must never edit prisma/schema.prisma's AD_BOT models (User/Ad/Transaction/BotPurchase/...) or MARRIAGE_BOT models (MatchUser/MatchProfile/...), src/lib/adBotLogic.ts, src/lib/matchBotLogic.ts, src/services/ton-service.ts, or the AD_BOT/MARRIAGE_BOT branches inside src/app/api/telegram/[botId]/route.ts, src/app/api/bots/deploy/route.ts, src/app/bots/page.tsx. Adding a new sibling branch/option for a brand-new Grok template is fine; editing Claude's existing ones is not. Don't re-propose either bot — both are live and complete.",
     "Ownership table in docs/AGENT_BUS.md corrected post-rebuild — old botEngine.ts/hosted_bots (Supabase-JS) ownership lines are historical only, that system was deleted in 25d3d09 and no longer exists. Grok's assignment now: docs/agent-outbox.md task O1's website-tools backlog, or a brand-new bot template that only adds to (never edits) the shared dispatcher files.",
-    "O1 backlog remaining after G3 ship: (2) digital business card / linktree-style page, (3) Arabic CV generator + PDF, (4) simple Arabic contracts/invoices, (5) crypto converter (TON marketing), (6) image compress already partially exists as free-tools/image-optimizer",
-    "G4 ack'd by Claude 2026-09-02 with one required fix: editToken must use crypto.randomUUID()/randomBytes, never Math.random() (it's a bearer secret for anonymous edit access, unlike G3's public short-link code). Grok cleared to ship otherwise as planned."
+    "O1 backlog remaining after G4 ship: (3) Arabic CV generator + PDF, (4) simple Arabic contracts/invoices, (5) crypto converter (TON marketing), (6) image compress already partially exists as free-tools/image-optimizer",
+    "Owner must run prisma/migration_12_digital_card.sql once in Supabase SQL Editor (CREATE TABLE IF NOT EXISTS + GRANT service_role)."
   ],
   "resolved": [
+    "G4 digital business card shipped full: DigitalCard model, migration_12_digital_card.sql, POST /api/tools/card (editToken via crypto.randomBytes(24)), GET /c/[slug] + views++, /free-tools/digital-card UI, listed on free-tools + sitemap. Claude ack'd plan with editToken entropy fix — applied.",
     "G3 URL shortener shipped full: ShortLink model, migration_11_short_link.sql, POST /api/tools/shorten, GET /s/[code], /free-tools/url-shortener, listed on free-tools page. Claude ack'd plan; owner must run migration_11 once in Supabase SQL Editor.",
     "HOLD lifted 2026-09-02 — Prisma+grammy rebuild is stable (AD_BOT + MARRIAGE_BOT both live), owner explicitly asked Claude to resume Grok. See new RESUME entry in open[].",
     "GROK TOOLING ALERT on src/lib/botEngine.ts — moot, file no longer exists (deleted in 25d3d09, superseded by the Prisma+grammy engine).",
