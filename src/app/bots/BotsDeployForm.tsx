@@ -6,7 +6,11 @@ import SectionBackdrop from "@/components/SectionBackdrop";
 
 const theme = getCategoryTheme("bots");
 
-export default function BotsDeployForm({ isOwner }: { isOwner: boolean }) {
+// AdSlot is a Server Component (reads cookies via next/headers) — a
+// Client Component like this one can't import it directly, only receive
+// it already-rendered as a prop from the Server Component that renders
+// this one (src/app/bots/page.tsx).
+export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; adSlot: React.ReactNode }) {
   const [token, setToken] = useState("");
   const [template, setTemplate] = useState("AD_BOT");
   const [ownerId, setOwnerId] = useState("");
@@ -122,6 +126,8 @@ export default function BotsDeployForm({ isOwner }: { isOwner: boolean }) {
         </button>
       </form>
       {status && <div className="mt-4 whitespace-pre-wrap rounded bg-gray-100 p-3 text-sm">{status}</div>}
+
+      <div className="mt-8">{adSlot}</div>
     </main>
   );
 }

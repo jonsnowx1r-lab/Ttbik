@@ -3,6 +3,7 @@ import { supabasePublic } from "@/lib/supabase";
 import type { Category, Service } from "@/types";
 import StorefrontBrowser from "@/components/StorefrontBrowser";
 import SectionBackdrop from "@/components/SectionBackdrop";
+import AdSlot from "@/components/AdSlot";
 
 export const revalidate = 30;
 
@@ -56,6 +57,10 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <AdSlot position="in-content" label="بين الترحيب والأقسام" />
+      </div>
 
       {visible.length > 0 && <StorefrontBrowser categories={visible} services={services} />}
     </div>

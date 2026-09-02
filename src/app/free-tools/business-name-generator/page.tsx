@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import BusinessNameGenerator from "./BusinessNameGenerator";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "مولد أسماء المشاريع والمتاجر مجاناً | سوق تولز",
@@ -19,6 +20,9 @@ export default function BusinessNameGeneratorPage() {
       </p>
       <div className="mt-6">
         <BusinessNameGenerator />
+      </div>
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل مولد الأسماء" />
       </div>
     </div>
   );

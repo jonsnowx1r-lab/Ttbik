@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import TextAnalyzer from "./TextAnalyzer";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "محلل النصوص الذكي مجاناً | سوق تولز",
@@ -19,6 +20,9 @@ export default function TextAnalyzerPage() {
       </p>
       <div className="mt-6">
         <TextAnalyzer />
+      </div>
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل محلل النصوص" />
       </div>
     </div>
   );

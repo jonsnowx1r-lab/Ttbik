@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import WritingAssistant from "./WritingAssistant";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "مساعد الكتابة الذكي مجاناً | سوق تولز",
@@ -19,6 +20,9 @@ export default function WritingAssistantPage() {
       </p>
       <div className="mt-6">
         <WritingAssistant />
+      </div>
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل مساعد الكتابة" />
       </div>
     </div>
   );

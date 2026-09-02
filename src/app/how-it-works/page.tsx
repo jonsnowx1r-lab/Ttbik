@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import SectionBackdrop from "@/components/SectionBackdrop";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "كيف يعمل الموقع؟ | سوق تولز",
@@ -80,6 +81,10 @@ export default function HowItWorksPage() {
         <Link href="/order/lookup" className="rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
           تتبع طلبي
         </Link>
+      </div>
+
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل كيف يعمل الموقع" />
       </div>
     </div>
   );

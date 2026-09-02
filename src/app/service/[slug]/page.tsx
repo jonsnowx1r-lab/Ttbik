@@ -13,6 +13,7 @@ import { isOwnerServer } from "@/lib/isOwner";
 import Link from "next/link";
 import { getCategoryTheme } from "@/lib/categoryTheme";
 import SectionBackdrop from "@/components/SectionBackdrop";
+import AdSlot from "@/components/AdSlot";
 
 export const revalidate = 30;
 
@@ -127,6 +128,13 @@ export default async function ServicePage({ params }: { params: { slug: string }
             <OrderForm serviceId={service.id} priceUsd={service.price_usd} categorySlug={categorySlug} />
           )}
         </div>
+      </div>
+
+      {/* Below the whole grid, clear of the description and the order/
+          payment card — an ad here never risks being mistaken for part of
+          the checkout flow. */}
+      <div className="mt-10">
+        <AdSlot position="in-content" label="أسفل صفحة الخدمة" />
       </div>
     </div>
   );

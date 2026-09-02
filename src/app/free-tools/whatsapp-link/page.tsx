@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import WhatsappLinkGenerator from "./WhatsappLinkGenerator";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "مولد رابط الطلب عبر واتساب مجاناً | سوق تولز",
@@ -19,6 +20,9 @@ export default function WhatsappLinkPage() {
       </p>
       <div className="mt-6">
         <WhatsappLinkGenerator />
+      </div>
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل مولد رابط واتساب" />
       </div>
     </div>
   );
