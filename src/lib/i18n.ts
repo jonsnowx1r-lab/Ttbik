@@ -183,6 +183,15 @@ export const STR: Dict = {
 
   depositChoose: { ar: "اختر مبلغ الإيداع وعملتك المفضّلة (USDT, TRX, TON, LTC, SOL...) في الصفحة:\n{link}", en: "Choose your deposit amount and preferred currency (USDT, TRX, TON, LTC, SOL...) on the page:\n{link}" },
 
+  // Native TON deposit — a second, direct path alongside the NOWPayments
+  // link above (owner spec, 2026-09-02), shown only when the platform's
+  // shared hot wallet is configured.
+  btnTonDeposit: { ar: "💎 إيداع TON مباشر", en: "💎 Direct TON Deposit" },
+  tonDepositInfo: {
+    ar: "💎 إيداع TON/USDT-TON مباشر\n\n📮 العنوان: {address}\n🔖 رمز التعريف (Memo/Comment) الخاص بك: {memo}\n\n⚠️ يجب إضافة رمز التعريف أعلاه بالضبط في خانة \"التعليق/Comment/Memo\" عند التحويل، وإلا لن يُحتسب إيداعك تلقائياً.\n\n⏳ يُضاف المبلغ لرصيدك تلقائياً خلال 24 ساعة من تأكيد المعاملة على الشبكة.",
+    en: "💎 Direct TON/USDT-TON deposit\n\n📮 Address: {address}\n🔖 Your memo/comment code: {memo}\n\n⚠️ You must add the code above exactly in the transfer's \"Comment/Memo\" field, or your deposit won't be credited automatically.\n\n⏳ The amount is added to your balance automatically within 24 hours of the transaction confirming on-chain.",
+  },
+
   // "أريد بوتاً مماثلاً" — the paid bot-purchase flow (owner spec,
   // 2026-08-31). Deliberately says only what a buyer needs to decide: the
   // 50% user payout as a selling point, not the internal creator/platform

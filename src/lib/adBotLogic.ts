@@ -3,6 +3,14 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { Bot as BotRow, Prisma } from "@prisma/client";
 import { t, type Lang, DEFAULT_LANG } from "@/lib/i18n";
+import {
+  getOrCreateTonMemo,
+  getMasterHotWalletAddress,
+  isNativeTonConfigured,
+  isTonAddress,
+  usdToTon,
+  sendTonWithdrawal,
+} from "@/services/ton-service";
 
 /**
  * AD_BOT template — grammy + Prisma, per the owner's blueprint. Navigation
@@ -254,7 +262,13 @@ function mainMenu(lang: Lang): Keyboard {
     .resized();
 }
 function walletMenu(lang: Lang): Keyboard {
-  return new Keyboard().text(t(lang, "btnDeposit")).text(t(lang, "btnWithdraw")).row().text(backLabel(lang)).resized();
+  const kb = new Keyboard().text(t(lang, "btnDeposit")).text(t(lang, "btnWithdraw")).row();
+  // Native TON deposit — only shown once the platform's shared hot wallet
+  // is actually configured (owner spec, 2026-09-02), alongside the
+  // existing NOWPayments deposit link shown by btnDeposit, never replacing it.
+  if (isNativeTonConfigured()) kb.text(t(lang, "btnTonDeposit")).row();
+  kb.text(backLabel(lang));
+  return kb.resized();
 }
 function typeMenu(lang: Lang): Keyboard {
   const kb = new Keyboard();
@@ -343,6 +357,7 @@ function topLevelTexts(lang: Lang): string[] {
     t(lang, "btnFaq"),
     t(lang, "btnWantOwnBot"),
     t(lang, "btnOwnerPanel"),
+    t(lang, "btnTonDeposit"),
   ];
 }
 function isBack(lang: Lang, text: string): boolean {
@@ -657,6 +672,12 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await sendDepositOptions(bot, chatId, user.id, lang);
     return;
   }
+  if (text === t(lang, "btnTonDeposit") && isNativeTonConfigured()) {
+    const address = getMasterHotWalletAddress()!;
+    const memo = await getOrCreateTonMemo(user.id);
+    await bot.api.sendMessage(chatId, t(lang, "tonDepositInfo", { address, memo }), { reply_markup: walletMenu(lang) });
+    return;
+  }
   if (text === t(lang, "btnWithdraw")) {
     await setPending(user.id, { mode: "withdraw_address" });
     await bot.api.sendMessage(chatId, t(lang, "withdrawAddressPrompt"), { reply_markup: amountEntryMenu(lang) });
@@ -793,7 +814,7 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     const isAudit = amount > AUDIT_THRESHOLD;
     await prisma.bot.update({ where: { id: botRow.id }, data: { ownerBalance: round2(ownerBalance - amount) } });
     const tx = await prisma.transaction.create({
-      data: { userId: user.id, botId: botRow.id, amount: round2(amount), currency: "internal", type: "OWNER_WITHDRAWAL", status: isAudit ? "PENDING_AUDIT" : "PENDING" },
+      data: { userId: user.id, botId: botRow.id, amount: round2(amount), currency: "internal", type: "OWNER_WITHDRAWAL", status: isAudit ? "PENDING_AUDIT" : "PENDING", destination: pending.address },
     });
     await setPending(user.id, null);
     await bot.api.sendMessage(
@@ -1090,7 +1111,7 @@ async function consumeWithdrawAmount(bot: TelegramBot, chatId: number, user: any
   const isAudit = amount > AUDIT_THRESHOLD;
   await prisma.user.update({ where: { id: user.id }, data: { balance: round2(balance - amount) } });
   const tx = await prisma.transaction.create({
-    data: { userId: user.id, amount: round2(amount), currency: "internal", type: "WITHDRAWAL", status: isAudit ? "PENDING_AUDIT" : "PENDING" },
+    data: { userId: user.id, amount: round2(amount), currency: "internal", type: "WITHDRAWAL", status: isAudit ? "PENDING_AUDIT" : "PENDING", destination: address },
   });
   await setPending(user.id, null);
   await bot.api.sendMessage(chatId, t(lang, "withdrawSent", { amount: fmt(amount) }), { reply_markup: mainMenu(lang) });
@@ -1636,6 +1657,39 @@ async function decideWithdrawal(bot: TelegramBot, chatId: number, txIdSuffix: st
     return;
   }
   if (approve) {
+    // Native TON payout: if the payout address is a valid TON address and
+    // the master hot wallet is configured, sign and broadcast the transfer
+    // right here instead of asking the admin to send it manually. This is
+    // ONLY reached after the existing manual-approval + $20 audit-threshold
+    // gate above — it automates the actual sending step, not the approval
+    // decision itself.
+    if (tx.destination && isTonAddress(tx.destination) && isNativeTonConfigured()) {
+      try {
+        const amountTon = await usdToTon(Number(tx.amount));
+        await sendTonWithdrawal(tx.destination, amountTon);
+        await prisma.$transaction([
+          prisma.transaction.update({ where: { id: tx.id }, data: { status: "COMPLETED" } }),
+          prisma.tonTransaction.create({
+            data: {
+              userId: tx.userId,
+              type: "WITHDRAWAL",
+              amountTon,
+              usdValue: Number(tx.amount),
+              txHash: `withdraw_${tx.id}`,
+              toAddress: tx.destination,
+              status: "COMPLETED",
+            },
+          }),
+        ]);
+        await bot.api.sendMessage(chatId, `✅ تمت الموافقة وأُرسل ${amountTon.toFixed(4)} TON فعلياً إلى ${tx.destination}.`);
+      } catch (error: any) {
+        // Leave status as PENDING/PENDING_AUDIT (unchanged) so re-sending
+        // "موافقة <id>" retries the send — never mark COMPLETED on a
+        // transfer that may not have actually gone through.
+        await bot.api.sendMessage(chatId, `⚠️ فشل الإرسال الآلي على شبكة TON: ${error.message || error}\nأرسل "موافقة ${shortId(tx.id)}" مجدداً للمحاولة، أو حوّل المبلغ يدوياً.`);
+      }
+      return;
+    }
     await prisma.transaction.update({ where: { id: tx.id }, data: { status: "COMPLETED" } });
     await bot.api.sendMessage(chatId, "✅ تمت الموافقة — حوّل المبلغ يدوياً للمستفيد.");
   } else if (tx.type === "OWNER_WITHDRAWAL" && tx.botId) {

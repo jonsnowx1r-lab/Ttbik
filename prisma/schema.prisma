@@ -50,6 +50,16 @@ model User {
   role           Role          @default(USER)
   balance        Float         @default(0.0)
   depositAddress String?
+  // Native TON deposit attribution (owner spec, 2026-09-02): the platform
+  // uses ONE shared hot wallet (MASTER_HOT_WALLET_ADDRESS) for all native
+  // TON/USDT-TON deposits — not a separate on-chain subwallet per user —
+  // and tells each user apart by this unique memo/comment they attach to
+  // their transfer. Deposits still land in the same unified User.balance
+  // (converted to its USD value at credit time), same as NOWPayments
+  // deposits already do — one wallet ledger for the whole platform, not a
+  // second parallel TON-only balance.
+  tonMemo        String?       @unique
+  tonTransactions TonTransaction[]
   referredBy     String?
   language       String        @default("ar") // "ar" | "en" — persisted UI language preference
   // Phone verification via Telegram's native "share contact" button —
@@ -135,10 +145,32 @@ model Transaction {
   type       String // DEPOSIT | WITHDRAWAL | TASK_REWARD | AD_PAYMENT | AD_REFUND | PLATFORM_PROFIT | OWNER_WITHDRAWAL | PENALTY | CREATOR_EARNING_PENDING | REFERRAL_COMMISSION | REFERRAL_B2B_COMMISSION
   status     String // PENDING | PENDING_AUDIT | COMPLETED | FAILED | REJECTED | RELEASED
   txHash     String? // NOWPayments payment_id, used for IPN idempotency
+  destination String? // withdrawal payout address (TRC20/TON/etc) — set only for WITHDRAWAL/OWNER_WITHDRAWAL, so decideWithdrawal knows where to send on approval
   created_at DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
 
   @@unique([txHash])
+}
+
+// Blockchain-level ledger for native TON/USDT-TON transfers through the
+// shared MASTER_HOT_WALLET_ADDRESS (owner spec, 2026-09-02) — the source
+// of idempotency for the deposit scanner (unique per on-chain txHash/lt)
+// and the record of what was actually signed and broadcast for a
+// withdrawal. Each processed row also creates a normal Transaction
+// (type DEPOSIT/WITHDRAWAL, currency "TON") so the user's wallet history
+// stays unified regardless of which gateway moved the money — this table
+// is the TON-specific detail behind that entry, not a second balance.
+model TonTransaction {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  type       String // DEPOSIT | WITHDRAWAL
+  amountTon  Float
+  usdValue   Float // TON amount converted to USD at the rate used to credit/debit User.balance
+  txHash     String   @unique // on-chain transaction hash/logical-time — the idempotency key
+  toAddress  String? // withdrawal destination only; null for deposits (always the shared hot wallet)
+  status     String   @default("PENDING") // PENDING | COMPLETED | FAILED
+  created_at DateTime @default(now())
 }
 
 // Per-user click/timer state for the "زيارة الموقع (15 ثانية)" anti-cheat
