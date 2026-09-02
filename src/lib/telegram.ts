@@ -41,7 +41,9 @@ export async function sendOrderAlert(params: {
     `السعر: $${params.priceUsd}`,
     `العميل: ${params.customerName}`,
     `التواصل: ${params.customerContact}`,
-    `طريقة الدفع: ${params.paymentMethod === "bank" ? "تحويل بنكي (ACH)" : "USDT"}`,
+    `طريقة الدفع: ${
+      params.paymentMethod === "bank" ? "تحويل بنكي (ACH)" : params.paymentMethod === "crypto_auto" ? "⚡ دفع تلقائي (NOWPayments)" : "USDT (يدوي)"
+    }`,
     `مرجع التحويل: ${params.transferReference}`,
   ].join("\n");
 

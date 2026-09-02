@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import crypto from "crypto";
-
-// NOWPayments IPN: HMAC-SHA512 of the JSON body with keys sorted
-// alphabetically and no extra whitespace (their documented signing scheme),
-// compared against the x-nowpayments-sig header.
-function sortedJson(obj: any): string {
-  if (Array.isArray(obj)) return `[${obj.map(sortedJson).join(",")}]`;
-  if (obj && typeof obj === "object") {
-    const keys = Object.keys(obj).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${sortedJson(obj[k])}`).join(",")}}`;
-  }
-  return JSON.stringify(obj);
-}
+import { verifyNowPaymentsSignature } from "@/lib/nowpaymentsSignature";
 
 export async function POST(req: NextRequest) {
   const secret = process.env.NOWPAYMENTS_IPN_SECRET || "";
@@ -21,8 +9,7 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ error: "invalid body" }, { status: 400 });
   if (!secret) return NextResponse.json({ error: "not configured" }, { status: 503 });
 
-  const expected = crypto.createHmac("sha512", secret).update(sortedJson(body)).digest("hex");
-  if (signature !== expected) {
+  if (!verifyNowPaymentsSignature(body, signature)) {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 

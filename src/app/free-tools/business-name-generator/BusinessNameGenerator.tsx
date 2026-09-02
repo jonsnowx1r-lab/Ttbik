@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function BusinessNameGenerator() {
+  const router = useRouter();
   const [description, setDescription] = useState("");
-  const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -13,7 +14,6 @@ export default function BusinessNameGenerator() {
     if (!description.trim() || loading) return;
     setLoading(true);
     setError("");
-    setOutput("");
     try {
       const res = await fetch("/api/free-tools/business-name", {
         method: "POST",
@@ -22,10 +22,11 @@ export default function BusinessNameGenerator() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "تعذّر توليد الأسماء");
-      setOutput(data.output);
+      // Navigate to a dedicated result page instead of showing inline —
+      // a real page view for every generation, not just a state update.
+      router.push(`/free-tools/business-name-generator/result?output=${encodeURIComponent(data.output)}`);
     } catch (e: any) {
       setError(e.message || "حدث خطأ غير متوقع");
-    } finally {
       setLoading(false);
     }
   }
@@ -48,16 +49,9 @@ export default function BusinessNameGenerator() {
       </button>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      {output && (
-        <div className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-700">{output}</div>
-      )}
 
       <div className="mt-6 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 p-4 text-sm text-slate-600">
         اخترت اسماً؟ الخطوة التالية: أنشئ لمشروعك{" "}
-        <Link href="/service/landing-page-generator" className="font-bold text-brand-700 underline">
-          صفحة هبوط احترافية
-        </Link>{" "}
-        أو{" "}
         <Link href="/free-tools/whatsapp-link" className="font-bold text-brand-700 underline">
           رابط طلب واتساب مجاني
         </Link>

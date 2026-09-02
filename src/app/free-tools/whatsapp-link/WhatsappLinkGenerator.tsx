@@ -1,24 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function WhatsappLinkGenerator() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [number, setNumber] = useState("");
-  const [copied, setCopied] = useState(false);
 
   const digitsOnly = number.replace(/\D/g, "");
-  const message = encodeURIComponent(`مرحباً، أريد أطلب: ${name || "المنتج"}${price ? ` (${price})` : ""}`);
-  const link = digitsOnly ? `https://wa.me/${digitsOnly}?text=${message}` : "";
+  const valid = digitsOnly.length >= 8;
 
-  function copyLink() {
-    if (!link) return;
-    navigator.clipboard.writeText(link).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+  function generate() {
+    if (!valid) return;
+    const message = encodeURIComponent(`مرحباً، أريد أطلب: ${name || "المنتج"}${price ? ` (${price})` : ""}`);
+    const link = `https://wa.me/${digitsOnly}?text=${message}`;
+    // Navigate to a dedicated result page instead of showing inline — a
+    // real page view for every generation, not just a state update.
+    router.push(`/free-tools/whatsapp-link/result?link=${encodeURIComponent(link)}`);
   }
 
   return (
@@ -45,37 +45,16 @@ export default function WhatsappLinkGenerator() {
         />
       </div>
 
-      {link && (
-        <div className="mt-4 rounded-xl bg-slate-50 p-4">
-          <p className="mb-2 text-xs font-semibold text-slate-500">رابط الطلب الجاهز:</p>
-          <p className="break-all font-mono text-sm text-brand-700" dir="ltr">
-            {link}
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={copyLink}
-              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
-            >
-              {copied ? "✅ تم النسخ" : "نسخ الرابط"}
-            </button>
-            <a
-              href={link}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:border-brand-300"
-            >
-              فتح في واتساب
-            </a>
-          </div>
-        </div>
-      )}
+      <button
+        onClick={generate}
+        disabled={!valid}
+        className="mt-3 rounded-xl bg-brand-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
+      >
+        إنشاء الرابط
+      </button>
 
       <div className="mt-6 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 p-4 text-sm text-slate-600">
-        هذه الأداة مجانية تماماً لمنتج واحد بلا حدود استخدام. إن كان لديك أكثر من منتج، احصل على{" "}
-        <Link href="/service/whatsapp-catalog" className="font-bold text-brand-700 underline">
-          صفحة كتالوج كاملة لكل منتجاتك
-        </Link>{" "}
-        بزر طلب واتساب لكل منتج تلقائياً.
+        هذه الأداة مجانية تماماً بلا حدود استخدام — أنشئ رابطاً لكل منتج لديك بقدر ما تحتاج.
       </div>
     </div>
   );

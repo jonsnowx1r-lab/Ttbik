@@ -10,9 +10,9 @@ const SYSTEM_PROMPT = `أنت مسؤول تسويق لموقع "سوق تولز"
 const TOPICS = [
   { name: "مولد رابط الطلب عبر واتساب (مجاني بالكامل)", url: "https://ttbik.vercel.app/free-tools/whatsapp-link" },
   { name: "مولد أسماء المشاريع بالذكاء الاصطناعي (مجاني)", url: "https://ttbik.vercel.app/free-tools/business-name-generator" },
-  { name: "كتالوج واتساب الكامل لعرض كل منتجاتك", url: "https://ttbik.vercel.app/service/whatsapp-catalog" },
-  { name: "محلل آراء العملاء بالجملة", url: "https://ttbik.vercel.app/service/review-analyzer" },
-  { name: "بوت الرد الآلي الجاهز لتليجرام", url: "https://ttbik.vercel.app/service/auto-reply-bot" },
+  { name: "مصغّر روابط مع عداد نقرات حقيقي (مجاني)", url: "https://ttbik.vercel.app/free-tools/url-shortener" },
+  { name: "بوت الرد الآلي الجاهز لتليجرام (مجاني)", url: "https://ttbik.vercel.app/service/auto-reply-bot" },
+  { name: "بوت الأسئلة الشائعة الجاهز لتليجرام (مجاني)", url: "https://ttbik.vercel.app/service/faq-bot" },
 ];
 
 export async function GET(req: NextRequest) {

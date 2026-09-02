@@ -64,7 +64,14 @@ export default function AdminDashboard() {
             <div className="mt-3 grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
               <p>العميل: {o.customer_name}</p>
               <p>التواصل: {o.customer_contact}</p>
-              <p>طريقة الدفع: {o.payment_method === "usdt" ? "USDT" : "تحويل بنكي (ACH)"}</p>
+              <p>
+                طريقة الدفع:{" "}
+                {o.payment_method === "bank"
+                  ? "تحويل بنكي (ACH)"
+                  : o.payment_method === "crypto_auto"
+                    ? "⚡ دفع تلقائي (NOWPayments)"
+                    : "USDT (يدوي)"}
+              </p>
               <p>مرجع التحويل: {o.transfer_reference}</p>
             </div>
             <div className="mt-4 flex gap-2">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import ImageOptimizer from "./ImageOptimizer";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "أداة ضغط وتحويل الصور مجاناً (WebP/JPEG/PNG) | سوق تولز",
@@ -20,6 +21,9 @@ export default function ImageOptimizerPage() {
       </p>
       <div className="mt-6">
         <ImageOptimizer />
+      </div>
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل أداة ضغط الصور" />
       </div>
     </div>
   );

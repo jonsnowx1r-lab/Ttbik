@@ -7,7 +7,10 @@ export type DemoType =
   | "ad_slot_preview"
   | "studio_tool";
 export type DeliveryType = "link" | "text";
-export type PaymentMethod = "bank" | "usdt";
+// "usdt" = legacy self-attested manual crypto (kept for old rows' display
+// only, no longer offered in OrderForm — replaced by "crypto_auto" below).
+// "crypto_auto" = real NOWPayments checkout, auto-approved by its webhook.
+export type PaymentMethod = "bank" | "usdt" | "crypto_auto";
 export type OrderStatus = "pending" | "approved" | "rejected";
 
 export interface Category {

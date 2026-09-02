@@ -13,7 +13,6 @@ interface PaymentInfo {
     name: string;
     address: string;
   };
-  usdt: { address: string; network: string };
 }
 
 function maskDigits(value: string): string {
@@ -30,7 +29,7 @@ export default function OrderForm({
 }) {
   const router = useRouter();
   const [step, setStep] = useState<"payment" | "form">("payment");
-  const [method, setMethod] = useState<PaymentMethod>("usdt");
+  const [method, setMethod] = useState<PaymentMethod>("crypto_auto");
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [reference, setReference] = useState("");
@@ -48,13 +47,28 @@ export default function OrderForm({
   }, []);
 
   async function submit() {
-    if (!name.trim() || !contact.trim() || !reference.trim()) {
+    if (!name.trim() || !contact.trim()) {
+      setError("الرجاء تعبئة كل الحقول");
+      return;
+    }
+    if (method === "bank" && !reference.trim()) {
       setError("الرجاء تعبئة كل الحقول");
       return;
     }
     setLoading(true);
     setError("");
     try {
+      if (method === "crypto_auto") {
+        const res = await fetch("/api/orders/create-invoice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serviceId, customerName: name, customerContact: contact }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "تعذّر إنشاء فاتورة الدفع");
+        window.location.href = data.invoiceUrl;
+        return;
+      }
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,7 +90,6 @@ export default function OrderForm({
   }
 
   const bank = payment?.bank;
-  const usdt = payment?.usdt;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -86,12 +99,12 @@ export default function OrderForm({
         <div className="space-y-4">
           <div className="flex gap-2">
             <button
-              onClick={() => setMethod("usdt")}
+              onClick={() => setMethod("crypto_auto")}
               className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                method === "usdt" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300"
+                method === "crypto_auto" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300"
               }`}
             >
-              USDT
+              ⚡ دفع فوري (عملات رقمية)
             </button>
             <button
               onClick={() => setMethod("bank")}
@@ -104,15 +117,13 @@ export default function OrderForm({
           </div>
 
           <div className="rounded-xl bg-slate-50 p-4 text-sm">
-            {!payment ? (
-              <p className="text-slate-400">جارٍ تحميل بيانات الدفع...</p>
-            ) : method === "usdt" ? (
+            {method === "crypto_auto" ? (
               <>
-                <p className="font-semibold text-slate-700">حوّل مبلغ {priceUsd}$ إلى عنوان USDT التالي:</p>
-                <p className="mt-1 break-all font-mono text-brand-700">
-                  {usdt?.address || "سيتم تزويده قريباً"}
+                <p className="font-semibold text-slate-700">دفع فوري وتلقائي — بدون انتظار مراجعة الإدارة.</p>
+                <p className="mt-1 text-slate-500">
+                  اختر أي عملة رقمية تفضلها (USDT، TON، TRX، LTC، SOL وغيرها) في صفحة الدفع التالية. بمجرد
+                  تأكيد الدفع على الشبكة، تُسلَّم لك الخدمة تلقائياً خلال دقائق دون تدخل بشري.
                 </p>
-                <p className="mt-1 text-slate-500">الشبكة: {usdt?.network}</p>
               </>
             ) : (
               <>
@@ -171,7 +182,7 @@ export default function OrderForm({
             onClick={() => setStep("form")}
             className="w-full rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-700"
           >
-            تم الدفع ✅ — متابعة
+            {method === "crypto_auto" ? "متابعة إلى الدفع ⚡" : "تم الدفع ✅ — متابعة"}
           </button>
         </div>
       )}
@@ -190,12 +201,14 @@ export default function OrderForm({
             placeholder="طريقة التواصل معك (تليجرام / واتساب / إيميل)"
             className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           />
-          <input
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            placeholder="اسم المُحوِّل أو رقم عملية التحويل"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-          />
+          {method === "bank" && (
+            <input
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="اسم المُحوِّل أو رقم عملية التحويل"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button
@@ -209,7 +222,11 @@ export default function OrderForm({
               disabled={loading}
               className="flex-1 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
             >
-              {loading ? "جارٍ الإرسال..." : "إرسال الطلب للمراجعة"}
+              {loading
+                ? "جارٍ التحويل..."
+                : method === "crypto_auto"
+                  ? "الانتقال لصفحة الدفع ⚡"
+                  : "إرسال الطلب للمراجعة"}
             </button>
           </div>
         </div>
