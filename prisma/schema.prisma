@@ -375,7 +375,7 @@ model RandomChatSession {
 
 // ===================================================================
 // Website tools (Grok O1) — isolated models, no overlap with AD_BOT /
-// MARRIAGE_BOT. URL shortener first (G3).
+// MARRIAGE_BOT. URL shortener first (G3), digital business card (G4).
 // ===================================================================
 model ShortLink {
   id          String    @id @default(cuid())
@@ -385,4 +385,22 @@ model ShortLink {
   createdAt   DateTime  @default(now())
   ownerIpHash String?   // optional light rate-limit fingerprint, no PII store
   expiresAt   DateTime?
+}
+
+// Digital business card / Linktree-style page (G4). Public path /c/[slug].
+// editToken is a high-entropy bearer secret returned once at create;
+// required for later PATCH. Generated with crypto.randomBytes, never Math.random.
+model DigitalCard {
+  id          String   @id @default(cuid())
+  slug        String   @unique // 4-24 chars, [a-z0-9-_]
+  title       String
+  bio         String?
+  avatarUrl   String?  // optional external https image URL only
+  links       Json     // array of { label: string, url: string, order?: number }
+  theme       String   @default("simple") // simple | dark | brand
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  ownerIpHash String?  // light rate-limit fingerprint, no PII
+  editToken   String   @unique // bearer secret for anonymous edit access
 }
