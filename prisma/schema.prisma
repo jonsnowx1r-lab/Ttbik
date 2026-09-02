@@ -372,3 +372,17 @@ model RandomChatSession {
   created_at DateTime  @default(now())
   ended_at   DateTime?
 }
+
+// ===================================================================
+// FREE TOOLS — URL shortener (Grok O1 / G3, 2026-09-02)
+// Isolated model, zero ongoing cost, no touch to AD_BOT / MARRIAGE_BOT.
+// ===================================================================
+model ShortLink {
+  id          String    @id @default(cuid())
+  code        String    @unique // 6-8 char base62
+  targetUrl   String
+  clicks      Int       @default(0)
+  createdAt   DateTime  @default(now())
+  ownerIpHash String?   // optional light rate-limit fingerprint, no PII store
+  expiresAt   DateTime?
+}
