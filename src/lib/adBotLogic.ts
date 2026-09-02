@@ -525,11 +525,22 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     await bot.api.sendMessage(chatId, t(lang, "langCurrent"), { reply_markup: languageMenu(lang) });
     return;
   }
-  if (pending?.mode === "choosing_language" && (text === t("ar", "btnLangAr") || text === t("en", "btnLangEn"))) {
-    const newLang: Lang = text === t("en", "btnLangEn") ? "en" : "ar";
-    await prisma.user.update({ where: { id: user.id }, data: { language: newLang, pendingAction: null as any } });
-    await bot.api.sendMessage(chatId, t(newLang, "langSet"), { reply_markup: mainMenu(newLang) });
-    return;
+  if (pending?.mode === "choosing_language") {
+    // Match the button's label in EITHER language, not just the label as
+    // rendered in the language the menu happened to be shown in — e.g.
+    // picking "العربية" while the menu is showing in English renders as
+    // "🇸🇦 Arabic", which the old check (Arabic-labeled-Arabic-choice OR
+    // English-labeled-English-choice only) never matched, so it silently
+    // fell through to the "choose from the list" fallback and the user got
+    // stuck unable to switch back.
+    const isAr = text === t("ar", "btnLangAr") || text === t("en", "btnLangAr");
+    const isEn = text === t("ar", "btnLangEn") || text === t("en", "btnLangEn");
+    if (isAr || isEn) {
+      const newLang: Lang = isEn ? "en" : "ar";
+      await prisma.user.update({ where: { id: user.id }, data: { language: newLang, pendingAction: null as any } });
+      await bot.api.sendMessage(chatId, t(newLang, "langSet"), { reply_markup: mainMenu(newLang) });
+      return;
+    }
   }
   if (text === t(lang, "btnFaq")) {
     const faqKb = new Keyboard().text(t(lang, "btnWantOwnBot")).row().text(backLabel(lang)).resized();
