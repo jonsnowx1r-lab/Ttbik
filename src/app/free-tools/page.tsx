@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "أدوات مجانية | سوق تولز",
@@ -81,6 +82,10 @@ export default function FreeToolsPage() {
             <p className="mt-1 text-sm text-slate-500">{tool.desc}</p>
           </Link>
         ))}
+      </div>
+
+      <div className="mt-8">
+        <AdSlot position="in-content" label="بين الأدوات والبوتات" />
       </div>
 
       <h2 className="mt-10 text-lg font-extrabold text-slate-900">🤖 بوتات جاهزة مجانية</h2>

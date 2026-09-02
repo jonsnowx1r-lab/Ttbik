@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Logo from "@/components/Logo";
 import { isOwnerServer } from "@/lib/isOwner";
+import AdServiceWorker from "@/components/AdServiceWorker";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "سوق تولز — سوق الخدمات الرقمية المصغّرة",
@@ -15,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ar" dir="rtl">
       <body className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased">
+        <AdServiceWorker />
         {isOwner && (
           <div className="bg-emerald-600 py-1.5 text-center text-xs font-bold text-white">
             🔑 وضع المالك مفعّل — لديك وصول كامل لكل الخدمات والأدوات
@@ -50,7 +53,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </div>
         </header>
+        <div className="mx-auto max-w-6xl px-4 py-2">
+          <AdSlot position="header-banner" label="أعلى الصفحة" />
+        </div>
         <main>{children}</main>
+        <div className="mx-auto max-w-6xl px-4 py-2">
+          <AdSlot position="footer-banner" label="أسفل الصفحة قبل الفوتر" />
+        </div>
         <footer className="mt-20 border-t border-slate-200 bg-white">
           <div className="mx-auto max-w-6xl px-4 py-10">
             <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-right">
