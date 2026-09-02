@@ -61,7 +61,8 @@ type PendingAction =
   | { mode: "confirm_delete_profile" }
   | { mode: "admin_broadcast" }
   | { mode: "admin_lookup" }
-  | { mode: "admin_unban" };
+  | { mode: "admin_unban" }
+  | { mode: "contact_admin_compose" };
 
 const SKIP_LABEL = "⏭ غير محدد / لا يهم";
 
@@ -72,7 +73,8 @@ function mainMenu(): Keyboard {
   return new Keyboard()
     .text("👤 ملفي الشخصي").text("💍 مواصفات الشريك").row()
     .text("🔍 البحث عن شريك").text("🔀 مراسلة عشوائية").row()
-    .text("💌 من أعجب بي").text("ℹ️ معلومات")
+    .text("💌 من أعجب بي").text("ℹ️ معلومات").row()
+    .text("📩 مراسلة الأدمن")
     .resized();
 }
 function adminMenu(): Keyboard {
@@ -80,7 +82,7 @@ function adminMenu(): Keyboard {
     .text("📊 الإحصائيات").text("📋 الملفات المعلقة").row()
     .text("🚩 بلاغات المطابقة").text("🚩 بلاغات الدردشة العشوائية").row()
     .text("📢 بث جماعي").text("🔎 بحث عن مستخدم").row()
-    .text("🔓 رفع حظر/كتم")
+    .text("🔓 رفع حظر/كتم").text("📥 الرسائل الواردة")
     .resized();
 }
 const ADMIN_COMMANDS = new Set([
@@ -92,10 +94,20 @@ const ADMIN_COMMANDS = new Set([
   "📢 بث جماعي",
   "🔎 بحث عن مستخدم",
   "🔓 رفع حظر/كتم",
+  "📥 الرسائل الواردة",
 ]);
 const DELETE_CONFIRM_LABEL = "✅ نعم، احذف نهائياً";
 function confirmDeleteMenu(): Keyboard {
   return new Keyboard().text(DELETE_CONFIRM_LABEL).row().text(backLabel()).resized();
+}
+const CONTACT_ADMIN_CONFIRM_LABEL = "✅ متابعة ومراسلة الأدمن";
+const CONTACT_ADMIN_WARNING =
+  "⚠️ تنبيه هام قبل المتابعة\n\n" +
+  "هذه القناة مخصصة حصرياً للمشاكل الجدية المتعلقة بالبوت (مشكلة تقنية فعلية، إساءة خطيرة من مستخدم آخر، أو استفسار إداري حقيقي).\n\n" +
+  "🚫 أي استخدام عبثي، رسائل مزعجة، أو تكرار غير مبرر لهذه الميزة سيؤدي إلى حظرك فوراً ونهائياً من هذا البوت دون أي إنذار إضافي.\n\n" +
+  "إن كنت متأكداً أن لديك سبباً جدياً فعلاً، اضغط الزر أدناه ثم أرسل رسالتك.";
+function contactAdminConfirmMenu(): Keyboard {
+  return new Keyboard().text(CONTACT_ADMIN_CONFIRM_LABEL).row().text(backLabel()).resized();
 }
 function skipMenu(): Keyboard {
   return new Keyboard().text(SKIP_LABEL).row().text(backLabel()).resized();
@@ -700,7 +712,7 @@ async function sendAdminStats(bot: TelegramBot, chatId: number) {
   // pendingAction state for the broadcast/lookup/unban flows below) — it
   // must never count as a real platform user in these stats.
   const notAdmin = { id: { not: SUPER_ADMIN_ID || "__none__" } };
-  const [totalUsers, onlineUsers, pendingProfiles, approvedProfiles, rejectedProfiles, pendingSearchReports, pendingChatReports, activeSessions, waitingQueue] = await Promise.all([
+  const [totalUsers, onlineUsers, pendingProfiles, approvedProfiles, rejectedProfiles, pendingSearchReports, pendingChatReports, activeSessions, waitingQueue, pendingInbox] = await Promise.all([
     prisma.matchUser.count({ where: notAdmin }),
     prisma.matchUser.count({ where: { ...notAdmin, lastActiveAt: { gte: onlineSince } } }),
     prisma.matchProfile.count({ where: { status: "PENDING" } }),
@@ -710,6 +722,7 @@ async function sendAdminStats(bot: TelegramBot, chatId: number) {
     prisma.matchReport.count({ where: { status: "PENDING", source: "RANDOM_CHAT" } }),
     prisma.randomChatSession.count({ where: { status: "ACTIVE" } }),
     prisma.randomChatQueue.count({ where: { status: "WAITING", expiresAt: { gt: new Date() } } }),
+    prisma.adminMessage.count({ where: { status: "PENDING" } }),
   ]);
   const text =
     `📊 إحصائيات بوت التعارف\n\n` +
@@ -717,7 +730,8 @@ async function sendAdminStats(bot: TelegramBot, chatId: number) {
     `🟢 متصلون الآن: ${onlineUsers}\n\n` +
     `📋 الملفات الشخصية:\n⏳ بانتظار المراجعة: ${pendingProfiles}\n✅ معتمدة: ${approvedProfiles}\n❌ مرفوضة: ${rejectedProfiles}\n\n` +
     `🚩 البلاغات بانتظار المراجعة:\n🔍 من البحث: ${pendingSearchReports}\n🔀 من المحادثة العشوائية: ${pendingChatReports}\n\n` +
-    `🔀 المحادثة العشوائية الآن:\n💬 محادثات نشطة: ${activeSessions}\n⏳ بانتظار شريك: ${waitingQueue}`;
+    `🔀 المحادثة العشوائية الآن:\n💬 محادثات نشطة: ${activeSessions}\n⏳ بانتظار شريك: ${waitingQueue}\n\n` +
+    `📥 رسائل واردة غير مقروءة: ${pendingInbox}`;
   await bot.api.sendMessage(chatId, text);
 }
 
@@ -753,6 +767,20 @@ async function sendPendingReportsList(bot: TelegramBot, chatId: number, source: 
       .text("🔇 كتم 24س", `mrep_mute|${r.id}`)
       .row()
       .text("⛔ حظر نهائي", `mrep_ban|${r.id}`);
+    await bot.api.sendMessage(chatId, text, { reply_markup: kb }).catch(() => null);
+  }
+}
+
+async function sendInboxMessages(bot: TelegramBot, chatId: number) {
+  const messages = await prisma.adminMessage.findMany({ where: { status: "PENDING" }, orderBy: { created_at: "asc" }, take: 20 });
+  if (messages.length === 0) {
+    await bot.api.sendMessage(chatId, "✅ لا توجد رسائل واردة جديدة.");
+    return;
+  }
+  for (const m of messages) {
+    const senderProfile = await prisma.matchProfile.findUnique({ where: { userId: m.senderId } });
+    const text = `📩 رسالة من ${senderProfile?.name || "بلا ملف"} (#${shortId(m.senderId)})\n🆔 ${m.senderId}\n${relativeTime(m.created_at)}\n\n${m.text}`;
+    const kb = new InlineKeyboard().text("✅ تحديد كمقروء", `madmin_msgread|${m.id}`);
     await bot.api.sendMessage(chatId, text, { reply_markup: kb }).catch(() => null);
   }
 }
@@ -864,6 +892,10 @@ async function handleAdminMessage(bot: TelegramBot, chatId: number, text: string
     await bot.api.sendMessage(chatId, "🔓 أرسل آيدي المستخدم الذي تريد رفع الحظر/الكتم عنه:");
     return;
   }
+  if (text === "📥 الرسائل الواردة") {
+    await sendInboxMessages(bot, chatId);
+    return;
+  }
   if (text.startsWith("موافقة ملف ") || text.startsWith("رفض ملف ")) {
     const approve = text.startsWith("موافقة ملف ");
     const idSuffix = text.split(" ")[2]?.trim();
@@ -879,6 +911,12 @@ async function handleAdminCallback(bot: TelegramBot, chatId: number, data: strin
     const userId = data.split("|")[1];
     await decideProfileByUserId(bot, chatId, userId, approve);
     await bot.api.answerCallbackQuery(cq.id, { text: approve ? "✅ تم القبول" : "❌ تم الرفض" }).catch(() => null);
+    return;
+  }
+  if (data.startsWith("madmin_msgread|")) {
+    const msgId = data.split("|")[1];
+    await prisma.adminMessage.update({ where: { id: msgId }, data: { status: "READ" } }).catch(() => null);
+    await bot.api.answerCallbackQuery(cq.id, { text: "✅ تم التحديد كمقروء" }).catch(() => null);
     return;
   }
   if (data.startsWith("mrep_")) {
@@ -1126,9 +1164,34 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
         "3️⃣ اضغط «🔍 البحث عن شريك» لعرض الملفات المطابقة\n" +
         "4️⃣ أو جرّب «🔀 مراسلة عشوائية» للتعارف المجهول الفوري\n\n" +
         "🔒 خصوصيتك محفوظة: لا تُشارَك بياناتك مع أي طرف حتى تختار أنت بدء التواصل.\n" +
-        "🛡 كل ملف جديد يخضع لمراجعة يدوية من الإدارة قبل ظهوره في نتائج البحث.",
+        "🛡 كل ملف جديد يخضع لمراجعة يدوية من الإدارة قبل ظهوره في نتائج البحث.\n\n" +
+        "❗ لأي مشكلة جدية فقط، استخدم زر «📩 مراسلة الأدمن».",
       { reply_markup: mainMenu() }
     );
+    return;
+  }
+  if (text === "📩 مراسلة الأدمن") {
+    await bot.api.sendMessage(chatId, CONTACT_ADMIN_WARNING, { reply_markup: contactAdminConfirmMenu() });
+    return;
+  }
+  if (text === CONTACT_ADMIN_CONFIRM_LABEL) {
+    await setPending(tgUserId, { mode: "contact_admin_compose" });
+    await bot.api.sendMessage(chatId, "✍️ اكتب رسالتك للإدارة الآن وأرسلها في رسالة واحدة:", { reply_markup: plainBackMenu() });
+    return;
+  }
+  if (pending?.mode === "contact_admin_compose") {
+    await prisma.adminMessage.create({ data: { senderId: tgUserId, text } });
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "✅ تم إرسال رسالتك إلى الإدارة.", { reply_markup: mainMenu() });
+    if (SUPER_ADMIN_ID) {
+      const senderProfile = await prisma.matchProfile.findUnique({ where: { userId: tgUserId } });
+      await bot.api
+        .sendMessage(
+          Number(SUPER_ADMIN_ID),
+          `📩 رسالة جديدة من مستخدم\n\nمن: ${senderProfile?.name || "بلا ملف"} (#${shortId(tgUserId)})\n\n${text}\n\nراجعها من «📥 الرسائل الواردة».`
+        )
+        .catch(() => null);
+    }
     return;
   }
 

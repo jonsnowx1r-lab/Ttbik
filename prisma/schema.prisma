@@ -252,6 +252,7 @@ model MatchUser {
   reportsGiven   MatchReport[]      @relation("ReportsGiven")
   reportsReceived MatchReport[]     @relation("ReportsReceived")
   queueEntries   RandomChatQueue[]
+  adminMessages  AdminMessage[]
 }
 
 // Own profile — goes through SUPER_ADMIN manual approval (status) before
@@ -325,6 +326,19 @@ model MatchReport {
   reason     String?
   source     String    @default("SEARCH") // SEARCH (from a search-result card) | RANDOM_CHAT — drives the admin panel's two separate report queues
   status     String    @default("PENDING") // PENDING | REVIEWED — set once an admin acts on it (ignore/mute/ban)
+  created_at DateTime  @default(now())
+}
+
+// A user-initiated message to the admin (owner spec, 2026-09-02) — gated
+// behind a strongly-worded misuse warning in the bot UI (see matchBotLogic's
+// contact-admin flow), so this table is meant to stay low-volume and every
+// row genuinely worth the admin's attention.
+model AdminMessage {
+  id         String    @id @default(uuid())
+  senderId   String
+  sender     MatchUser @relation(fields: [senderId], references: [id])
+  text       String
+  status     String    @default("PENDING") // PENDING | READ
   created_at DateTime  @default(now())
 }
 
