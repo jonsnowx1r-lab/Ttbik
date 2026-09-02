@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import AdSlot from "@/components/AdSlot";
 
 type LinkItem = { label: string; url: string; order?: number };
 
@@ -111,6 +112,10 @@ export default async function DigitalCardPublicPage({
             سوق تولز
           </Link>
         </p>
+
+        <div className="mt-8">
+          <AdSlot position="in-content" label="أسفل صفحة البطاقة العامة" />
+        </div>
       </div>
     </div>
   );
