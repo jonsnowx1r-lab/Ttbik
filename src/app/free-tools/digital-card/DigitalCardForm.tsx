@@ -44,7 +44,7 @@ export default function DigitalCardForm() {
       return;
     }
     setLoading(true);
-    try try {
+    try {
       const res = await fetch("/api/tools/card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -128,7 +128,7 @@ export default function DigitalCardForm() {
 
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">
-              معرّف الرابط (اختياري)
+              معرّف الرابط ( المخصص (اختياري)
             </label>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400" dir="ltr">
