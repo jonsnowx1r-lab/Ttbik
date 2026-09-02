@@ -7,6 +7,7 @@ import AdServiceWorker from "@/components/AdServiceWorker";
 import AdSlot from "@/components/AdSlot";
 import MultitagScript from "@/components/MultitagScript";
 import VignetteScript from "@/components/VignetteScript";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 
 export const metadata: Metadata = {
   title: "سوق تولز — سوق الخدمات الرقمية المصغّرة",
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <MultitagScript />
         <VignetteScript />
+        <AnalyticsTracker isOwner={isOwner} />
         {isOwner && (
           <div className="bg-emerald-600 py-1.5 text-center text-xs font-bold text-white">
             🔑 وضع المالك مفعّل — لديك وصول كامل لكل الخدمات والأدوات
