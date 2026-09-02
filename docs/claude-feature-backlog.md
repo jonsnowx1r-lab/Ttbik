@@ -29,9 +29,24 @@ conversion via a paid conversion API, plagiarism checking.
       existing FK behavior — confirm before wiring, this is destructive),
       and whatever "إزالة" beyond delete turns out to mean once discussed
       with the owner (e.g. revoke webhook without deleting history?). This
-      exists because AD_BOT/MARRIAGE_BOT are manually sold and manually
-      controlled (see AGENT_BUS.md Product rules) — the owner needs to be
-      able to shut one down without touching the database by hand.
+      exists because AD_BOT is manually sold and MARRIAGE_BOT is entirely
+      owner-only, both manually controlled (see AGENT_BUS.md Product
+      rules) — the owner needs to be able to shut one down without
+      touching the database by hand.
+- [ ] **0b. Paid features inside the owner's own MARRIAGE_BOT instance**
+      (owner directive, 2026-09-03) — MARRIAGE_BOT itself stays exclusively
+      the owner's private bot, never sold or activated for anyone else
+      (see AGENT_BUS.md Product rules), but the owner wants to sell
+      in-bot upsells to that bot's own users (exact features TBD with the
+      owner — a likely candidate is a paid profile boost/priority
+      matching, but confirm before building). Pay for these through the
+      SAME payment rails already live on the platform (NOWPayments/
+      central-wallet — src/lib/nowpayments.ts, the same pattern
+      matchBotLogic.ts's users would already be near via any existing
+      wallet flow), not a new payment mechanism — owner was explicit that
+      all payment goes through what already exists, with only the
+      $100 AD_BOT activation purchase as the one different (manual,
+      fixed-price, internally-verified-token) case.
 - [ ] **1. Unified points/rewards ledger across all bots** — a single
       `PlatformPoints` balance per Telegram user id, earned from any bot
       (daily streak, referral, quiz win, ...) and spendable in any other

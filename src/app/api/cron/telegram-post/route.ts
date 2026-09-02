@@ -5,7 +5,7 @@ import { supabasePublic } from "@/lib/supabase";
 // Triggered daily by Vercel Cron (see vercel.json). Publishes one varied
 // promotional post to the public Telegram channel, rotating across three
 // pools: free tools, live paid catalog services, and (only if configured)
-// AD_BOT/MARRIAGE_BOT manual-purchase awareness posts.
+// an AD_BOT manual-purchase awareness post.
 //
 // Paid services are fetched fresh from Supabase on every run instead of
 // hardcoded — the old hardcoded list here had already drifted to include
@@ -44,28 +44,28 @@ async function getPaidTopics(): Promise<{ name: string; url: string }[]> {
 
 type BotPromo = { label: string; intro: string; price: string; botLink: string; cta: string };
 
-// AD_BOT/MARRIAGE_BOT are never sold or self-served on the website — manual
-// price/payment/approval only (docs/AGENT_BUS.md Product rules, owner
-// directive 2026-09-03). Offered here purely as awareness, and only once
-// the owner has set the right username(s); silently skipped otherwise so
-// this route never errors or posts a link that doesn't exist.
+// AD_BOT is never sold or self-served on the website — manual price/
+// payment/approval only (docs/AGENT_BUS.md Product rules, owner directive
+// 2026-09-03). Offered here purely as awareness, and only once the owner
+// has set PROMO_AD_BOT_USERNAME; silently skipped otherwise so this route
+// never errors or posts a link that doesn't exist.
 //
-// The two templates route "I want to buy one" completely differently —
-// this is NOT the channel's own posting bot (TELEGRAM_BOT_TOKEN, which
-// just sends this cron's messages and runs no AD_BOT/MARRIAGE_BOT
-// template logic at all):
-// - AD_BOT already has a self-serve purchase flow built into every AD_BOT
-//   instance (src/lib/adBotLogic.ts's "أريد بوتاً مماثلاً" button → $100
-//   bank-transfer flow → owner's manual approval). PROMO_AD_BOT_USERNAME
-//   must be the @username of an AD_BOT-template bot the owner already has
-//   running (e.g. their own admin/management instance) — the promo post
-//   just points there and tells people to tap that button; no separate
-//   contact link needed.
-// - MARRIAGE_BOT has no such in-bot flow (src/lib/matchBotLogic.ts never
-//   offers it) — a MARRIAGE_BOT promo therefore ALSO needs
-//   ADMIN_CONTACT_USERNAME (the owner's own personal Telegram username) as
-//   the only way to actually reach someone about it, so both must be set
-//   together or this promo type is skipped.
+// NOT the channel's own posting bot (TELEGRAM_BOT_TOKEN, which just sends
+// this cron's messages and runs no AD_BOT template logic at all) — this
+// must be the @username of an actual AD_BOT-template bot the owner already
+// has running (e.g. their own admin/management instance, which shows them
+// the Super Admin panel because SUPER_ADMIN_TELEGRAM_ID matches — that's
+// unrelated to which bot this is, every AD_BOT does that for the owner).
+// Every AD_BOT already has a self-serve purchase flow built in
+// (src/lib/adBotLogic.ts's "أريد بوتاً مماثلاً" button → $100 bank-transfer
+// flow → owner's manual approval), so the promo post just points there and
+// tells people to tap that button — no separate contact link needed.
+//
+// MARRIAGE_BOT has no promo path here at all, deliberately: the owner
+// confirmed (2026-09-03) it will never be sold or activated for anyone
+// else — it's their own private bot only, and its creator password exists
+// solely so THEY can redeploy it themselves if its current token/instance
+// breaks, not as a path for a third party to get one.
 function getBotPromos(): BotPromo[] {
   const promos: BotPromo[] = [];
   if (process.env.PROMO_AD_BOT_USERNAME) {
@@ -75,15 +75,6 @@ function getBotPromos(): BotPromo[] {
       price: "100$ (تحويل بنكي)",
       botLink: `https://t.me/${process.env.PROMO_AD_BOT_USERNAME}`,
       cta: "التفعيل يتم يدوياً فقط: افتح البوت واضغط زر «أريد بوتاً مماثلاً» من القائمة، ثم اتبع الخطوات — لا تفعيل تلقائي ولا كود مجاني.",
-    });
-  }
-  if (process.env.PROMO_MARRIAGE_BOT_USERNAME && process.env.ADMIN_CONTACT_USERNAME) {
-    promos.push({
-      label: "بوت التعارف والزواج الشرعي",
-      intro: "💍 منصة تعارف وزواج شرعي كاملة، كبوت تليجرام خاص بك تديره بنفسك.",
-      price: "حسب الاتفاق مع الإدارة",
-      botLink: `https://t.me/${process.env.PROMO_MARRIAGE_BOT_USERNAME}`,
-      cta: `هذا القالب لا يُفعَّل من داخل البوت — للشراء والتفاصيل تواصل مباشرة: https://t.me/${process.env.ADMIN_CONTACT_USERNAME}`,
     });
   }
   return promos;
@@ -134,8 +125,8 @@ export async function GET(req: NextRequest) {
   const paidTopics = await getPaidTopics();
   const botPromos = getBotPromos();
 
-  // Plain topics (free + live paid) far outnumber bot-purchase pitches, so
-  // AD_BOT/MARRIAGE_BOT awareness posts stay an occasional post, not a spam
+  // Plain topics (free + live paid) far outnumber the bot-purchase pitch,
+  // so the AD_BOT awareness post stays an occasional post, not a spam
   // pattern — roughly 1-in-N where N grows with the live catalog size.
   const pool: { label: string; run: () => Promise<string> }[] = [
     ...FREE_TOPICS.map((t) => ({ label: t.name, run: () => writeGenericPost(t) })),

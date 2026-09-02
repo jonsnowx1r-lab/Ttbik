@@ -38,25 +38,41 @@ Not a daemon. Files persist work across disconnects. That is the retrospective l
 ## Product rules (resolved)
 - No cash withdraw from hosted bots.
 - Paid orderCode for create, except owner. One order = one bot.
-- **AD_BOT and MARRIAGE_BOT are never sold or self-served on the website
-  (owner directive, 2026-09-03).** No public price, no catalog listing, no
-  automated checkout — ever — for these two templates. Selling free/instant
-  self-service access to them "بمجرد دفع مبلغ صغير" harms the business
-  (owner's own words). They stay reachable ONLY the way they already are:
-  AD_BOT via the in-bot "أريد بوتاً مماثلاً" button → $100 manual bank
-  transfer → owner's manual approval → per-buyer BotPurchase code;
-  MARRIAGE_BOT via a password the owner hands out personally. Price and
-  payment for both are negotiated/settled manually, off-platform, by the
-  owner — don't build an on-site price, an automated payment path, or an
-  activation code that isn't gated by owner approval for either template.
+- **AD_BOT is never sold or self-served on the website (owner directive,
+  2026-09-03).** No public price, no catalog listing, no automated
+  checkout — ever. Selling free/instant self-service access to it "بمجرد
+  دفع مبلغ صغير" harms the business (owner's own words). It stays
+  reachable ONLY the way it already is: the in-bot "أريد بوتاً مماثلاً"
+  button → $100 manual bank transfer → owner's manual approval → per-buyer
+  BotPurchase code. Price and payment are negotiated/settled manually,
+  off-platform, by the owner — don't build an on-site price, an automated
+  payment path, or an activation code that isn't gated by owner approval.
   This is why `hosted-bot-builder` was retired (see
   migration_remove_locked_code_products.sql §2b) rather than fixed to
   auto-deliver — auto-delivery is the thing that must never exist here.
-- Neither template's source/build is exposed anywhere for download/copy —
-  keep it that way (unlike the free FAQ/auto-reply bots, which deliberately
-  ship full source). Before adding any admin/debug/export endpoint that
-  touches Bot rows, make sure it can't leak a working AD_BOT/MARRIAGE_BOT
-  token, template code, or webhook secret to anyone but the owner.
+- **MARRIAGE_BOT is not a product at all — it is the owner's own private
+  bot, full stop (owner clarified 2026-09-03, correcting an earlier,
+  wrong assumption in this file that it could be handed to "someone the
+  owner trusts").** It is never sold, never activated for anyone else,
+  never listed anywhere, and there is no path — paid, free, or
+  by-request — for a third party to get their own instance. Its
+  `MARRIAGE_BOT_CREATOR_PASSWORD` gate exists solely so the OWNER can
+  redeploy their own single instance (same template, a new token) if the
+  one they're currently running ever breaks or needs replacing — never
+  treat a request for "access" to this template as something to fulfill.
+  The owner does plan to add PAID FEATURES *inside* their existing
+  MARRIAGE_BOT instance (e.g. profile boosts — exact scope TBD with the
+  owner), reusing the platform's existing NOWPayments/central-wallet
+  payment rails like everything else — see
+  docs/claude-feature-backlog.md. That is strictly an in-bot upsell; it
+  does not make the template itself sellable or deployable by anyone but
+  the owner.
+- Neither AD_BOT's nor MARRIAGE_BOT's source/build is exposed anywhere for
+  download/copy — keep it that way (unlike the free FAQ/auto-reply bots,
+  which deliberately ship full source). Before adding any admin/debug/
+  export endpoint that touches Bot rows, make sure it can't leak a working
+  AD_BOT/MARRIAGE_BOT token, template code, or webhook secret to anyone
+  but the owner.
 - Locked-code-for-sale catalog products (order-manager-bot, ad-slot-bot,
   landing-page-generator, workflow-templates, invoice-generator,
   whatsapp-catalog) are permanently deleted, not just deactivated — the
