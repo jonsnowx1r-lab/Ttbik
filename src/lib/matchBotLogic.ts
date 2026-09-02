@@ -74,8 +74,13 @@ function mainMenu(): Keyboard {
   return new Keyboard()
     .text("👤 ملفي الشخصي").text("💍 مواصفات الشريك").row()
     .text("🔍 البحث عن شريك").text("🔀 مراسلة عشوائية").row()
-    .text("💌 من أعجب بي").text("ℹ️ معلومات").row()
-    .text("📩 مراسلة الأدمن")
+    .text("💌 من أعجب بي").text("ℹ️ معلومات")
+    .resized();
+}
+function infoMenu(): Keyboard {
+  return new Keyboard()
+    .text("📩 مراسلة الأدمن").text("🔗 دعوة رابط البوت").row()
+    .text(backLabel())
     .resized();
 }
 function adminMenu(): Keyboard {
@@ -1210,14 +1215,18 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
         "3️⃣ اضغط «🔍 البحث عن شريك» لعرض الملفات المطابقة\n" +
         "4️⃣ أو جرّب «🔀 مراسلة عشوائية» للتعارف المجهول الفوري\n\n" +
         "🔒 خصوصيتك محفوظة: لا تُشارَك بياناتك مع أي طرف حتى تختار أنت بدء التواصل.\n" +
-        "🛡 كل ملف جديد يخضع لمراجعة يدوية من الإدارة قبل ظهوره في نتائج البحث.\n\n" +
-        "❗ لأي مشكلة جدية فقط، استخدم زر «📩 مراسلة الأدمن».",
-      { reply_markup: mainMenu() }
+        "🛡 كل ملف جديد يخضع لمراجعة يدوية من الإدارة قبل ظهوره في نتائج البحث.",
+      { reply_markup: infoMenu() }
     );
     return;
   }
   if (text === "📩 مراسلة الأدمن") {
     await bot.api.sendMessage(chatId, CONTACT_ADMIN_WARNING, { reply_markup: contactAdminConfirmMenu() });
+    return;
+  }
+  if (text === "🔗 دعوة رابط البوت") {
+    const me = await bot.api.getMe();
+    await bot.api.sendMessage(chatId, `🔗 شارك هذا الرابط مع أصدقائك لدعوتهم لاستخدام البوت:\n\nhttps://t.me/${me.username}`, { reply_markup: infoMenu() });
     return;
   }
   if (text === CONTACT_ADMIN_CONFIRM_LABEL) {
