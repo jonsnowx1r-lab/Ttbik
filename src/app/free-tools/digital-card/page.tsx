@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import DigitalCardForm from "./DigitalCardForm";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "بطاقة أعمال رقمية (Linktree) | أدوات مجانية | سوق تولز",
@@ -17,6 +18,9 @@ export default function DigitalCardPage() {
       </p>
       <div className="mt-8">
         <DigitalCardForm />
+      </div>
+      <div className="mt-8">
+        <AdSlot position="in-content" label="أسفل نموذج البطاقة الرقمية" />
       </div>
     </div>
   );
