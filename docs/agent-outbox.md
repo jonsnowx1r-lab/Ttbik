@@ -127,4 +127,4 @@ import AdSlot from "@/components/AdSlot";
    API route, or existing behavior. `npx tsc --noEmit` clean and
    `npm run build` green before pushing, same as always.
 
-Status: open
+Status: done (SHAs 580de22 / f6ecf3b / abc2a98)
