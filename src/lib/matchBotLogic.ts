@@ -674,25 +674,48 @@ async function startRandomChat(bot: TelegramBot, chatId: number, botRow: BotRow,
 // trail for a "still working" feel, then settles on the same
 // informative final text this used to send immediately.
 async function animateSearchingMessage(bot: TelegramBot, chatId: number) {
+  // Logged instead of silently swallowed (owner report, 2026-09-05: no
+  // animation appeared at all in production) — a blind .catch(() => null)
+  // here means a real failure (wrong permissions, rate limit, whatever it
+  // turns out to be) would be invisible. These console.error lines land in
+  // Vercel's function logs (Project → Deployments → the live deployment →
+  // Logs, or `vercel logs`), which is the only way to see what's actually
+  // happening server-side without live access to this deployment.
+  console.log("[randomChat] animateSearchingMessage: start", { chatId });
   const keyboard = new Keyboard().text("🔀 مراسلة عشوائية").row().text(backLabel()).resized();
-  const msg = await bot.api.sendMessage(chatId, "🔍 جاري البحث عن شريك للمحادثة", { reply_markup: keyboard });
+  let msg;
+  try {
+    msg = await bot.api.sendMessage(chatId, "🔍 جاري البحث عن شريك للمحادثة", { reply_markup: keyboard });
+    console.log("[randomChat] initial sendMessage ok", { messageId: msg.message_id });
+  } catch (e) {
+    console.error("[randomChat] initial sendMessage FAILED", e);
+    return;
+  }
   const frames = [
     "🔎 جاري البحث عن شريك للمحادثة.",
     "🔍 جاري البحث عن شريك للمحادثة..",
     "🔎 جاري البحث عن شريك للمحادثة...",
   ];
-  for (const frame of frames) {
+  for (const [i, frame] of frames.entries()) {
     await new Promise((resolve) => setTimeout(resolve, 800));
-    await bot.api.editMessageText(chatId, msg.message_id, frame).catch(() => null);
+    try {
+      await bot.api.editMessageText(chatId, msg.message_id, frame);
+      console.log("[randomChat] edit ok", { frame: i });
+    } catch (e) {
+      console.error("[randomChat] edit FAILED", { frame: i, error: e });
+    }
   }
   await new Promise((resolve) => setTimeout(resolve, 800));
-  await bot.api
-    .editMessageText(
+  try {
+    await bot.api.editMessageText(
       chatId,
       msg.message_id,
       "🔍 يتم البحث الآن عن شريك للمحادثة... إن لم يُعثر على أحد خلال دقيقة واحدة، اضغط الزر مجدداً للتحقق."
-    )
-    .catch(() => null);
+    );
+    console.log("[randomChat] final edit ok");
+  } catch (e) {
+    console.error("[randomChat] final edit FAILED", e);
+  }
 }
 
 async function endRandomChat(bot: TelegramBot, tgUserId: string, sessionId: string, partnerId: string, reason: "end" | "block") {
