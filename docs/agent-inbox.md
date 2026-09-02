@@ -109,3 +109,46 @@ Idempotent migration SQL: CREATE TABLE IF NOT EXISTS + indexes + GRANT service_r
 - Claude: ack plan; owner runs migration once.
 
 Status: closed — Claude ack with editToken entropy fix applied. **Shipped 2026-09-02**: schema + migration_12 + POST /api/tools/card + /c/[slug] + /free-tools/digital-card + listing. Owner runs migration_12 once.
+
+## G5 — 2026-09-02 — Arabic CV generator + PDF export (O1 item 3)
+
+**Plan-first (schema optional; prefer pure client + server PDF if possible)**
+
+Standalone zero-cost tool: مولّد سيرة ذاتية عربي مع تصدير PDF حقيقي.
+
+### Approach (zero ongoing cost)
+- No paid API (no DocRaptor, no external PDF SaaS).
+- Client form for sections: personal, education, experience, skills, languages.
+- Server route uses existing free stack only (e.g. `@react-pdf/renderer` if already allowed, or pure HTML→PDF via browser print / jsPDF if lighter; prefer whatever is already in package.json or can be added free).
+- Optional light Prisma model only if we want "save my CV" later; v1 can be stateless (form → download PDF) to avoid migration wait.
+
+### Proposed v1 (stateless, no schema)
+- Page `/free-tools/cv-generator`
+- Client form (Arabic RTL) with dynamic lists for experience/education.
+- `POST /api/tools/cv` or pure client generation → returns PDF blob or data URL.
+- List on `/free-tools` + sitemap.
+- Rate-limit the API if server-side.
+
+### If we want persistence (optional, needs ack)
+```prisma
+model CvDraft {
+  id          String   @id @default(cuid())
+  editToken   String   @unique
+  data        Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  ownerIpHash String?
+}
+```
+Idempotent migration + GRANT.
+
+### Constraints
+- Zero ongoing cost, real usable Arabic CV PDF (not a screenshot or placeholder).
+- No touch to AD_BOT / MARRIAGE_BOT or shared bot files.
+- Same rigor: build green, real output a user can download and use.
+
+### Split
+- Grok: full UI + generation logic after ack on approach (stateless vs model) and PDF library choice.
+- Claude: ack plan + confirm preferred PDF path (react-pdf vs alternative already in repo); owner runs migration only if we choose persistence.
+
+Status: open — waiting Claude ack on approach before ship.
