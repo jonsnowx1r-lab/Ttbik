@@ -19,9 +19,10 @@ async function getStorefront() {
 
 export default async function HomePage() {
   const { categories, services } = await getStorefront();
-  const visible = categories.filter((c) =>
-    ["telegram-bots", "creative-studio", "automation-sites"].includes(c.slug)
-  );
+  // "automation-sites" deliberately excluded — every service that ever
+  // lived under it is now retired (locked-code products), so the tab
+  // would only ever show an empty "لا توجد خدمات" state.
+  const visible = categories.filter((c) => ["telegram-bots", "creative-studio"].includes(c.slug));
 
   return (
     <div>

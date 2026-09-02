@@ -78,9 +78,11 @@ export default function BotsDeployPage() {
           <label className="mb-1 block text-sm font-medium">اختر قالب البوت</label>
           <select value={template} onChange={(e) => setTemplate(e.target.value)} className="w-full rounded border bg-white p-2 text-black">
             <option value="AD_BOT">بوت الإعلانات والمهام</option>
-            <option value="STORE">بوت متجر إلكتروني</option>
-            <option value="HOSPITAL">بوت المشافي والمواعيد</option>
             <option value="MARRIAGE_BOT">بوت التعارف والزواج الشرعي</option>
+            {/* STORE و HOSPITAL أُخفيا مؤقتاً من هنا — القالبان لا يزالان
+                قيد الإعداد فعلياً (راجع docs/claude-feature-backlog.md)،
+                وإظهارهما هنا يعطي المستخدم قالباً "قيد الإعداد" فور
+                اختياره، وهذا بالضبط الالتباس الذي طلب المالك إزالته. */}
           </select>
         </div>
         {template === "MARRIAGE_BOT" ? (

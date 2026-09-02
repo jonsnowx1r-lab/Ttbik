@@ -20,6 +20,18 @@ where slug in (
   'workflow-templates', 'invoice-generator', 'whatsapp-catalog'
 );
 
+-- 2b) Site-audit finding (2026-09-02, different reason from the batch
+--    above — this one was still ACTIVE and being sold): "hosted-bot-builder"
+--    ($15) tells the paying customer to redeem their approved order_code
+--    on /bots — but /bots/deploy only ever validates a BotPurchase.code
+--    (the unrelated $100 AD_BOT creator system) or the MARRIAGE_BOT
+--    password; it never reads the `orders` table at all. Any customer who
+--    actually paid this $15 would have their code rejected. It also
+--    advertises store/clinic templates that don't exist yet (STORE/
+--    HOSPITAL are still stubs). Deactivating until it's rebuilt to
+--    actually gate something real.
+update services set is_active = false where slug = 'hosted-bot-builder';
+
 -- 3) Data-integrity fix found while doing this: faq-bot and auto-reply-bot
 --    are both free ($0, see make_faq_bot_free.sql) and are actively linked
 --    as live offers from /free-tools (FREE_BOTS array) — but the earlier
