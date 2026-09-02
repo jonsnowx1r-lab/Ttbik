@@ -67,7 +67,14 @@ function backLabel() {
 function mainMenu(): Keyboard {
   return new Keyboard()
     .text("👤 ملفي الشخصي").text("💍 مواصفات الشريك").row()
-    .text("🔍 البحث عن شريك").text("🔀 مراسلة عشوائية")
+    .text("🔍 البحث عن شريك").text("🔀 مراسلة عشوائية").row()
+    .text("ℹ️ معلومات")
+    .resized();
+}
+function adminMenu(): Keyboard {
+  return new Keyboard()
+    .text("📊 الإحصائيات").text("📋 الملفات المعلقة").row()
+    .text("🚩 بلاغات المطابقة").text("🚩 بلاغات الدردشة العشوائية")
     .resized();
 }
 function skipMenu(): Keyboard {
@@ -206,19 +213,20 @@ async function saveProfile(bot: TelegramBot, chatId: number, userId: string, dat
 }
 
 async function notifyAdminNewProfile(bot: TelegramBot, profile: MatchProfile) {
-  // The moderation reference MUST be shortId(profile.userId) — decideProfile
-  // looks candidates up by userId, not by the MatchProfile row's own id.
+  // Buttons carry the full userId in callback_data — see handleAdminCallback.
+  // The text commands (موافقة ملف/رفض ملف <رمز>) still work too, as a
+  // fallback for whenever a message with buttons has scrolled out of view.
   const text =
-    `👤 ملف جديد بانتظار المراجعة\n\n` +
+    (profile.status === "PENDING" ? `👤 ملف بانتظار المراجعة` : `👤 ملف`) + ` #${shortId(profile.userId)}\n\n` +
     `الاسم: ${profile.name}\nالجنس: ${profile.gender === "MALE" ? "ذكر" : "أنثى"}\nالعمر: ${profile.age}\nالدولة: ${profile.country}\n` +
     `العمل: ${profile.job || "غير محدد"}\nالتعليم: ${profile.education || "غير محدد"}\nالمواصفات: ${profile.attributes || "غير محدد"}\n` +
-    `التواصل: ${profile.contactMethod === "TELEGRAM" ? "تلجرام" : "واتساب"} — ${profile.contactValue}\n\n` +
-    `للموافقة أرسل: موافقة ملف ${shortId(profile.userId)}\nللرفض أرسل: رفض ملف ${shortId(profile.userId)}`;
+    `التواصل: ${profile.contactMethod === "TELEGRAM" ? "تلجرام" : "واتساب"} — ${profile.contactValue}`;
+  const kb = new InlineKeyboard().text("✅ قبول", `madmin_approve|${profile.userId}`).text("❌ رفض", `madmin_reject|${profile.userId}`);
   try {
     if (profile.photoFileId) {
-      await bot.api.sendPhoto(Number(SUPER_ADMIN_ID), profile.photoFileId, { caption: text });
+      await bot.api.sendPhoto(Number(SUPER_ADMIN_ID), profile.photoFileId, { caption: text, reply_markup: kb });
     } else {
-      await bot.api.sendMessage(Number(SUPER_ADMIN_ID), text);
+      await bot.api.sendMessage(Number(SUPER_ADMIN_ID), text, { reply_markup: kb });
     }
   } catch {
     // admin unreachable — not fatal, they can still review later once they message the bot
@@ -487,6 +495,15 @@ async function handleMatchCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
   const data = String(cq.data || "");
   if (!chatId) return;
 
+  if (data.startsWith("madmin_") || data.startsWith("mrep_")) {
+    if (!SUPER_ADMIN_ID || tgUserId !== SUPER_ADMIN_ID) {
+      await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+      return;
+    }
+    await handleAdminCallback(bot, chatId, data, cq);
+    return;
+  }
+
   const user = await ensureMatchUser(botRow.id, tgUserId);
   const pending = user.pendingAction as PendingAction | null;
 
@@ -518,9 +535,9 @@ async function handleMatchCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
     const targetId = data.split("|")[1];
     const target = await prisma.matchProfile.findUnique({ where: { userId: targetId } });
     if (target) {
-      await prisma.matchReport.create({ data: { reporterId: tgUserId, targetId: target.userId } }).catch(() => null);
+      await prisma.matchReport.create({ data: { reporterId: tgUserId, targetId: target.userId, source: "SEARCH" } }).catch(() => null);
       if (SUPER_ADMIN_ID) {
-        await bot.api.sendMessage(Number(SUPER_ADMIN_ID), `🚩 بلاغ جديد على ملف #${shortId(target.userId)} (${target.name}) من المستخدم ${tgUserId}.`).catch(() => null);
+        await bot.api.sendMessage(Number(SUPER_ADMIN_ID), `🚩 بلاغ جديد على ملف #${shortId(target.userId)} (${target.name}) من المستخدم ${tgUserId}.\nراجعه من «🚩 بلاغات المطابقة».`).catch(() => null);
       }
     }
     await bot.api.answerCallbackQuery(cq.id, { text: "🚩 تم إرسال بلاغك" }).catch(() => null);
@@ -612,15 +629,9 @@ async function endRandomChat(bot: TelegramBot, tgUserId: string, sessionId: stri
 // ---------------------------------------------------------------------
 // SUPER_ADMIN moderation (text commands, same convention as adBotLogic)
 // ---------------------------------------------------------------------
-async function decideProfile(bot: TelegramBot, chatId: number, idSuffix: string, approve: boolean) {
-  const candidates = await prisma.matchProfile.findMany({ where: { status: "PENDING" }, take: 200 });
-  const profile = candidates.find((p) => shortId(p.userId) === idSuffix);
-  if (!profile) {
-    await bot.api.sendMessage(chatId, "الملف غير موجود أو رُوجع مسبقاً.");
-    return;
-  }
+async function applyProfileDecision(bot: TelegramBot, adminChatId: number, profile: MatchProfile, approve: boolean) {
   await prisma.matchProfile.update({ where: { userId: profile.userId }, data: { status: approve ? "APPROVED" : "REJECTED" } });
-  await bot.api.sendMessage(chatId, approve ? "✅ تم اعتماد الملف." : "❌ تم رفض الملف.");
+  await bot.api.sendMessage(adminChatId, approve ? `✅ تم اعتماد ملف ${profile.name}.` : `❌ تم رفض ملف ${profile.name}.`);
   await bot.api
     .sendMessage(
       Number(profile.userId),
@@ -629,17 +640,147 @@ async function decideProfile(bot: TelegramBot, chatId: number, idSuffix: string,
     .catch(() => null);
 }
 
+async function decideProfile(bot: TelegramBot, chatId: number, idSuffix: string, approve: boolean) {
+  const candidates = await prisma.matchProfile.findMany({ where: { status: "PENDING" }, take: 200 });
+  const profile = candidates.find((p) => shortId(p.userId) === idSuffix);
+  if (!profile) {
+    await bot.api.sendMessage(chatId, "الملف غير موجود أو رُوجع مسبقاً.");
+    return;
+  }
+  await applyProfileDecision(bot, chatId, profile, approve);
+}
+
+async function decideProfileByUserId(bot: TelegramBot, chatId: number, userId: string, approve: boolean) {
+  const profile = await prisma.matchProfile.findUnique({ where: { userId } });
+  if (!profile || profile.status !== "PENDING") {
+    await bot.api.sendMessage(chatId, "الملف غير موجود أو رُوجع مسبقاً.");
+    return;
+  }
+  await applyProfileDecision(bot, chatId, profile, approve);
+}
+
+async function sendAdminStats(bot: TelegramBot, chatId: number) {
+  const onlineSince = new Date(Date.now() - ONLINE_THRESHOLD_MINUTES * 60000);
+  const [totalUsers, onlineUsers, pendingProfiles, approvedProfiles, rejectedProfiles, pendingSearchReports, pendingChatReports, activeSessions, waitingQueue] = await Promise.all([
+    prisma.matchUser.count(),
+    prisma.matchUser.count({ where: { lastActiveAt: { gte: onlineSince } } }),
+    prisma.matchProfile.count({ where: { status: "PENDING" } }),
+    prisma.matchProfile.count({ where: { status: "APPROVED" } }),
+    prisma.matchProfile.count({ where: { status: "REJECTED" } }),
+    prisma.matchReport.count({ where: { status: "PENDING", source: "SEARCH" } }),
+    prisma.matchReport.count({ where: { status: "PENDING", source: "RANDOM_CHAT" } }),
+    prisma.randomChatSession.count({ where: { status: "ACTIVE" } }),
+    prisma.randomChatQueue.count({ where: { status: "WAITING", expiresAt: { gt: new Date() } } }),
+  ]);
+  const text =
+    `📊 إحصائيات بوت التعارف\n\n` +
+    `👥 إجمالي المستخدمين: ${totalUsers}\n` +
+    `🟢 متصلون الآن: ${onlineUsers}\n\n` +
+    `📋 الملفات الشخصية:\n⏳ بانتظار المراجعة: ${pendingProfiles}\n✅ معتمدة: ${approvedProfiles}\n❌ مرفوضة: ${rejectedProfiles}\n\n` +
+    `🚩 البلاغات بانتظار المراجعة:\n🔍 من البحث: ${pendingSearchReports}\n🔀 من المحادثة العشوائية: ${pendingChatReports}\n\n` +
+    `🔀 المحادثة العشوائية الآن:\n💬 محادثات نشطة: ${activeSessions}\n⏳ بانتظار شريك: ${waitingQueue}`;
+  await bot.api.sendMessage(chatId, text);
+}
+
+async function sendPendingProfilesList(bot: TelegramBot, chatId: number) {
+  const profiles = await prisma.matchProfile.findMany({ where: { status: "PENDING" }, orderBy: { created_at: "asc" }, take: 20 });
+  if (profiles.length === 0) {
+    await bot.api.sendMessage(chatId, "✅ لا توجد ملفات بانتظار المراجعة حالياً.");
+    return;
+  }
+  for (const profile of profiles) {
+    await notifyAdminNewProfile(bot, profile);
+  }
+}
+
+async function sendPendingReportsList(bot: TelegramBot, chatId: number, source: "SEARCH" | "RANDOM_CHAT") {
+  const reports = await prisma.matchReport.findMany({ where: { status: "PENDING", source }, orderBy: { created_at: "asc" }, take: 20 });
+  if (reports.length === 0) {
+    await bot.api.sendMessage(chatId, "✅ لا توجد بلاغات بانتظار المراجعة في هذا القسم.");
+    return;
+  }
+  for (const r of reports) {
+    const [reporterProfile, targetProfile] = await Promise.all([
+      prisma.matchProfile.findUnique({ where: { userId: r.reporterId } }),
+      prisma.matchProfile.findUnique({ where: { userId: r.targetId } }),
+    ]);
+    const text =
+      `🚩 بلاغ ${source === "SEARCH" ? "من نتائج البحث" : "من محادثة عشوائية مجهولة"}\n\n` +
+      `المُبلِّغ: ${reporterProfile?.name || "بلا ملف"} (#${shortId(r.reporterId)})\n` +
+      `المُبلَّغ عنه: ${targetProfile?.name || "بلا ملف"} (#${shortId(r.targetId)})\n` +
+      `${relativeTime(r.created_at)}`;
+    const kb = new InlineKeyboard()
+      .text("🙈 تجاهل", `mrep_ignore|${r.id}`)
+      .text("🔇 كتم 24س", `mrep_mute|${r.id}`)
+      .row()
+      .text("⛔ حظر نهائي", `mrep_ban|${r.id}`);
+    await bot.api.sendMessage(chatId, text, { reply_markup: kb }).catch(() => null);
+  }
+}
+
 async function handleAdminMessage(bot: TelegramBot, chatId: number, text: string) {
+  if (text === "/start") {
+    await bot.api.sendMessage(chatId, "🛠 لوحة تحكم مشرف بوت التعارف والزواج.", { reply_markup: adminMenu() });
+    return;
+  }
+  if (text === "📊 الإحصائيات") {
+    await sendAdminStats(bot, chatId);
+    return;
+  }
+  if (text === "📋 الملفات المعلقة") {
+    await sendPendingProfilesList(bot, chatId);
+    return;
+  }
+  if (text === "🚩 بلاغات المطابقة") {
+    await sendPendingReportsList(bot, chatId, "SEARCH");
+    return;
+  }
+  if (text === "🚩 بلاغات الدردشة العشوائية") {
+    await sendPendingReportsList(bot, chatId, "RANDOM_CHAT");
+    return;
+  }
   if (text.startsWith("موافقة ملف ") || text.startsWith("رفض ملف ")) {
     const approve = text.startsWith("موافقة ملف ");
     const idSuffix = text.split(" ")[2]?.trim();
     if (idSuffix) await decideProfile(bot, chatId, idSuffix, approve);
     return;
   }
-  await bot.api.sendMessage(
-    chatId,
-    "🛠 أنت مشرف بوت التعارف.\n\nمراجعة الملفات تتم عبر الأوامر النصية التي تصلك تلقائياً مع كل ملف جديد:\nموافقة ملف <رمز>\nرفض ملف <رمز>"
-  );
+  await bot.api.sendMessage(chatId, "🛠 لوحة تحكم مشرف بوت التعارف والزواج.", { reply_markup: adminMenu() });
+}
+
+async function handleAdminCallback(bot: TelegramBot, chatId: number, data: string, cq: any) {
+  if (data.startsWith("madmin_approve|") || data.startsWith("madmin_reject|")) {
+    const approve = data.startsWith("madmin_approve|");
+    const userId = data.split("|")[1];
+    await decideProfileByUserId(bot, chatId, userId, approve);
+    await bot.api.answerCallbackQuery(cq.id, { text: approve ? "✅ تم القبول" : "❌ تم الرفض" }).catch(() => null);
+    return;
+  }
+  if (data.startsWith("mrep_")) {
+    const [action, reportId] = data.split("|");
+    const report = await prisma.matchReport.findUnique({ where: { id: reportId } });
+    if (!report) {
+      await bot.api.answerCallbackQuery(cq.id, { text: "البلاغ غير موجود." }).catch(() => null);
+      return;
+    }
+    if (report.status === "REVIEWED") {
+      await bot.api.answerCallbackQuery(cq.id, { text: "تمت مراجعة هذا البلاغ مسبقاً." }).catch(() => null);
+      return;
+    }
+    await prisma.matchReport.update({ where: { id: reportId }, data: { status: "REVIEWED" } });
+    if (action === "mrep_ban") {
+      await prisma.matchUser.update({ where: { id: report.targetId }, data: { isBanned: true } }).catch(() => null);
+      await bot.api.sendMessage(chatId, "⛔ تم حظر المستخدم المُبلَّغ عنه نهائياً من البوت.");
+    } else if (action === "mrep_mute") {
+      await prisma.matchUser.update({ where: { id: report.targetId }, data: { mutedUntil: new Date(Date.now() + 24 * 3600 * 1000) } }).catch(() => null);
+      await bot.api.sendMessage(chatId, "🔇 تم كتم المستخدم لمدة 24 ساعة.");
+    } else {
+      await bot.api.sendMessage(chatId, "🙈 تم تجاهل البلاغ.");
+    }
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  await bot.api.answerCallbackQuery(cq.id).catch(() => null);
 }
 
 // ---------------------------------------------------------------------
@@ -663,6 +804,15 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
 
   const user = await ensureMatchUser(botRow.id, tgUserId);
   await prisma.matchUser.update({ where: { id: tgUserId }, data: { lastActiveAt: new Date() } }).catch(() => null);
+
+  if (user.isBanned) {
+    await bot.api.sendMessage(chatId, "🚫 تم حظرك من استخدام هذا البوت من قِبل الإدارة.");
+    return;
+  }
+  if (user.mutedUntil && user.mutedUntil > new Date()) {
+    await bot.api.sendMessage(chatId, "🔇 أنت مكتوم مؤقتاً بسبب مخالفة بلّغ عنها أحد المستخدمين. حاول لاحقاً.");
+    return;
+  }
 
   if (msg.contact) {
     if (String(msg.contact.user_id) === tgUserId) {
@@ -722,9 +872,9 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
       return;
     }
     if (text === "🚩 إبلاغ") {
-      await prisma.matchReport.create({ data: { reporterId: tgUserId, targetId: pending.partnerId } }).catch(() => null);
+      await prisma.matchReport.create({ data: { reporterId: tgUserId, targetId: pending.partnerId, source: "RANDOM_CHAT" } }).catch(() => null);
       if (SUPER_ADMIN_ID) {
-        await bot.api.sendMessage(Number(SUPER_ADMIN_ID), `🚩 بلاغ من محادثة عشوائية — المُبلِّغ ${tgUserId} ضد ${pending.partnerId}.`).catch(() => null);
+        await bot.api.sendMessage(Number(SUPER_ADMIN_ID), `🚩 بلاغ من محادثة عشوائية — المُبلِّغ ${tgUserId} ضد ${pending.partnerId}.\nراجعه من «🚩 بلاغات الدردشة العشوائية».`).catch(() => null);
       }
       await bot.api.sendMessage(chatId, "🚩 تم إرسال بلاغك.");
       return;
@@ -745,11 +895,13 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
       return;
     }
     const statusLabel = profile.status === "APPROVED" ? "✅ معتمد" : profile.status === "REJECTED" ? "❌ مرفوض" : "⏳ قيد المراجعة";
-    await bot.api.sendMessage(
-      chatId,
-      `👤 ملفك الشخصي\n\nالاسم: ${profile.name}\nالعمر: ${profile.age}\nالدولة: ${profile.country}\nالحالة: ${statusLabel}\n\nلتعديل الملف أرسل «✏️ تعديل».`,
-      { reply_markup: new Keyboard().text("✏️ تعديل").row().text(backLabel()).resized() }
-    );
+    const infoText = `👤 ملفك الشخصي\n\nالاسم: ${profile.name}\nالعمر: ${profile.age}\nالدولة: ${profile.country}\nالحالة: ${statusLabel}\n\nلتعديل الملف أرسل «✏️ تعديل».`;
+    const kb = new Keyboard().text("✏️ تعديل").row().text(backLabel()).resized();
+    if (profile.photoFileId) {
+      await bot.api.sendPhoto(chatId, profile.photoFileId, { caption: infoText, reply_markup: kb });
+    } else {
+      await bot.api.sendMessage(chatId, infoText, { reply_markup: kb });
+    }
     return;
   }
   if (text === "✏️ تعديل") {
@@ -767,6 +919,23 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
   }
   if (text === "🔀 مراسلة عشوائية") {
     await startRandomChat(bot, chatId, botRow, tgUserId);
+    return;
+  }
+  if (text === "ℹ️ معلومات") {
+    await bot.api.sendMessage(
+      chatId,
+      "ℹ️ عن هذا البوت\n\n" +
+        "🤖 بوت تعارف وزواج شرعي يعمل بخوارزمية مطابقة ذكية تحلّل ملفك الشخصي ومواصفات الشريك الذي تبحث عنه لإيجاد الأنسب لك تلقائياً.\n" +
+        "🟢 البوت متصل الآن ويعمل على مدار الساعة.\n\n" +
+        "📌 طريقة الاستخدام:\n" +
+        "1️⃣ أنشئ ملفك الشخصي من «👤 ملفي الشخصي»\n" +
+        "2️⃣ حدد مواصفات الشريك الذي تبحث عنه من «💍 مواصفات الشريك»\n" +
+        "3️⃣ اضغط «🔍 البحث عن شريك» لعرض الملفات المطابقة\n" +
+        "4️⃣ أو جرّب «🔀 مراسلة عشوائية» للتعارف المجهول الفوري\n\n" +
+        "🔒 خصوصيتك محفوظة: لا تُشارَك بياناتك مع أي طرف حتى تختار أنت بدء التواصل.\n" +
+        "🛡 كل ملف جديد يخضع لمراجعة يدوية من الإدارة قبل ظهوره في نتائج البحث.",
+      { reply_markup: mainMenu() }
+    );
     return;
   }
 

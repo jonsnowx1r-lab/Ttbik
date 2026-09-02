@@ -232,14 +232,16 @@ model BotPurchase {
 // A person's identity within a MARRIAGE_BOT instance — phone-verified
 // before any profile can be created, given how sensitive this context is.
 model MatchUser {
-  id             String   @id // Telegram User ID
+  id             String    @id // Telegram User ID
   botId          String // which MARRIAGE_BOT instance (multi-tenant, same pattern as Bot/User above)
   phoneNumber    String?
-  phoneVerified  Boolean  @default(false)
-  language       String   @default("ar")
+  phoneVerified  Boolean   @default(false)
+  language       String    @default("ar")
   pendingAction  Json?
-  lastActiveAt   DateTime @default(now()) // drives "متصل الآن" vs "آخر ظهور" on result cards
-  created_at     DateTime @default(now())
+  lastActiveAt   DateTime  @default(now()) // drives "متصل الآن" vs "آخر ظهور" on result cards
+  isBanned       Boolean   @default(false) // admin action from a reviewed report — blocks all bot use
+  mutedUntil     DateTime? // admin action from a reviewed report — temporary block, lifts on its own once past
+  created_at     DateTime  @default(now())
 
   profile        MatchProfile?
   preference     PartnerPreference?
@@ -320,6 +322,8 @@ model MatchReport {
   targetId   String
   target     MatchUser @relation("ReportsReceived", fields: [targetId], references: [id])
   reason     String?
+  source     String    @default("SEARCH") // SEARCH (from a search-result card) | RANDOM_CHAT — drives the admin panel's two separate report queues
+  status     String    @default("PENDING") // PENDING | REVIEWED — set once an admin acts on it (ignore/mute/ban)
   created_at DateTime  @default(now())
 }
 
