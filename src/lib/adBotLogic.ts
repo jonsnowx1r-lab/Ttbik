@@ -1363,7 +1363,15 @@ async function payoutTask(tgUserId: string, adId: string, currentBotId: string):
   }
   if (SUPER_ADMIN_ID) {
     ops.push(
-      prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, botId: currentBotId, amount: platformFinal, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } })
+      prisma.transaction.create({ data: { userId: SUPER_ADMIN_ID, botId: currentBotId, amount: platformFinal, currency: "internal", type: "PLATFORM_PROFIT", status: "COMPLETED" } }),
+      // Real (not just logged) accumulator behind the periodic TON sweep to
+      // the owner's personal external wallet (owner spec, 2026-09-02) — see
+      // checkAndSweepOwnerProfits in ton-service.ts.
+      prisma.platformSettings.upsert({
+        where: { id: 1 },
+        update: { accumulatedOwnerProfit: { increment: platformFinal } },
+        create: { id: 1, accumulatedOwnerProfit: platformFinal },
+      })
     );
   }
 

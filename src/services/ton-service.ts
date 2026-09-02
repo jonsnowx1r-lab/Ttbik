@@ -189,3 +189,55 @@ export async function usdToTon(usdAmount: number): Promise<number> {
 export function isNativeTonConfigured(): boolean {
   return Boolean(process.env.MASTER_TON_MNEMONIC && process.env.MASTER_HOT_WALLET_ADDRESS);
 }
+
+// Periodic real (not just bookkeeping) transfer of the platform's
+// accumulated net profit from the shared hot wallet to the owner's own
+// personal external wallet (owner spec, 2026-09-02). Threshold defaults to
+// $15 — deliberately kept above $10 (per owner instruction) so the swept
+// amount comfortably covers TON's small network fee rather than sweeping
+// right at the edge of it. Meant to be called from a schedule (folded into
+// the existing /api/cron/ton-deposits run rather than a separate cron
+// entry, to stay within Vercel's cron-job limits).
+const OWNER_SWEEP_DEFAULT_THRESHOLD = 15;
+
+export async function checkAndSweepOwnerProfits(): Promise<{ swept: boolean; amountTon?: number; usdValue?: number }> {
+  const ownerAddress = process.env.OWNER_CWALLET_ADDRESS;
+  if (!ownerAddress || !isNativeTonConfigured()) return { swept: false };
+
+  const threshold = Number(process.env.OWNER_SWEEP_THRESHOLD || OWNER_SWEEP_DEFAULT_THRESHOLD);
+  const settings = await prisma.platformSettings.findUnique({ where: { id: 1 } });
+  const accumulated = Number(settings?.accumulatedOwnerProfit || 0);
+  if (accumulated <= threshold) return { swept: false };
+
+  const amountTon = await usdToTon(accumulated);
+  await sendTonWithdrawal(ownerAddress, amountTon);
+
+  // Record the sweep against the SUPER_ADMIN's own user row (creating it
+  // defensively if it doesn't exist yet — this can run before any task has
+  // ever completed). User.botId has no real foreign-key constraint, so a
+  // placeholder is safe here; this row isn't tied to any specific bot.
+  const superAdminId = process.env.SUPER_ADMIN_TELEGRAM_ID;
+  if (superAdminId) {
+    await prisma.user.upsert({ where: { id: superAdminId }, update: {}, create: { id: superAdminId, botId: "platform", role: "SUPER_ADMIN" } });
+  }
+  await prisma.$transaction([
+    prisma.platformSettings.update({ where: { id: 1 }, data: { accumulatedOwnerProfit: { decrement: accumulated } } }),
+    ...(superAdminId
+      ? [
+          prisma.tonTransaction.create({
+            data: {
+              userId: superAdminId,
+              type: "OWNER_SWEEP",
+              amountTon,
+              usdValue: accumulated,
+              txHash: `sweep_${Date.now()}`,
+              toAddress: ownerAddress,
+              status: "COMPLETED",
+            },
+          }),
+        ]
+      : []),
+  ]);
+
+  return { swept: true, amountTon, usdValue: accumulated };
+}

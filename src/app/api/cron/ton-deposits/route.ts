@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scanTonDeposits } from "@/services/ton-service";
+import { scanTonDeposits, checkAndSweepOwnerProfits } from "@/services/ton-service";
 
-// Native TON deposit scanner (owner spec, 2026-09-02). Runs daily via
-// Vercel Cron (vercel.json) — Vercel's Hobby plan caps cron at once daily,
-// so a TON deposit can take up to ~24h to actually land in a user's
-// balance. Real limitation of the free tier; a paid plan (more frequent
-// cron) or an external pinger would be needed to shorten it.
+// Native TON deposit scanner + owner-profit sweep (owner spec, 2026-09-02).
+// Runs daily via Vercel Cron (vercel.json) — Vercel's Hobby plan caps cron
+// at once daily, so a TON deposit can take up to ~24h to actually land in
+// a user's balance. Real limitation of the free tier; a paid plan (more
+// frequent cron) or an external pinger would be needed to shorten it.
+// The profit sweep is folded into this same run (rather than a separate
+// cron entry) to stay within Vercel's cron-job limits.
 function isAuthorized(req: NextRequest): boolean {
   const auth = req.headers.get("authorization");
   const querySecret = req.nextUrl.searchParams.get("secret");
@@ -20,8 +22,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: "native TON not configured" });
   }
   try {
-    const result = await scanTonDeposits();
-    return NextResponse.json({ ok: true, ...result });
+    const depositResult = await scanTonDeposits();
+    const sweepResult = await checkAndSweepOwnerProfits().catch((error: any) => ({ swept: false, error: error.message }));
+    return NextResponse.json({ ok: true, ...depositResult, sweep: sweepResult });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message || "scan failed" }, { status: 500 });
   }

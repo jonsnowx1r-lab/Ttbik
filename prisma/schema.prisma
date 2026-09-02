@@ -160,11 +160,22 @@ model Transaction {
 // (type DEPOSIT/WITHDRAWAL, currency "TON") so the user's wallet history
 // stays unified regardless of which gateway moved the money — this table
 // is the TON-specific detail behind that entry, not a second balance.
+// Singleton row (id always 1) tracking the platform's real net TON profit
+// accumulated since the last sweep to the owner's personal external wallet
+// — owner spec, 2026-09-02. Incremented atomically alongside every
+// PLATFORM_PROFIT transaction in payoutTask; read/reset by
+// checkAndSweepOwnerProfits in ton-service.ts.
+model PlatformSettings {
+  id                     Int      @id @default(1)
+  accumulatedOwnerProfit Float    @default(0.0)
+  updatedAt              DateTime @updatedAt
+}
+
 model TonTransaction {
   id         String   @id @default(uuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id])
-  type       String // DEPOSIT | WITHDRAWAL
+  type       String // DEPOSIT | WITHDRAWAL | OWNER_SWEEP
   amountTon  Float
   usdValue   Float // TON amount converted to USD at the rate used to credit/debit User.balance
   txHash     String   @unique // on-chain transaction hash/logical-time — the idempotency key
