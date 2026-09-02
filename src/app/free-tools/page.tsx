@@ -8,6 +8,11 @@ export const metadata: Metadata = {
 
 const TOOLS = [
   {
+    href: "/free-tools/url-shortener",
+    title: "مصغّر روابط + QR + عداد نقرات",
+    desc: "اختصر أي رابط، احصل على رمز QR، وتتبع عدد النقرات — مجاناً وعلى نطاق الموقع.",
+  },
+  {
     href: "/free-tools/image-optimizer",
     title: "ضغط وتحويل الصور (WebP/JPEG/PNG)",
     desc: "اضغط صورك وحوّل صيغتها فوراً داخل متصفحك — بلا رفع لأي خادم وبلا حدود استخدام.",
