@@ -5,6 +5,7 @@ import Logo from "@/components/Logo";
 import { isOwnerServer } from "@/lib/isOwner";
 import AdServiceWorker from "@/components/AdServiceWorker";
 import AdSlot from "@/components/AdSlot";
+import MultitagScript from "@/components/MultitagScript";
 
 export const metadata: Metadata = {
   title: "سوق تولز — سوق الخدمات الرقمية المصغّرة",
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               "(function(s){s.dataset.zone='11710148',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))",
           }}
         />
+        <MultitagScript />
         {isOwner && (
           <div className="bg-emerald-600 py-1.5 text-center text-xs font-bold text-white">
             🔑 وضع المالك مفعّل — لديك وصول كامل لكل الخدمات والأدوات
