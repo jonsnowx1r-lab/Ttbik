@@ -148,6 +148,9 @@ function isSkip(text: string): boolean {
 function skipMenu(): Keyboard {
   return new Keyboard().text(SKIP_LABEL).row().text(backLabel()).resized();
 }
+function infoMenu(): Keyboard {
+  return new Keyboard().text("مراسلة الأدمن").text("🔗 مشاركة الرابط").row().text(backLabel()).resized();
+}
 function plainBackMenu(): Keyboard {
   return new Keyboard().text(backLabel()).resized();
 }
@@ -1700,9 +1703,14 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
   if (text === "ℹ️ معلومات") {
     await bot.api.sendMessage(
       chatId,
-      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اكتب: مراسلة الأدمن\n💡 لاقتراح خاصية جديدة أو تعديل محدد، استخدم زر «اقتراح».",
-      { reply_markup: mainMenu() }
+      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اضغط «مراسلة الأدمن».\n💡 لاقتراح خاصية جديدة أو تعديل محدد، استخدم زر «اقتراح» في القائمة الرئيسية.",
+      { reply_markup: infoMenu() }
     );
+    return;
+  }
+  if (text === "🔗 مشاركة الرابط") {
+    const me = await bot.api.getMe();
+    await bot.api.sendMessage(chatId, `🔗 شارك هذا الرابط مع من يبحث عن عمل أو منتجات:\n\nhttps://t.me/${me.username}`, { reply_markup: infoMenu() });
     return;
   }
   if (text === "💡 اقتراح") {
