@@ -1,9 +1,9 @@
 {
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
-  "last_seen_comment_id": 5531503320,
+  "last_seen_comment_id": 5533003925,
   "last_actor": "claude",
-  "updated_at": "2026-09-03T21:15:00Z",
+  "updated_at": "2026-09-03T21:20:00Z",
   "mode": "work-cycle",
   "open": [
     "HARD BOUNDARY (permanent, not just for this cycle): Grok must never edit prisma/schema.prisma's AD_BOT/MARRIAGE_BOT/JOBS_BOT models, src/lib/adBotLogic.ts, src/lib/matchBotLogic.ts, src/lib/jobsBotLogic.ts, src/services/ton-service.ts, src/services/marriageTonService.ts, src/services/jobsTonService.ts, or the AD_BOT/MARRIAGE_BOT/JOBS_BOT branches inside src/app/api/telegram/[botId]/route.ts, src/app/api/bots/deploy/route.ts, src/app/bots/page.tsx. Adding a new sibling branch/option for a brand-new Grok template is fine; editing Claude's existing ones is not. See docs/AGENT_BUS.md for the full, current list.",
