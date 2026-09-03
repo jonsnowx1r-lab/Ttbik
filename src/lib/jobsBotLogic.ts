@@ -164,9 +164,12 @@ function storeMenu(): Keyboard {
   return new Keyboard()
     .text("💰 بيع").text("🛍 شراء").row()
     .text("🔍 بحث عن منتج").text("🔍 تصفح المنتجات").row()
-    .text("📋 طلبات الشراء").row()
+    .text("📂 طلباتي").row()
     .text(backLabel())
     .resized();
+}
+function myOrdersMenu(): Keyboard {
+  return new Keyboard().text("🛍 طلباتي (شراء)").text("💰 طلباتي (بيع)").row().text(backLabel()).resized();
 }
 function workSearchMenu(): Keyboard {
   return new Keyboard().text("🔍 عن مهني").text("🔍 عن وظيفة شاغرة").row().text(backLabel()).resized();
@@ -588,25 +591,51 @@ async function sendStoreResults(bot: TelegramBot, chatId: number, keyword: strin
   await bot.api.sendMessage(chatId, `${title}\n\n${lines.join("\n")}`, { reply_markup: kb });
 }
 
-async function sendStoreWantedResults(bot: TelegramBot, chatId: number, offset: number, viewerId: string) {
-  const blocked = await blockedPeerIds(viewerId);
+function orderStatusLabel(status: string): string {
+  return status === "ACTIVE" ? "🟢 نشط" : status === "SOLD" ? "✅ مباع" : `⚪️ ${status}`;
+}
+
+// "📂 طلباتي" — a personal view of the current user's own posts, not a
+// public browse (owner spec, 2026-09-06): sellers had no way to see their
+// own active listings anywhere, and the earlier public "browse everyone's
+// wanted listings" button is replaced by this since it caused confusion.
+async function sendMyWantedListings(bot: TelegramBot, chatId: number, userId: string, offset: number) {
   const wanted = await prisma.storeWantedListing.findMany({
-    where: { status: "ACTIVE", buyerId: { notIn: blocked } },
+    where: { buyerId: userId },
     orderBy: { created_at: "desc" },
     skip: offset,
     take: RESULTS_PAGE_SIZE,
   });
   if (wanted.length === 0) {
-    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد طلبات شراء حالياً." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: mainMenu() });
+    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد لديك طلبات شراء منشورة." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: myOrdersMenu() });
     return;
   }
   const kb = new InlineKeyboard();
   const lines = wanted.map((w, i) => {
     kb.text(`👁 عرض ${i + 1}`, `jview|wanted|${w.id}`).row();
-    return `${i + 1}. 🛍 ${w.title}${w.budget ? ` — ميزانية تقريبية: $${w.budget.toFixed(2)}` : ""}`;
+    return `${i + 1}. 🛍 ${w.title}${w.budget ? ` — ميزانية تقريبية: $${w.budget.toFixed(2)}` : ""} — ${orderStatusLabel(w.status)}`;
   });
-  if (wanted.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|wanted||${offset + RESULTS_PAGE_SIZE}`);
-  await bot.api.sendMessage(chatId, `📋 طلبات شراء معروضة:\n\n${lines.join("\n")}`, { reply_markup: kb });
+  if (wanted.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|mywanted||${offset + RESULTS_PAGE_SIZE}`);
+  await bot.api.sendMessage(chatId, `🛍 طلبات الشراء الخاصة بك:\n\n${lines.join("\n")}`, { reply_markup: kb });
+}
+async function sendMyStoreListings(bot: TelegramBot, chatId: number, userId: string, offset: number) {
+  const listings = await prisma.storeListing.findMany({
+    where: { sellerId: userId },
+    orderBy: { created_at: "desc" },
+    skip: offset,
+    take: RESULTS_PAGE_SIZE,
+  });
+  if (listings.length === 0) {
+    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد لديك منتجات معروضة." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: myOrdersMenu() });
+    return;
+  }
+  const kb = new InlineKeyboard();
+  const lines = listings.map((l, i) => {
+    kb.text(`👁 عرض ${i + 1}`, `jview|listing|${l.id}`).row();
+    return `${i + 1}. 🛒 ${l.title} — $${l.price.toFixed(2)} — ${orderStatusLabel(l.status)}`;
+  });
+  if (listings.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|mylistings||${offset + RESULTS_PAGE_SIZE}`);
+  await bot.api.sendMessage(chatId, `💰 منتجاتك المعروضة:\n\n${lines.join("\n")}`, { reply_markup: kb });
 }
 
 async function sendJobPostingCard(bot: TelegramBot, chatId: number, id: string, viewerId: string) {
@@ -1357,8 +1386,15 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
     await bot.api.sendMessage(chatId, "اكتب اسم المنتج أو كلمة مفتاحية:", { reply_markup: plainBackMenu() });
     return;
   }
-  if (text === "📋 طلبات الشراء") {
-    return sendStoreWantedResults(bot, chatId, 0, tgUserId);
+  if (text === "📂 طلباتي") {
+    await bot.api.sendMessage(chatId, "📂 طلباتي:", { reply_markup: myOrdersMenu() });
+    return;
+  }
+  if (text === "🛍 طلباتي (شراء)") {
+    return sendMyWantedListings(bot, chatId, tgUserId, 0);
+  }
+  if (text === "💰 طلباتي (بيع)") {
+    return sendMyStoreListings(bot, chatId, tgUserId, 0);
   }
   if (text === "💰 بيع") {
     if (profile!.roleType !== "TRADER") {
@@ -1446,7 +1482,8 @@ async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
     if (parts[1] === "posting") await sendJobPostingResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]), tgUserId);
     else if (parts[1] === "professional") await sendProfessionalResults(bot, chatId, decodeURIComponent(parts[2]), decodeURIComponent(parts[3]), Number(parts[4]), tgUserId);
     else if (parts[1] === "listing") await sendStoreResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]), tgUserId);
-    else if (parts[1] === "wanted") await sendStoreWantedResults(bot, chatId, Number(parts[3]), tgUserId);
+    else if (parts[1] === "mywanted") await sendMyWantedListings(bot, chatId, tgUserId, Number(parts[3]));
+    else if (parts[1] === "mylistings") await sendMyStoreListings(bot, chatId, tgUserId, Number(parts[3]));
     await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     return;
   }
