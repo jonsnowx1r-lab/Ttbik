@@ -28,14 +28,33 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
 
   async function handleDeploy(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setStatus(null);
+
+    // Client-side guards — avoid round-trip for obvious bad input
+    const trimmedToken = token.trim();
+    if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(trimmedToken)) {
+      setStatus("❌ صيغة التوكن غير صحيحة. يجب أن تكون مثل: 123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw");
+      return;
+    }
+    if (!ownerId || ownerId.length < 5 || ownerId.length > 15) {
+      setStatus("❌ معرّف المالك (Telegram User ID) غير صالح.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const res = await fetch("/api/bots/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, template, ownerId, ref: ref || undefined, activationCode: activationCode || undefined, password: password || undefined }),
+        body: JSON.stringify({
+          token: trimmedToken,
+          template,
+          ownerId,
+          ref: ref || undefined,
+          activationCode: activationCode || undefined,
+          password: password || undefined,
+        }),
       });
 
       const data = await res.json();
