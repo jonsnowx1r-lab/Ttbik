@@ -754,7 +754,7 @@ async function sendJobPostingCard(bot: TelegramBot, chatId: number, id: string, 
     (p.description ? `📝 ${p.description}\n` : "") + `🏷 ${p.keywords}\n${relativeTime(p.created_at)}`;
   const kb = new InlineKeyboard()
     .url("💬 تواصل", contactUrl).row()
-    .text("🚩 إبلاغ", `jreport|posting|${p.id}`).text("⛔ حظر", `jblock|${p.posterId}`);
+    .text("🚩 إبلاغ", `jreport|posting|${p.posterId}`).text("⛔ حظر", `jblock|${p.posterId}`);
   await bot.api.sendMessage(chatId, text, { reply_markup: kb });
 }
 
@@ -797,7 +797,7 @@ async function sendStoreListingCard(bot: TelegramBot, chatId: number, id: string
     }
   } else {
     if (l.status === "ACTIVE") kb.text("🛍 شراء (عرض سعر)", `jbuy|${l.id}`).row();
-    kb.text("🚩 إبلاغ", `jreport|listing|${l.id}`).text("⛔ حظر", `jblock|${l.sellerId}`);
+    kb.text("🚩 إبلاغ", `jreport|listing|${l.sellerId}`).text("⛔ حظر", `jblock|${l.sellerId}`);
   }
   const photoIds = Array.isArray(l.photoFileIds) ? (l.photoFileIds as unknown as string[]) : [];
   if (photoIds.length > 0) {
@@ -833,7 +833,7 @@ async function sendStoreWantedCard(bot: TelegramBot, chatId: number, id: string,
   } else {
     if (w.status === "ACTIVE") kb.text("💰 بيع (تقديم عرض)", `jselloffer|${w.id}`).row();
     if (contactUrl) kb.url("💬 تواصل", contactUrl).row();
-    kb.text("🚩 إبلاغ", `jreport|wanted|${w.id}`).text("⛔ حظر", `jblock|${w.buyerId}`);
+    kb.text("🚩 إبلاغ", `jreport|wanted|${w.buyerId}`).text("⛔ حظر", `jblock|${w.buyerId}`);
   }
   await bot.api.sendMessage(chatId, text, { reply_markup: kb });
 }
@@ -1317,7 +1317,7 @@ async function sendAdminInboxSummary(bot: TelegramBot, chatId: number) {
   const [messages, reports, disputes] = await Promise.all([
     prisma.jobsAdminMessage.findMany({ where: { status: "PENDING" }, orderBy: { created_at: "asc" }, take: 10 }),
     prisma.jobsReport.findMany({ where: { status: "PENDING" }, orderBy: { created_at: "asc" }, take: 10 }),
-    prisma.jobsDispute.findMany({ where: { status: "BOTH_SUBMITTED" }, orderBy: { created_at: "asc" }, take: 10 }),
+    prisma.jobsDispute.findMany({ where: { status: { not: "RESOLVED" } }, orderBy: { created_at: "asc" }, take: 10 }),
   ]);
   if (messages.length === 0 && reports.length === 0 && disputes.length === 0) {
     await bot.api.sendMessage(chatId, "✅ لا توجد رسائل أو بلاغات أو نزاعات بانتظار المراجعة.");
@@ -1333,16 +1333,22 @@ async function sendAdminInboxSummary(bot: TelegramBot, chatId: number) {
   for (const r of reports) {
     const kindLabel = r.targetKind === "listing" ? "منتج" : r.targetKind === "posting" ? "وظيفة" : r.targetKind === "wanted" ? "طلب شراء" : "ملف";
     const text = `🚩 بلاغ من #${shortId(r.reporterId)} ضد #${shortId(r.targetId)} (${kindLabel})\n${relativeTime(r.created_at)}\n\nالسبب: ${r.reason}`;
-    const kb = new InlineKeyboard().text("🙈 تجاهل", `jrep_ignore|${r.id}`).text("⛔ حظر المُبلَّغ عنه", `jrep_ban|${r.id}|${r.targetId}`);
+    const kb = new InlineKeyboard()
+      .text("🙈 تجاهل", `jrep_ignore|${r.id}`).row()
+      .text("🔇 كتم 24 ساعة", `jrep_mute|${r.id}|${r.targetId}`).text("⛔ حظر المُبلَّغ عنه", `jrep_ban|${r.id}|${r.targetId}`);
     if (r.evidencePhotoFileId) await bot.api.sendPhoto(chatId, r.evidencePhotoFileId, { caption: text, reply_markup: kb }).catch(() => null);
     else await bot.api.sendMessage(chatId, text, { reply_markup: kb }).catch(() => null);
   }
   for (const d of disputes) {
     const order = await prisma.storeOrder.findUnique({ where: { id: d.orderId } });
+    const stageNote = d.status === "BOTH_SUBMITTED" ? "" : "\n\n⏳ لم يقدّم الطرفان إفادتهما بعد بالكامل — القرار أدناه سيُنفَّذ بما هو متاح إن اخترت عدم الانتظار أكثر.";
     await bot.api
       .sendMessage(
         chatId,
-        `⚠️ نزاع طلب #${shortId(d.orderId)} — $${order?.amount.toFixed(2)}\n\n🟦 المشتري:\n${d.buyerStatement}\n\n🟥 البائع:\n${d.sellerStatement}`,
+        `⚠️ نزاع طلب #${shortId(d.orderId)} — $${order?.amount.toFixed(2)}\n\n` +
+          `🟦 المشتري:\n${d.buyerStatement || "(لم يقدّم إفادته بعد)"}\n\n` +
+          `🟥 البائع:\n${d.sellerStatement || "(لم يقدّم إفادته بعد)"}` +
+          stageNote,
         { reply_markup: new InlineKeyboard().text("✅ الإفراج للبائع", `jresolve|${d.orderId}|seller`).text("↩️ استرداد للمشتري", `jresolve|${d.orderId}|buyer`) }
       )
       .catch(() => null);
@@ -1393,10 +1399,30 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
         await bot.api.sendMessage(chatId, "لم يتم العثور على مستخدم بهذا الآيدي.");
         return;
       }
+      const [listingsCount, wantedCount, postingsCount, reportsAgainst] = await Promise.all([
+        prisma.storeListing.count({ where: { sellerId: targetId, status: { in: ["ACTIVE", "PAUSED"] } } }),
+        prisma.storeWantedListing.count({ where: { buyerId: targetId, status: { in: ["ACTIVE", "PAUSED"] } } }),
+        prisma.jobPosting.count({ where: { posterId: targetId, status: "OPEN" } }),
+        prisma.jobsReport.count({ where: { targetId } }),
+      ]);
+      const muted = user.mutedUntil && user.mutedUntil > new Date();
+      let profileBlock = "لا يوجد ملف شخصي.";
+      if (profile) {
+        profileBlock =
+          `${roleLabel(profile.roleType)}\nالاسم: ${profile.name}، ${profile.age}\n🌍 ${profile.country}، ${profile.governorate}، ${profile.city}\n` +
+          `📞 ${profile.contactMethod === "TELEGRAM" ? "تلجرام" : "واتساب"}: ${profile.contactValue}\n` +
+          (profile.seekerProfession ? `💼 يبحث عن: ${profile.seekerProfession}\n` : "") +
+          (profile.employerBusinessName ? `🏢 ${profile.employerBusinessName}\n` : "") +
+          (profile.professionalCategory ? `🔨 ${profile.professionalCategory}${profile.professionalDescription ? ` — ${profile.professionalDescription}` : ""}\n` : "") +
+          `⏸ الملف موقوف: ${profile.isPaused ? "نعم" : "لا"}`;
+      }
       await bot.api.sendMessage(
         chatId,
-        `🆔 ${targetId}\n💰 الرصيد: $${user.balance.toFixed(2)}\n🚫 محظور: ${user.isBanned ? "نعم" : "لا"}\n\n` +
-          (profile ? `${roleLabel(profile.roleType)}\nالاسم: ${profile.name}` : "لا يوجد ملف شخصي.")
+        `🆔 ${targetId}\n💰 الرصيد: $${user.balance.toFixed(2)}\n📱 تحقق الهاتف: ${user.phoneVerified ? "✅" : "❌"}\n` +
+          `🚫 محظور: ${user.isBanned ? "نعم" : "لا"}\n🔇 مكتوم: ${muted ? `نعم حتى ${user.mutedUntil!.toLocaleString("ar")}` : "لا"}\n` +
+          `🚩 بلاغات ضده: ${reportsAgainst}\n📦 منتجات نشطة: ${listingsCount} | 🛍 طلبات شراء نشطة: ${wantedCount} | 📢 وظائف مفتوحة: ${postingsCount}\n\n` +
+          profileBlock,
+        { reply_markup: new InlineKeyboard().text(user.isBanned ? "🔓 رفع الحظر" : "⛔ حظر", `jadmin_toggleban|${targetId}`) }
       );
       return;
     }
@@ -1425,7 +1451,7 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
     if (text === "📥 رسائل واردة") return sendAdminInboxSummary(bot, chatId);
     if (text === "💰 المحفظة") {
       const [totalBalance, totalEscrowed] = await Promise.all([
-        prisma.jobsUser.aggregate({ _sum: { balance: true } }),
+        prisma.jobsUser.aggregate({ where: { id: { not: SUPER_ADMIN_ID || "__none__" } }, _sum: { balance: true } }),
         prisma.storeOrder.aggregate({ where: { status: "ESCROWED" }, _sum: { amount: true } }),
       ]);
       await bot.api.sendMessage(chatId, `💰 محفظة البوت\n\nإجمالي أرصدة المستخدمين: $${(totalBalance._sum.balance || 0).toFixed(2)}\nمبالغ محجوزة حالياً (Escrow): $${(totalEscrowed._sum.amount || 0).toFixed(2)}`);
@@ -1642,13 +1668,18 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
   }
 
   if (text === "👤 ملفي الشخصي") {
+    const kb = new InlineKeyboard().text("✏️ تعديل الملف الشخصي", "jeditprofile");
+    if (profile!.roleType === "PROFESSIONAL") {
+      kb.row().text(profile!.isPaused ? "▶️ تفعيل الظهور في نتائج البحث" : "⏸ إيقاف الظهور في نتائج البحث", "jtoggleprofilepause");
+    }
     await bot.api.sendMessage(
       chatId,
       `${roleLabel(profile!.roleType)}\n\n👤 ${profile!.name}، ${profile!.age}\n🌍 ${profile!.country}، ${profile!.governorate}، ${profile!.city}\n` +
         (profile!.seekerProfession ? `💼 يبحث عن: ${profile!.seekerProfession}\n` : "") +
         (profile!.employerBusinessName ? `🏢 ${profile!.employerBusinessName}\n` : "") +
-        (profile!.professionalCategory ? `🔨 ${profile!.professionalCategory}\n` : ""),
-      { reply_markup: new InlineKeyboard().text("✏️ تعديل الملف الشخصي", "jeditprofile") }
+        (profile!.professionalCategory ? `🔨 ${profile!.professionalCategory}\n` : "") +
+        (profile!.roleType === "PROFESSIONAL" ? `📌 الظهور في البحث: ${profile!.isPaused ? "⏸ متوقف" : "🟢 مفعّل"}\n` : ""),
+      { reply_markup: kb }
     );
     return;
   }
@@ -1797,6 +1828,30 @@ async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
       await bot.api.answerCallbackQuery(cq.id, { text: "⛔ تم الحظر" }).catch(() => null);
       return;
     }
+    if (data.startsWith("jrep_mute|")) {
+      const [, reportId, targetId] = data.split("|");
+      const mutedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await prisma.jobsUser.update({ where: { id: targetId }, data: { mutedUntil } }).catch(() => null);
+      await prisma.jobsReport.update({ where: { id: reportId }, data: { status: "REVIEWED" } }).catch(() => null);
+      await bot.api.sendMessage(Number(targetId), "🔇 تم كتمك مؤقتاً لمدة 24 ساعة بسبب مخالفة بلّغ عنها أحد المستخدمين.").catch(() => null);
+      await bot.api.answerCallbackQuery(cq.id, { text: "🔇 تم الكتم 24 ساعة" }).catch(() => null);
+      return;
+    }
+    if (data.startsWith("jadmin_toggleban|")) {
+      const targetId = data.split("|")[1];
+      const target = await prisma.jobsUser.findUnique({ where: { id: targetId } });
+      if (!target) {
+        await bot.api.answerCallbackQuery(cq.id, { text: "غير موجود" }).catch(() => null);
+        return;
+      }
+      const nowBanned = !target.isBanned;
+      await prisma.jobsUser.update({ where: { id: targetId }, data: { isBanned: nowBanned, mutedUntil: nowBanned ? target.mutedUntil : null } });
+      await bot.api
+        .sendMessage(Number(targetId), nowBanned ? "🚫 تم حظرك من استخدام هذا البوت من قِبل الإدارة." : "✅ تم رفع الحظر عنك من قِبل الإدارة، يمكنك استخدام البوت الآن.")
+        .catch(() => null);
+      await bot.api.answerCallbackQuery(cq.id, { text: nowBanned ? "⛔ تم الحظر" : "🔓 تم رفع الحظر" }).catch(() => null);
+      return;
+    }
     if (data.startsWith("jresolve|")) {
       const [, orderId, winner] = data.split("|");
       await resolveDispute(bot, chatId, orderId, winner as "buyer" | "seller");
@@ -1810,6 +1865,20 @@ async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
 
   if (data === "jeditprofile") {
     await startProfileWizard(bot, chatId, tgUserId);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data === "jtoggleprofilepause") {
+    const profile = await prisma.jobsProfile.findUnique({ where: { userId: tgUserId } });
+    if (!profile || profile.roleType !== "PROFESSIONAL") {
+      await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+      return;
+    }
+    const isPaused = !profile.isPaused;
+    await prisma.jobsProfile.update({ where: { userId: tgUserId }, data: { isPaused } });
+    await bot.api
+      .sendMessage(chatId, isPaused ? "⏸ تم إيقاف ظهورك في نتائج البحث عن مهنيين." : "▶️ تم تفعيل ظهورك في نتائج البحث مجدداً.", { reply_markup: mainMenu() })
+      .catch(() => null);
     await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     return;
   }
