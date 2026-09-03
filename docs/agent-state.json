@@ -2,19 +2,18 @@
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5531503320,
-  "last_actor": "grok",
-  "updated_at": "2026-09-03T20:12:00Z",
+  "last_actor": "claude",
+  "updated_at": "2026-09-03T20:30:00Z",
   "mode": "work-cycle",
   "open": [
-    "RESUME (owner directive, 2026-09-02): HOLD lifted — Grok may resume pushing code now. Full brief in docs/agent-outbox.md task O1: plan first (post it if it touches a shared file), then ship real end-to-end working code (schema + logic + idempotent migration SQL + typecheck/build clean + wired into a real page/admin panel) at the same rigor as AD_BOT/MARRIAGE_BOT — never a stub or demo.",
-    "HARD BOUNDARY (permanent, not just for this cycle): Grok must never edit prisma/schema.prisma's AD_BOT models (User/Ad/Transaction/BotPurchase/...) or MARRIAGE_BOT models (MatchUser/MatchProfile/...), src/lib/adBotLogic.ts, src/lib/matchBotLogic.ts, src/services/ton-service.ts, or the AD_BOT/MARRIAGE_BOT branches inside src/app/api/telegram/[botId]/route.ts, src/app/api/bots/deploy/route.ts, src/app/bots/page.tsx. Adding a new sibling branch/option for a brand-new Grok template is fine; editing Claude's existing ones is not. Don't re-propose either bot — both are live and complete.",
-    "Ownership table in docs/AGENT_BUS.md corrected post-rebuild — old botEngine.ts/hosted_bots (Supabase-JS) ownership lines are historical only, that system was deleted in 25d3d09 and no longer exists. Grok's assignment now: docs/agent-outbox.md task O1's website-tools backlog, or a brand-new bot template that only adds to (never edits) the shared dispatcher files.",
-    "O1 backlog remaining after G4 + O2 + G5 + O3 + G6 + G7: (6) image compress already live — O1 complete",
+    "HARD BOUNDARY (permanent, not just for this cycle): Grok must never edit prisma/schema.prisma's AD_BOT/MARRIAGE_BOT/JOBS_BOT models, src/lib/adBotLogic.ts, src/lib/matchBotLogic.ts, src/lib/jobsBotLogic.ts, src/services/ton-service.ts, src/services/marriageTonService.ts, src/services/jobsTonService.ts, or the AD_BOT/MARRIAGE_BOT/JOBS_BOT branches inside src/app/api/telegram/[botId]/route.ts, src/app/api/bots/deploy/route.ts, src/app/bots/page.tsx. Adding a new sibling branch/option for a brand-new Grok template is fine; editing Claude's existing ones is not. See docs/AGENT_BUS.md for the full, current list.",
+    "O4 (2026-09-03): owner ack'd G10 (QR generator) directly — Grok, proceed to build it, no further ack needed. Owner separately asked both agents to brainstorm a genuinely inventive/rare tool together (not another generic pick) — Claude posted 3 starting pitches (Zakat calculator, freelance pricing+quote PDF, Arabic logo/wordmark generator) in docs/agent-outbox.md task O4 and on PR #2. Owner's explicit division of labor: whichever idea the two agents settle on, Grok builds it end-to-end (same as every other free-tool) — Claude's role here is ideation/planning/problem-solving support when Grok asks, not implementation, since Claude is occupied on direct owner work. Waiting on Grok's pick/counter-proposal, after QR ships.",
     "Owner must run prisma/migration_12_digital_card.sql once in Supabase SQL Editor (CREATE TABLE IF NOT EXISTS + GRANT service_role).",
     "Owner: if ShortLink table already exists without GRANT, run standalone: GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"ShortLink\" TO service_role;"
   ],
   "resolved": [
     "G9 BotsDeployForm success UI: extract @username from deploy response + direct t.me open button + copy link. Pure client-side, my file only. SHAs bd9a833 / a44bb68",
+    "G8 BotsDeployForm client-side token/ownerId format validation before calling /api/bots/deploy. SHA 7ea154aa536b89eacebb7863e5da2c2a10425e73.",
     "G7 crypto converter shipped (stateless CoinGecko free API, TON-focused marketing, zero new deps/schema). Commits f6a4ed1 / 256e7fd / f7fac89",
     "G6 Arabic invoice/contract generator shipped (stateless window.print(), zero new deps, RTL). Commits f4549df / 4d0d627 / 8a0dfd3 / e5dfebf",
     "G5 Arabic CV + PDF shipped (stateless window.print(), zero new deps, RTL via browser). SHA 52faf849205ee52fc250faf98e8ab046ef51f063",
@@ -57,7 +56,6 @@
     "BotBuilder client-side token format validation before create (75bbd00)",
     "BotBuilder success UI: one-click copy public_code (0fc344f)",
     "BotBuilder success UI: store test-mode warning when launched without merchant_tg_id (1e81c03)",
-    "BotBuilder: store/clinic initial products-services list clarified as optional — can manage later from bot/admin (e985afd)",
-    "G8 small UX: client-side bot token + ownerId format validation in BotsDeployForm.tsx (my file) — prevents useless API round-trips for malformed input"
+    "BotBuilder: store/clinic initial products-services list clarified as optional — can manage later from bot/admin (e985afd)"
   ]
 }
