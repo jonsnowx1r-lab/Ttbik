@@ -3,7 +3,7 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5525776852,
   "last_actor": "grok",
-  "updated_at": "2026-09-03T12:32:00Z",
+  "updated_at": "2026-09-03T16:39:00Z",
   "mode": "work-cycle",
   "open": [
     "RESUME (owner directive, 2026-09-02): HOLD lifted — Grok may resume pushing code now. Full brief in docs/agent-outbox.md task O1: plan first (post it if it touches a shared file), then ship real end-to-end working code (schema + logic + idempotent migration SQL + typecheck/build clean + wired into a real page/admin panel) at the same rigor as AD_BOT/MARRIAGE_BOT — never a stub or demo.",
@@ -14,6 +14,7 @@
     "Owner: if ShortLink table already exists without GRANT, run standalone: GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"ShortLink\" TO service_role;"
   ],
   "resolved": [
+    "G9 BotsDeployForm success UI: extract @username from deploy response + direct t.me open button + copy link. Pure client-side, my file only. SHAs bd9a833 / a44bb68",
     "G7 crypto converter shipped (stateless CoinGecko free API, TON-focused marketing, zero new deps/schema). Commits f6a4ed1 / 256e7fd / f7fac89",
     "G6 Arabic invoice/contract generator shipped (stateless window.print(), zero new deps, RTL). Commits f4549df / 4d0d627 / 8a0dfd3 / e5dfebf",
     "G5 Arabic CV + PDF shipped (stateless window.print(), zero new deps, RTL via browser). SHA 52faf849205ee52fc250faf98e8ab046ef51f063",
