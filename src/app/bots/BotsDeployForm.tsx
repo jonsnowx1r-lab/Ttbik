@@ -18,7 +18,9 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
   const [password, setPassword] = useState("");
   const [ref, setRef] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -29,6 +31,8 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
   async function handleDeploy(e: React.FormEvent) {
     e.preventDefault();
     setStatus(null);
+    setBotUsername(null);
+    setCopied(false);
 
     // Client-side guards — avoid round-trip for obvious bad input
     const trimmedToken = token.trim();
@@ -60,6 +64,9 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
       const data = await res.json();
       if (data.success) {
         setStatus(`✅ ${data.message}`);
+        // Extract @username from message like "Bot @MyBot activated successfully!"
+        const match = String(data.message || "").match(/@([A-Za-z0-9_]+)/);
+        if (match) setBotUsername(match[1]);
       } else {
         setStatus(`❌ خطأ: ${data.error}`);
       }
@@ -68,6 +75,15 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
     } finally {
       setLoading(false);
     }
+  }
+
+  function copyLink() {
+    if (!botUsername) return;
+    const url = `https://t.me/${botUsername}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
   }
 
   return (
@@ -135,7 +151,7 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
               required
               value={activationCode}
               onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
-              placeholder="احصل عليه من داخل أي بوت على المنصة عبر زر «أريد بوتاً مماثلاً»"
+              placeholder="مثال: 987654321"
               className="w-full rounded border p-2 font-mono text-sm text-black"
             />
             <p className="mt-1 text-xs text-gray-500">مرتبط بآيدي المالك الذي أدخلته أعلاه تحديداً — لا يعمل مع آيدي آخر.</p>
@@ -145,7 +161,30 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
           {loading ? "جاري ربط وتفعيل البوت..." : "تفعيل البوت على تلجرام فوراً"}
         </button>
       </form>
-      {status && <div className="mt-4 whitespace-pre-wrap rounded bg-gray-100 p-3 text-sm">{status}</div>}
+      {status && (
+        <div className="mt-4 space-y-3">
+          <div className="whitespace-pre-wrap rounded bg-gray-100 p-3 text-sm">{status}</div>
+          {botUsername && (
+            <div className="flex flex-col gap-2 rounded border border-emerald-200 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <a
+                href={`https://t.me/${botUsername}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center rounded bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+              >
+                افتح @{botUsername} على تليجرام
+              </a>
+              <button
+                type="button"
+                onClick={copyLink}
+                className="rounded border border-emerald-300 bg-white px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-100"
+              >
+                {copied ? "تم النسخ ✓" : "نسخ الرابط"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-8">{adSlot}</div>
     </main>
