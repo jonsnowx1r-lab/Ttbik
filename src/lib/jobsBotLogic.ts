@@ -149,7 +149,11 @@ function skipMenu(): Keyboard {
   return new Keyboard().text(SKIP_LABEL).row().text(backLabel()).resized();
 }
 function infoMenu(): Keyboard {
-  return new Keyboard().text("مراسلة الأدمن").text("🔗 مشاركة الرابط").row().text(backLabel()).resized();
+  return new Keyboard()
+    .text("💡 اقتراح").text("🔗 مشاركة الرابط").row()
+    .text("مراسلة الأدمن").row()
+    .text(backLabel())
+    .resized();
 }
 function plainBackMenu(): Keyboard {
   return new Keyboard().text(backLabel()).resized();
@@ -162,7 +166,7 @@ function mainMenu(): Keyboard {
   return new Keyboard()
     .text("💼 قسم العمل").text("🛒 قسم المتجر").row()
     .text("👤 ملفي الشخصي").text("💰 رصيدي وإيداع").row()
-    .text("ℹ️ معلومات").text("💡 اقتراح")
+    .text("ℹ️ معلومات")
     .resized();
 }
 function workMenu(): Keyboard {
@@ -1703,7 +1707,7 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
   if (text === "ℹ️ معلومات") {
     await bot.api.sendMessage(
       chatId,
-      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اضغط «مراسلة الأدمن».\n💡 لاقتراح خاصية جديدة أو تعديل محدد، استخدم زر «اقتراح» في القائمة الرئيسية.",
+      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اضغط «مراسلة الأدمن».\n💡 لاقتراح خاصية جديدة أو تعديل محدد، اضغط «اقتراح».\n🔗 لدعوة آخرين، اضغط «مشاركة الرابط».",
       { reply_markup: infoMenu() }
     );
     return;
