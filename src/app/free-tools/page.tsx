@@ -11,6 +11,11 @@ export const metadata: Metadata = {
 
 const TOOLS = [
   {
+    href: "/free-tools/crypto-converter",
+    title: "محول عملات رقمية (TON / BTC / ETH)",
+    desc: "أسعار حية لـ TON وبيتكوين وإيثريوم وUSDT مقابل الدولار والريال — مفيد لمحفظة TON.",
+  },
+  {
     href: "/free-tools/invoice-generator",
     title: "مولّد فواتير وعقود بسيطة",
     desc: "فاتورة أو عقد خدمة عربي جاهز للطباعة/PDF — بنود، ضريبة، توقيعات. بلا تسجيل.",
