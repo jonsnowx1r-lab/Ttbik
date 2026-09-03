@@ -66,7 +66,7 @@ the next:
 2. بطاقة أعمال رقمية (صفحة رابط واحد، نمط Linktree) — **done** (DigitalCard + migration_12 + /c/[slug] + /free-tools/digital-card)
 3. مولّد سيرة ذاتية (CV) عربي مع تصدير PDF — **done** (stateless window.print(), /free-tools/cv-generator, SHA 52faf849)
 4. مولّد عقود/فواتير بسيطة بالعربي — **done** (stateless window.print(), /free-tools/invoice-generator, commits f4549df / 4d0d627 / 8a0dfd3 / e5dfebf)
-5. حاسبة/محول عملات رقمية (نافعة أيضاً كتسويق لمحفظة TON الموجودة)
+5. حاسبة/محول عملات رقمية (نافعة أيضاً كتسويق لمحفظة TON الموجودة) — **done** (G7, CoinGecko free, /free-tools/crypto-converter, SHAs f6a4ed1 / 256e7fd)
 6. أداة ضغط/تحويل صور — already live as image-optimizer
 
 Prefer a brand-new bot template instead? Fine — but it must own entirely
@@ -74,7 +74,7 @@ new Prisma models, only ADD a sibling branch to the shared dispatcher files
 (never edit Claude's), and not overlap AD_BOT/MARRIAGE_BOT. Propose it here
 first before touching any shared file.
 
-Status: items 1–4 shipped; remaining 5
+Status: **O1 complete** (items 1–5 shipped; 6 already live)
 
 ## O2 — 2026-09-04 — Add the site's ad slot to your 3 pages (owner directive)
 
