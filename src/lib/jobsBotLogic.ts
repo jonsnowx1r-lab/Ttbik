@@ -151,7 +151,6 @@ function skipMenu(): Keyboard {
 function infoMenu(): Keyboard {
   return new Keyboard()
     .text("💡 اقتراح").text("🔗 مشاركة الرابط").row()
-    .text("مراسلة الأدمن").row()
     .text(backLabel())
     .resized();
 }
@@ -1707,7 +1706,7 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
   if (text === "ℹ️ معلومات") {
     await bot.api.sendMessage(
       chatId,
-      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اضغط «مراسلة الأدمن».\n💡 لاقتراح خاصية جديدة أو تعديل محدد، اضغط «اقتراح».\n🔗 لدعوة آخرين، اضغط «مشاركة الرابط».",
+      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n💡 لاقتراح خاصية جديدة أو تعديل محدد، اضغط «اقتراح».\n🔗 لدعوة آخرين، اضغط «مشاركة الرابط».",
       { reply_markup: infoMenu() }
     );
     return;
