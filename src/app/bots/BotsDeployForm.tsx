@@ -151,7 +151,7 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
               required
               value={activationCode}
               onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
-              placeholder="مثال: 987654321"
+              placeholder="احصل عليه من داخل أي بوت على المنصة عبر زر «أريد بوتاً مماثلاً»"
               className="w-full rounded border p-2 font-mono text-sm text-black"
             />
             <p className="mt-1 text-xs text-gray-500">مرتبط بآيدي المالك الذي أدخلته أعلاه تحديداً — لا يعمل مع آيدي آخر.</p>
