@@ -11,6 +11,11 @@ export const metadata: Metadata = {
 
 const TOOLS = [
   {
+    href: "/free-tools/invoice-generator",
+    title: "مولّد فواتير وعقود بسيطة",
+    desc: "فاتورة أو عقد خدمة عربي جاهز للطباعة/PDF — بنود، ضريبة، توقيعات. بلا تسجيل.",
+  },
+  {
     href: "/free-tools/cv-generator",
     title: "مولّد سيرة ذاتية عربي + PDF",
     desc: "أنشئ سيرة ذاتية عربية احترافية واحفظها كـ PDF من المتصفح — نص عربي صحيح، بلا تسجيل.",
