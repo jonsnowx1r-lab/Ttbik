@@ -110,6 +110,7 @@ type PendingAction =
   | { mode: "profile_wizard"; step: ProfileStep; data: ProfileDraft }
   | { mode: "job_posting_wizard"; step: JobPostingStep; data: JobPostingDraft }
   | { mode: "job_search_keyword"; fallbackKeyword?: string }
+  | { mode: "store_search_keyword" }
   | { mode: "professional_search_category" }
   | { mode: "professional_search_category_custom" }
   | { mode: "professional_search_region"; category: string }
@@ -160,7 +161,12 @@ function workMenu(): Keyboard {
   return new Keyboard().text("📢 نشر").text("🔍 بحث").row().text(backLabel()).resized();
 }
 function storeMenu(): Keyboard {
-  return new Keyboard().text("💰 بيع").text("🛍 شراء").row().text("🔍 تصفح المنتجات").text("📋 طلبات الشراء").row().text(backLabel()).resized();
+  return new Keyboard()
+    .text("💰 بيع").text("🛍 شراء").row()
+    .text("🔍 بحث عن منتج").text("🔍 تصفح المنتجات").row()
+    .text("📋 طلبات الشراء").row()
+    .text(backLabel())
+    .resized();
 }
 function workSearchMenu(): Keyboard {
   return new Keyboard().text("🔍 عن مهني").text("🔍 عن وظيفة شاغرة").row().text(backLabel()).resized();
@@ -556,16 +562,20 @@ async function sendProfessionalResults(bot: TelegramBot, chatId: number, categor
   await bot.api.sendMessage(chatId, `🔍 نتائج البحث عن مهني "${category}":\n\n${lines.join("\n")}`, { reply_markup: kb });
 }
 
-async function sendStoreResults(bot: TelegramBot, chatId: number, offset: number, viewerId: string) {
+async function sendStoreResults(bot: TelegramBot, chatId: number, keyword: string, offset: number, viewerId: string) {
   const blocked = await blockedPeerIds(viewerId);
   const listings = await prisma.storeListing.findMany({
-    where: { status: "ACTIVE", sellerId: { notIn: blocked } },
+    where: {
+      status: "ACTIVE",
+      sellerId: { notIn: blocked },
+      ...(keyword ? { OR: [{ title: { contains: keyword, mode: "insensitive" } }, { description: { contains: keyword, mode: "insensitive" } }] } : {}),
+    },
     orderBy: { created_at: "desc" },
     skip: offset,
     take: RESULTS_PAGE_SIZE,
   });
   if (listings.length === 0) {
-    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد منتجات معروضة حالياً." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: mainMenu() });
+    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد منتجات مطابقة حالياً." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: mainMenu() });
     return;
   }
   const kb = new InlineKeyboard();
@@ -573,8 +583,9 @@ async function sendStoreResults(bot: TelegramBot, chatId: number, offset: number
     kb.text(`👁 عرض ${i + 1}`, `jview|listing|${l.id}`).row();
     return `${i + 1}. 🛒 ${l.title} — $${l.price.toFixed(2)}`;
   });
-  if (listings.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|listing||${offset + RESULTS_PAGE_SIZE}`);
-  await bot.api.sendMessage(chatId, `🛒 منتجات معروضة:\n\n${lines.join("\n")}`, { reply_markup: kb });
+  if (listings.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|listing|${encodeURIComponent(keyword)}|${offset + RESULTS_PAGE_SIZE}`);
+  const title = keyword ? `🔍 نتائج البحث عن "${keyword}":` : "🛒 منتجات معروضة:";
+  await bot.api.sendMessage(chatId, `${title}\n\n${lines.join("\n")}`, { reply_markup: kb });
 }
 
 async function sendStoreWantedResults(bot: TelegramBot, chatId: number, offset: number, viewerId: string) {
@@ -1199,6 +1210,10 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
     await setPending(tgUserId, null);
     return sendJobPostingResults(bot, chatId, keyword, 0, tgUserId);
   }
+  if (pending?.mode === "store_search_keyword") {
+    await setPending(tgUserId, null);
+    return sendStoreResults(bot, chatId, text, 0, tgUserId);
+  }
   if (pending?.mode === "professional_search_category") {
     if (text === OTHER_CATEGORY_LABEL) {
       await setPending(tgUserId, { mode: "professional_search_category_custom" });
@@ -1335,7 +1350,12 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
     return;
   }
   if (text === "🔍 تصفح المنتجات") {
-    return sendStoreResults(bot, chatId, 0, tgUserId);
+    return sendStoreResults(bot, chatId, "", 0, tgUserId);
+  }
+  if (text === "🔍 بحث عن منتج") {
+    await setPending(tgUserId, { mode: "store_search_keyword" });
+    await bot.api.sendMessage(chatId, "اكتب اسم المنتج أو كلمة مفتاحية:", { reply_markup: plainBackMenu() });
+    return;
   }
   if (text === "📋 طلبات الشراء") {
     return sendStoreWantedResults(bot, chatId, 0, tgUserId);
@@ -1425,7 +1445,7 @@ async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
     const parts = data.split("|");
     if (parts[1] === "posting") await sendJobPostingResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]), tgUserId);
     else if (parts[1] === "professional") await sendProfessionalResults(bot, chatId, decodeURIComponent(parts[2]), decodeURIComponent(parts[3]), Number(parts[4]), tgUserId);
-    else if (parts[1] === "listing") await sendStoreResults(bot, chatId, Number(parts[3]), tgUserId);
+    else if (parts[1] === "listing") await sendStoreResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]), tgUserId);
     else if (parts[1] === "wanted") await sendStoreWantedResults(bot, chatId, Number(parts[3]), tgUserId);
     await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     return;
