@@ -1,0 +1,180 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import QR from "@/lib/qrMin";
+
+const SIZES = [128, 256, 384, 512] as const;
+
+export default function QrGenerator() {
+  const [text, setText] = useState("https://ttbik.vercel.app");
+  const [size, setSize] = useState<(typeof SIZES)[number]>(256);
+  const [fg, setFg] = useState("#0f172a");
+  const [bg, setBg] = useState("#ffffff");
+  const [error, setError] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  const draw = useCallback(() => {
+    setError(null);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const value = text.trim();
+    if (!value) {
+      setDataUrl(null);
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, size, size);
+      }
+      return;
+    }
+    try {
+      const matrix = QR(value) as number[][];
+      const n = matrix.length;
+      const quiet = 2; // modules of quiet zone
+      const modules = n + quiet * 2;
+      const cell = size / modules;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = fg;
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          if (matrix[y][x]) {
+            ctx.fillRect(
+              (x + quiet) * cell,
+              (y + quiet) * cell,
+              Math.ceil(cell),
+              Math.ceil(cell)
+            );
+          }
+        }
+      }
+      setDataUrl(canvas.toDataURL("image/png"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر إنشاء رمز QR — النص طويل جداً");
+      setDataUrl(null);
+    }
+  }, [text, size, fg, bg]);
+
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  const download = () => {
+    if (!dataUrl) return;
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = "qr-souqtools.png";
+    a.click();
+  };
+
+  const copyPng = async () => {
+    if (!dataUrl || !navigator.clipboard) return;
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob }),
+      ]);
+    } catch {
+      // fallback: ignore
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <label className="block text-sm font-semibold text-slate-700">
+        النص أو الرابط
+      </label>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        dir="auto"
+        placeholder="https://... أو أي نص"
+        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+      />
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <span className="text-sm text-slate-500">الحجم:</span>
+        {SIZES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setSize(s)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              size === s
+                ? "bg-brand-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {s}px
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          لون الرمز
+          <input
+            type="color"
+            value={fg}
+            onChange={(e) => setFg(e.target.value)}
+            className="h-8 w-10 cursor-pointer rounded border border-slate-200"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          لون الخلفية
+          <input
+            type="color"
+            value={bg}
+            onChange={(e) => setBg(e.target.value)}
+            className="h-8 w-10 cursor-pointer rounded border border-slate-200"
+          />
+        </label>
+      </div>
+
+      {error && (
+        <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-6 flex flex-col items-center gap-4">
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="rounded-xl border border-slate-200 shadow-sm"
+          style={{ width: Math.min(size, 320), height: Math.min(size, 320) }}
+        />
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={download}
+            disabled={!dataUrl}
+            className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            تنزيل PNG
+          </button>
+          <button
+            type="button"
+            onClick={copyPng}
+            disabled={!dataUrl}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            نسخ الصورة
+          </button>
+        </div>
+      </div>
+
+      <p className="mt-4 text-center text-xs text-slate-400">
+        يعمل بالكامل داخل المتصفح — بلا رفع بيانات لأي خادم.
+      </p>
+    </div>
+  );
+}

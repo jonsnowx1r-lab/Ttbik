@@ -3,6 +3,11 @@
 // tool only needs to be added here once instead of drifting between pages.
 export const FREE_TOOLS = [
   {
+    href: "/free-tools/qr-generator",
+    title: "مولّد رمز QR",
+    desc: "أنشئ رمز QR لأي رابط أو نص — حجم وألوان قابلة للتخصيص وتنزيل PNG فوري داخل المتصفح.",
+  },
+  {
     href: "/free-tools/crypto-converter",
     title: "محول عملات رقمية (TON / BTC / ETH)",
     desc: "أسعار حية لـ TON وبيتكوين وإيثريوم وUSDT مقابل الدولار والريال — مفيد لمحفظة TON.",

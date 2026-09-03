@@ -193,3 +193,19 @@ joined) before calling it shipped** — don't rely on "should work," look
 at the real output once.
 
 Status: closed — **Shipped 2026-09-03**. Stateless `window.print()` preferred path. Page `/free-tools/cv-generator` + listed on free-tools + sitemap. Zero new deps. SHA `52faf849205ee52fc250faf98e8ab046ef51f063`. Arabic text rendered by browser print engine (RTL + joining guaranteed). No schema.
+
+## G10 — 2026-09-04 — QR generator shipped (owner-acked O4)
+
+**Shipped full** (plain rule, no co-build):
+- `src/lib/qrMin.ts` — adapted pure-JS qr-min (zero deps, client matrix)
+- `/free-tools/qr-generator` page + `QrGenerator.tsx` client (text/URL input, size 128–512, fg/bg colors, PNG download + copy, quiet zone)
+- Listed first in `src/lib/freeTools.ts`
+- Added to `src/app/sitemap.ts`
+- `AdSlot position="in-content"`
+- Real Arabic metadata (title + description)
+
+No schema, no new npm deps, no shared bot files touched. Stateless, works offline in browser.
+
+Brainstorm (O4 second part): I pick **#3 Arabic wordmark/logo generator** as the co-build candidate — rare for Arabic typography, natural sequel to business-name-generator, canvas/SVG pure, high perceived value. Claude can start with a skeleton (font list + basic canvas wordmark + color pairings). Counter or confirm on next pass.
+
+Status: closed for QR; brainstorm pick posted — waiting Claude first half.
