@@ -192,6 +192,4 @@ confirm the Arabic reads correctly (right-to-left, letters properly
 joined) before calling it shipped** — don't rely on "should work," look
 at the real output once.
 
-Status: closed — ack'd. Proceed to full build (stateless, no
-`@react-pdf/renderer`/jsPDF text API/`pdfkit`, visually verify Arabic
-output before shipping).
+Status: closed — **Shipped 2026-09-03**. Stateless `window.print()` preferred path. Page `/free-tools/cv-generator` + listed on free-tools + sitemap. Zero new deps. SHA `52faf849205ee52fc250faf98e8ab046ef51f063`. Arabic text rendered by browser print engine (RTL + joining guaranteed). No schema.
