@@ -19,6 +19,15 @@ export async function POST(req: NextRequest) {
       if (!expected || String(password || "") !== expected) {
         return NextResponse.json({ success: false, error: "كلمة السر غير صحيحة." }, { status: 400 });
       }
+    } else if (template === "JOBS_BOT") {
+      // Same private, owner-only gate as MARRIAGE_BOT (owner spec,
+      // 2026-09-05) — a separate env var so the owner can reuse the same
+      // secret value across both if they want a single shared password,
+      // without the two templates sharing any actual code or table.
+      const expected = process.env.JOBS_BOT_CREATOR_PASSWORD;
+      if (!expected || String(password || "") !== expected) {
+        return NextResponse.json({ success: false, error: "كلمة السر غير صحيحة." }, { status: 400 });
+      }
     } else {
       // Gate on a paid, admin-approved activation code (owner spec,
       // 2026-08-31) — /bots was previously open to anyone with a token and

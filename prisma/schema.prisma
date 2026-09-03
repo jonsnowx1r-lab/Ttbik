@@ -477,6 +477,221 @@ model RandomChatSession {
 }
 
 // ===================================================================
+// JOBS_BOT — فرص عمل + متجر بيع وشراء (owner spec, 2026-09-05). A
+// second owner-only private bot template, same governance model as
+// MARRIAGE_BOT: gated by JOBS_BOT_CREATOR_PASSWORD, never sold or
+// activated for anyone else. Fully independent tables — nothing here is
+// read or written by adBotLogic.ts, matchBotLogic.ts, ton-service.ts, or
+// marriageTonService.ts, and vice versa.
+// ===================================================================
+model JobsUser {
+  id            String    @id // Telegram User ID
+  botId         String // only ever one JOBS_BOT instance, per owner policy — same field convention as User/MatchUser regardless
+  phoneNumber   String?
+  phoneVerified Boolean   @default(false)
+  pendingAction Json?
+  lastActiveAt  DateTime  @default(now())
+  isBanned      Boolean   @default(false)
+  mutedUntil    DateTime?
+  created_at    DateTime  @default(now())
+
+  // JOBS_BOT's own isolated financial ledger — same reasoning as
+  // MatchUser.balance: reusing AD_BOT's or MARRIAGE_BOT's tables would
+  // mix money across bots. See JobsTransaction.
+  balance Float   @default(0.0)
+  tonMemo String? @unique
+
+  profile        JobsProfile?
+  jobPostings    JobPosting[]
+  storeListings  StoreListing[]
+  wantedListings StoreWantedListing[]
+  transactions   JobsTransaction[]
+}
+
+// Base identity + exactly ONE exclusive role (owner spec, 2026-09-05): a
+// user is either a job seeker, a job poster, a tradesperson/service
+// provider, or a trader — never two at once. Which role is chosen
+// determines which of the role-specific fields below actually apply; the
+// others stay null. Published immediately on save — no admin
+// pre-approval gate (unlike MatchProfile), this is a classifieds-style
+// board, not a moderated matchmaking pool.
+model JobsProfile {
+  id     String   @id @default(uuid())
+  userId String   @unique
+  user   JobsUser @relation(fields: [userId], references: [id])
+
+  name          String
+  age           Int
+  country       String
+  governorate   String
+  city          String
+  contactMethod String // TELEGRAM | WHATSAPP
+  contactValue  String
+
+  roleType String // SEEKER | EMPLOYER | TRADER | PROFESSIONAL
+
+  // [SEEKER] — what they're skilled in / looking for. Drives the
+  // "🔀 مطابقة تلقائية" convenience search (auto-runs a job-posting
+  // keyword search using this field) — the seeker is never listed or
+  // browsable themselves, only a search input.
+  seekerProfession String?
+
+  // [EMPLOYER] — their business/shop identity, shown on every job
+  // posting they publish (see JobPosting, a separate 1:many table since
+  // one employer can post multiple vacancies over time).
+  employerBusinessName String?
+
+  // [PROFESSIONAL] — the single service they offer. category is chosen
+  // from a fixed picklist (see PROFESSIONAL_CATEGORIES in
+  // jobsBotLogic.ts) with a free-text "أخرى" fallback stored here
+  // directly — matching uses simple loose text matching either way, so
+  // the picklist is a UX convenience, not a hard taxonomy constraint.
+  professionalCategory    String?
+  professionalDescription String?
+
+  isPaused   Boolean  @default(false) // user-toggled pause, same purpose as MatchProfile.isHidden
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+// One job vacancy posting (owner spec, 2026-09-05) — an EMPLOYER can
+// publish several over time. Matched against a SEEKER's search by simple
+// substring/keyword overlap on title + keywords, not a fixed profession
+// taxonomy (job titles are far too varied for that — see the owner's own
+// reasoning for preferring this over rigid field matching).
+model JobPosting {
+  id            String   @id @default(uuid())
+  posterId      String
+  poster        JobsUser @relation(fields: [posterId], references: [id])
+  title         String
+  keywords      String // free-text, space/comma separated — searched together with title
+  workersCount  Int      @default(1)
+  governorate   String
+  city          String
+  description   String?
+  contactMethod String // TELEGRAM | WHATSAPP
+  contactValue  String
+  status        String   @default("OPEN") // OPEN | FILLED
+  created_at    DateTime @default(now())
+}
+
+model StoreListing {
+  id             String   @id @default(uuid())
+  sellerId       String
+  seller         JobsUser @relation(fields: [sellerId], references: [id])
+  title          String
+  description    String?
+  price          Float
+  photoFileIds   Json? // array of Telegram file_id strings
+  deliveryMethod String // PICKUP_MANUAL | SHIPPING — shipping is purely informational; sender/receiver arrange the actual courier between themselves, the bot never integrates real shipping logistics
+  paymentMethod  String // MANUAL | ESCROW
+  status         String   @default("ACTIVE") // ACTIVE | SOLD | REMOVED
+  created_at     DateTime @default(now())
+}
+
+model StoreWantedListing {
+  id          String   @id @default(uuid())
+  buyerId     String
+  buyer       JobsUser @relation(fields: [buyerId], references: [id])
+  title       String
+  description String?
+  budget      Float?
+  status      String   @default("ACTIVE") // ACTIVE | FULFILLED | REMOVED
+  created_at  DateTime @default(now())
+}
+
+// One actual purchase against a StoreListing. Escrow flow (owner spec,
+// 2026-09-05): ESCROWED means the buyer's JobsUser.balance was already
+// debited and the amount is "in limbo" — it lives only in this row's
+// `amount` field until release, never added to the seller's balance
+// early. DELIVERED_CONFIRMED → RELEASED credits the seller. A daily cron
+// auto-releases any order stuck at ESCROWED for 7+ days with no linked
+// OPEN JobsDispute (see /api/cron/jobs-escrow-release).
+model StoreOrder {
+  id             String    @id @default(uuid())
+  buyerId        String
+  sellerId       String
+  listingId      String
+  amount         Float
+  deliveryMethod String // PICKUP_MANUAL | SHIPPING
+  status         String    @default("AWAITING_PAYMENT") // AWAITING_PAYMENT | ESCROWED | RELEASED | REFUNDED | CANCELLED
+  escrowedAt     DateTime?
+  releasedAt     DateTime?
+  created_at     DateTime  @default(now())
+}
+
+// Dispute on an ESCROWED StoreOrder (owner spec, 2026-09-05) — each side
+// submits their statement/evidence independently (the bot never shows
+// one party what the other already wrote, so neither can tailor a
+// response to counter the other in real time). Resolution happens
+// manually by the SUPER_ADMIN from the inbox's "نزاعات الطلبات" queue,
+// and directly triggers the real balance movement.
+model JobsDispute {
+  id                     String    @id @default(uuid())
+  orderId                String    @unique
+  openedBy               String // userId of whichever side opened it
+  buyerStatement         String?
+  buyerEvidencePhotoIds  Json?
+  sellerStatement        String?
+  sellerEvidencePhotoIds Json?
+  status                 String    @default("OPEN") // OPEN | BOTH_SUBMITTED | RESOLVED
+  resolution             String? // RELEASED_TO_SELLER | REFUNDED_TO_BUYER
+  created_at             DateTime  @default(now())
+  resolvedAt             DateTime?
+}
+
+// A report with required text reason + optional evidence photo (owner
+// spec, 2026-09-05) — an upgrade over MARRIAGE_BOT's one-tap report,
+// since a marketplace/services context benefits far more from actual
+// evidence than a matchmaking context does.
+model JobsReport {
+  id                  String   @id @default(uuid())
+  reporterId          String
+  targetId            String
+  targetKind          String   @default("profile") // profile | posting | listing — which kind of row targetId points at
+  reason              String
+  evidencePhotoFileId String?
+  status              String   @default("PENDING") // PENDING | REVIEWED
+  created_at          DateTime @default(now())
+}
+
+model JobsBlock {
+  id         String   @id @default(uuid())
+  blockerId  String
+  blockedId  String
+  created_at DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+model JobsAdminMessage {
+  id         String   @id @default(uuid())
+  senderId   String
+  text       String
+  status     String   @default("PENDING") // PENDING | READ
+  created_at DateTime @default(now())
+}
+
+// JOBS_BOT's own financial ledger — fully isolated from AD_BOT's and
+// MARRIAGE_BOT's tables, same reasoning as MatchTransaction (see its own
+// comment). Real-world custody (one NOWPayments account, one shared TON
+// hot wallet) is still pooled across all three bots — only the internal
+// bookkeeping never crosses over.
+model JobsTransaction {
+  id         String   @id @default(uuid())
+  userId     String
+  user       JobsUser @relation(fields: [userId], references: [id])
+  amount     Float
+  currency   String
+  type       String // DEPOSIT | ESCROW_HOLD | ESCROW_RELEASE | ESCROW_REFUND | WITHDRAWAL
+  status     String   @default("COMPLETED")
+  txHash     String?
+  created_at DateTime @default(now())
+
+  @@unique([txHash])
+}
+
+// ===================================================================
 // Website tools (Grok O1) — isolated models, no overlap with AD_BOT /
 // MARRIAGE_BOT. URL shortener first (G3), digital business card (G4).
 // ===================================================================

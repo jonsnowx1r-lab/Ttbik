@@ -1,0 +1,1376 @@
+import { Bot as TelegramBot, Keyboard, InlineKeyboard } from "grammy";
+import { prisma } from "@/lib/prisma";
+import type { Bot as BotRow, JobsProfile, JobsUser } from "@prisma/client";
+
+/**
+ * JOBS_BOT template (owner spec, 2026-09-05) — فرص عمل + متجر بيع وشراء.
+ * A second owner-only private bot, same governance model as MARRIAGE_BOT
+ * (see prisma/schema.prisma's JobsUser/JobsProfile/... block). Fully
+ * independent from AD_BOT and MARRIAGE_BOT — no shared tables, no shared
+ * logic files, no shared payment routes.
+ *
+ * Core structure:
+ * - One profile per user with an EXCLUSIVE role chosen once: SEEKER,
+ *   EMPLOYER, TRADER, or PROFESSIONAL. Never two roles at once.
+ * - Two independent top-level sections, open to browse regardless of role:
+ *   💼 العمل (نشر — role-gated to EMPLOYER/PROFESSIONAL; بحث — open to all)
+ *   🛒 المتجر (بيع/شراء — role-gated to TRADER; بحث — open to all)
+ * - Search results: a 5-item summary list + "عرض التفاصيل" per row opens
+ *   a full detail card (Telegram has no native multi-card-with-buttons
+ *   layout — sendMediaGroup can't carry inline keyboards).
+ * - Store purchases can go through escrow: buyer's balance is charged and
+ *   held on the StoreOrder row itself (never early-credited to the
+ *   seller) until the buyer confirms receipt, a dispute is resolved, or
+ *   7 days pass with no dispute (auto-release cron).
+ */
+
+const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_TELEGRAM_ID || "";
+const RESULTS_PAGE_SIZE = 5;
+const ESCROW_AUTO_RELEASE_DAYS = 7;
+
+const PROFESSIONAL_CATEGORIES = [
+  "نجار", "حداد", "سباك", "كهربائي", "دهان", "ميكانيكي سيارات",
+  "فني تكييف وتبريد", "بنّاء", "مبلّط", "فني جبس وديكور", "حداد ألمنيوم",
+  "فني زجاج", "سائق", "بستاني", "عامل نظافة", "خياط",
+  "حلاق ومصفف شعر", "فني كمبيوتر وموبايل", "مصوّر", "طباخ وشيف",
+  "عامل مطعم", "حارس أمن", "عامل مستودع وتحميل",
+];
+const OTHER_CATEGORY_LABEL = "✏️ مهنة أخرى (اكتبها)";
+
+function shortId(id: string): string {
+  return id.slice(-6);
+}
+function relativeTime(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "قبل لحظات";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `قبل ${minutes} دقيقة`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `قبل ${hours} ساعة`;
+  const days = Math.floor(hours / 24);
+  return `قبل ${days} يوم`;
+}
+function roleLabel(role: string): string {
+  if (role === "SEEKER") return "👷 باحث عن عمل";
+  if (role === "EMPLOYER") return "🏢 معلن وظيفة";
+  if (role === "PROFESSIONAL") return "🔨 مهني مقدّم خدمة";
+  return "🛒 تاجر";
+}
+
+// ---------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------
+type RoleType = "SEEKER" | "EMPLOYER" | "TRADER" | "PROFESSIONAL";
+type ProfileStep =
+  | "name" | "age" | "country" | "governorate" | "city" | "contactMethod" | "contactValue"
+  | "role" | "seekerProfession" | "employerBusinessName"
+  | "professionalCategory" | "professionalCategoryOther" | "professionalDescription";
+
+type ProfileDraft = {
+  name?: string;
+  age?: number;
+  country?: string;
+  governorate?: string;
+  city?: string;
+  contactMethod?: "TELEGRAM" | "WHATSAPP";
+  contactValue?: string;
+  roleType?: RoleType;
+  seekerProfession?: string;
+  employerBusinessName?: string;
+  professionalCategory?: string;
+  professionalDescription?: string;
+};
+
+type JobPostingStep = "title" | "keywords" | "workersCount" | "governorate" | "city" | "description" | "contactMethod" | "contactValue";
+type JobPostingDraft = {
+  title?: string;
+  keywords?: string;
+  workersCount?: number;
+  governorate?: string;
+  city?: string;
+  description?: string;
+  contactMethod?: "TELEGRAM" | "WHATSAPP";
+  contactValue?: string;
+};
+
+type StoreListingStep = "title" | "description" | "price" | "photos" | "deliveryMethod" | "paymentMethod";
+type StoreListingDraft = {
+  title?: string;
+  description?: string;
+  price?: number;
+  photoFileIds: string[];
+  deliveryMethod?: "PICKUP_MANUAL" | "SHIPPING";
+  paymentMethod?: "MANUAL" | "ESCROW";
+};
+
+type StoreWantedStep = "title" | "description" | "budget";
+type StoreWantedDraft = { title?: string; description?: string; budget?: number | null };
+
+type PendingAction =
+  | { mode: "profile_wizard"; step: ProfileStep; data: ProfileDraft }
+  | { mode: "job_posting_wizard"; step: JobPostingStep; data: JobPostingDraft }
+  | { mode: "job_search_keyword"; fallbackKeyword?: string }
+  | { mode: "professional_search_category" }
+  | { mode: "professional_search_category_custom" }
+  | { mode: "professional_search_region"; category: string }
+  | { mode: "store_listing_wizard"; step: StoreListingStep; data: StoreListingDraft }
+  | { mode: "store_wanted_wizard"; step: StoreWantedStep; data: StoreWantedDraft }
+  | { mode: "report_reason"; targetId: string; targetKind: "profile" | "posting" | "listing" }
+  | { mode: "report_evidence"; targetId: string; targetKind: "profile" | "posting" | "listing"; reason: string }
+  | { mode: "dispute_statement"; orderId: string; side: "buyer" | "seller" }
+  | { mode: "dispute_evidence"; orderId: string; side: "buyer" | "seller"; statement: string }
+  | { mode: "contact_admin_compose" }
+  | { mode: "admin_broadcast" }
+  | { mode: "admin_lookup" }
+  | { mode: "admin_unban" }
+  | { mode: "admin_channel" }
+  | { mode: "admin_reply"; targetUserId: string; messageId: string };
+
+// ---------------------------------------------------------------------
+// Menus
+// ---------------------------------------------------------------------
+function backLabel(): string {
+  return "◀️ رجوع";
+}
+function isBack(text: string): boolean {
+  return text === backLabel();
+}
+const SKIP_LABEL = "⏭ تخطّي";
+function isSkip(text: string): boolean {
+  return text === SKIP_LABEL;
+}
+function skipMenu(): Keyboard {
+  return new Keyboard().text(SKIP_LABEL).row().text(backLabel()).resized();
+}
+function plainBackMenu(): Keyboard {
+  return new Keyboard().text(backLabel()).resized();
+}
+function contactMethodMenu(): Keyboard {
+  return new Keyboard().text("✈️ تلجرام").text("💬 واتساب").row().text(backLabel()).resized();
+}
+
+function mainMenu(): Keyboard {
+  return new Keyboard()
+    .text("💼 قسم العمل").text("🛒 قسم المتجر").row()
+    .text("👤 ملفي الشخصي").text("💰 رصيدي وإيداع").row()
+    .text("ℹ️ معلومات")
+    .resized();
+}
+function workMenu(): Keyboard {
+  return new Keyboard().text("📢 نشر").text("🔍 بحث").row().text(backLabel()).resized();
+}
+function storeMenu(): Keyboard {
+  return new Keyboard().text("💰 بيع").text("🛍 شراء").row().text("🔍 تصفح المنتجات").row().text(backLabel()).resized();
+}
+function workSearchMenu(): Keyboard {
+  return new Keyboard().text("🔍 عن مهني").text("🔍 عن وظيفة شاغرة").row().text(backLabel()).resized();
+}
+function roleMenu(): Keyboard {
+  return new Keyboard()
+    .text("👷 باحث عن عمل").text("🏢 معلن وظيفة").row()
+    .text("🔨 مهني مقدّم خدمة").text("🛒 تاجر")
+    .resized();
+}
+function professionalCategoryMenu(): Keyboard {
+  const kb = new Keyboard();
+  for (let i = 0; i < PROFESSIONAL_CATEGORIES.length; i += 2) {
+    kb.text(PROFESSIONAL_CATEGORIES[i]);
+    if (PROFESSIONAL_CATEGORIES[i + 1]) kb.text(PROFESSIONAL_CATEGORIES[i + 1]);
+    kb.row();
+  }
+  kb.text(OTHER_CATEGORY_LABEL).row().text(backLabel());
+  return kb.resized();
+}
+function adminMenu(): Keyboard {
+  return new Keyboard()
+    .text("📊 الإحصائيات").text("📥 رسائل واردة").row()
+    .text("💰 المحفظة").text("🔎 بحث عن مستخدم").row()
+    .text("📡 قناة الاشتراك الإجباري").text("🔓 رفع حظر/كتم")
+    .resized();
+}
+
+// ---------------------------------------------------------------------
+// Core helpers
+// ---------------------------------------------------------------------
+async function ensureJobsUser(botId: string, tgUserId: string) {
+  const existing = await prisma.jobsUser.findUnique({ where: { id: tgUserId } });
+  if (existing) return existing;
+  return prisma.jobsUser.create({ data: { id: tgUserId, botId } });
+}
+async function setPending(userId: string, action: PendingAction | null) {
+  await prisma.jobsUser.update({ where: { id: userId }, data: { pendingAction: action as any } });
+}
+async function isBlocked(aId: string, bId: string): Promise<boolean> {
+  const b = await prisma.jobsBlock.findFirst({ where: { OR: [{ blockerId: aId, blockedId: bId }, { blockerId: bId, blockedId: aId }] } });
+  return !!b;
+}
+function depositLink(userId: string): string {
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+  return `${base}/pay/jobs?uid=${userId}`;
+}
+async function chargeJobsUser(userId: string, amount: number, type: string): Promise<{ ok: boolean; balance: number }> {
+  const user = await prisma.jobsUser.findUnique({ where: { id: userId } });
+  const balance = Number(user?.balance || 0);
+  if (balance < amount) return { ok: false, balance };
+  await prisma.$transaction([
+    prisma.jobsUser.update({ where: { id: userId }, data: { balance: { decrement: amount } } }),
+    prisma.jobsTransaction.create({ data: { userId, amount, currency: "internal", type, status: "COMPLETED" } }),
+  ]);
+  return { ok: true, balance: balance - amount };
+}
+async function creditJobsUser(userId: string, amount: number, type: string) {
+  await prisma.$transaction([
+    prisma.jobsUser.update({ where: { id: userId }, data: { balance: { increment: amount } } }),
+    prisma.jobsTransaction.create({ data: { userId, amount, currency: "internal", type, status: "COMPLETED" } }),
+  ]);
+}
+
+// ---------------------------------------------------------------------
+// Profile wizard (base fields + exclusive role branch)
+// ---------------------------------------------------------------------
+const BASE_STEP_ORDER: ProfileStep[] = ["name", "age", "country", "governorate", "city", "contactMethod", "contactValue", "role"];
+
+function nextProfileStep(step: ProfileStep, data: ProfileDraft): ProfileStep | null {
+  const baseIdx = BASE_STEP_ORDER.indexOf(step);
+  if (baseIdx >= 0 && baseIdx + 1 < BASE_STEP_ORDER.length) return BASE_STEP_ORDER[baseIdx + 1];
+  if (step === "role") {
+    if (data.roleType === "SEEKER") return "seekerProfession";
+    if (data.roleType === "EMPLOYER") return "employerBusinessName";
+    if (data.roleType === "PROFESSIONAL") return "professionalCategory";
+    return null; // TRADER — no extra fields
+  }
+  if (step === "seekerProfession") return null;
+  if (step === "employerBusinessName") return null;
+  if (step === "professionalCategory") return null; // handled specially — see consumeProfileStep
+  if (step === "professionalCategoryOther") return "professionalDescription";
+  if (step === "professionalDescription") return null;
+  return null;
+}
+
+async function askProfileStep(bot: TelegramBot, chatId: number, step: ProfileStep) {
+  switch (step) {
+    case "name":
+      await bot.api.sendMessage(chatId, "👋 لنبدأ بإنشاء ملفك الشخصي.\n\nما اسمك؟");
+      break;
+    case "age":
+      await bot.api.sendMessage(chatId, "كم عمرك؟");
+      break;
+    case "country":
+      await bot.api.sendMessage(chatId, "ما هي دولتك؟");
+      break;
+    case "governorate":
+      await bot.api.sendMessage(chatId, "ما هي محافظتك؟");
+      break;
+    case "city":
+      await bot.api.sendMessage(chatId, "ما هي مدينتك؟");
+      break;
+    case "contactMethod":
+      await bot.api.sendMessage(chatId, "ما وسيلة التواصل التي تفضلها؟", { reply_markup: contactMethodMenu() });
+      break;
+    case "contactValue":
+      await bot.api.sendMessage(chatId, "أرسل معرّفك في تلجرام (@username) أو رقم هاتفك على واتساب:", { reply_markup: plainBackMenu() });
+      break;
+    case "role":
+      await bot.api.sendMessage(
+        chatId,
+        "اختر نوع ملفك الشخصي — هذا الاختيار حصري ولا يمكن الجمع بين أكثر من نوع:\n\n" +
+          "👷 باحث عن عمل — تبحث عن وظيفة\n🏢 معلن وظيفة — تحتاج عمالاً\n🔨 مهني مقدّم خدمة — تعرض حرفتك\n🛒 تاجر — تريد بيع/شراء في المتجر",
+        { reply_markup: roleMenu() }
+      );
+      break;
+    case "seekerProfession":
+      await bot.api.sendMessage(chatId, "ما المهنة التي تتقنها أو تبحث عنها؟ (تُستخدم للمطابقة مع الوظائف الشاغرة)");
+      break;
+    case "employerBusinessName":
+      await bot.api.sendMessage(chatId, "ما اسم عملك/شركتك/متجرك؟");
+      break;
+    case "professionalCategory":
+      await bot.api.sendMessage(chatId, "اختر الحرفة/الخدمة التي تقدّمها:", { reply_markup: professionalCategoryMenu() });
+      break;
+    case "professionalCategoryOther":
+      await bot.api.sendMessage(chatId, "اكتب اسم مهنتك:", { reply_markup: plainBackMenu() });
+      break;
+    case "professionalDescription":
+      await bot.api.sendMessage(chatId, "اكتب وصفاً موجزاً لأعمالك وخبرتك (يظهر لمن يبحث عنك):", { reply_markup: plainBackMenu() });
+      break;
+  }
+}
+
+async function startProfileWizard(bot: TelegramBot, chatId: number, userId: string) {
+  await setPending(userId, { mode: "profile_wizard", step: "name", data: {} });
+  await askProfileStep(bot, chatId, "name");
+}
+
+async function saveProfile(bot: TelegramBot, chatId: number, userId: string, data: ProfileDraft) {
+  await prisma.jobsProfile.upsert({
+    where: { userId },
+    update: {
+      name: data.name!, age: data.age!, country: data.country!, governorate: data.governorate!, city: data.city!,
+      contactMethod: data.contactMethod!, contactValue: data.contactValue!, roleType: data.roleType!,
+      seekerProfession: data.seekerProfession ?? null,
+      employerBusinessName: data.employerBusinessName ?? null,
+      professionalCategory: data.professionalCategory ?? null,
+      professionalDescription: data.professionalDescription ?? null,
+    },
+    create: {
+      userId, name: data.name!, age: data.age!, country: data.country!, governorate: data.governorate!, city: data.city!,
+      contactMethod: data.contactMethod!, contactValue: data.contactValue!, roleType: data.roleType!,
+      seekerProfession: data.seekerProfession ?? null,
+      employerBusinessName: data.employerBusinessName ?? null,
+      professionalCategory: data.professionalCategory ?? null,
+      professionalDescription: data.professionalDescription ?? null,
+    },
+  });
+  await setPending(userId, null);
+  await bot.api.sendMessage(chatId, "✅ تم حفظ ملفك الشخصي. اختر من القائمة:", { reply_markup: mainMenu() });
+}
+
+async function consumeProfileStep(bot: TelegramBot, chatId: number, userId: string, pending: Extract<PendingAction, { mode: "profile_wizard" }>, text: string) {
+  const { step, data } = pending;
+  if (step === "name") {
+    if (!text) return;
+    data.name = text;
+  } else if (step === "age") {
+    const age = Number(text.replace(/[^0-9]/g, ""));
+    if (!Number.isFinite(age) || age < 16 || age > 90) {
+      await bot.api.sendMessage(chatId, "أرسل عمراً صحيحاً (16 فأكثر).");
+      return;
+    }
+    data.age = age;
+  } else if (step === "country") {
+    if (!text) return;
+    data.country = text;
+  } else if (step === "governorate") {
+    if (!text) return;
+    data.governorate = text;
+  } else if (step === "city") {
+    if (!text) return;
+    data.city = text;
+  } else if (step === "contactMethod") {
+    if (text !== "✈️ تلجرام" && text !== "💬 واتساب") {
+      await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: contactMethodMenu() });
+      return;
+    }
+    data.contactMethod = text === "✈️ تلجرام" ? "TELEGRAM" : "WHATSAPP";
+  } else if (step === "contactValue") {
+    if (!text) return;
+    data.contactValue = data.contactMethod === "WHATSAPP" ? text.replace(/[^0-9+]/g, "") : text.replace(/^@/, "");
+  } else if (step === "role") {
+    const map: Record<string, RoleType> = {
+      "👷 باحث عن عمل": "SEEKER",
+      "🏢 معلن وظيفة": "EMPLOYER",
+      "🔨 مهني مقدّم خدمة": "PROFESSIONAL",
+      "🛒 تاجر": "TRADER",
+    };
+    if (!map[text]) {
+      await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: roleMenu() });
+      return;
+    }
+    data.roleType = map[text];
+  } else if (step === "seekerProfession") {
+    if (!text) return;
+    data.seekerProfession = text;
+  } else if (step === "employerBusinessName") {
+    if (!text) return;
+    data.employerBusinessName = text;
+  } else if (step === "professionalCategory") {
+    if (text === OTHER_CATEGORY_LABEL) {
+      await setPending(userId, { mode: "profile_wizard", step: "professionalCategoryOther", data });
+      await askProfileStep(bot, chatId, "professionalCategoryOther");
+      return;
+    }
+    if (!PROFESSIONAL_CATEGORIES.includes(text)) {
+      await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: professionalCategoryMenu() });
+      return;
+    }
+    data.professionalCategory = text;
+    await setPending(userId, { mode: "profile_wizard", step: "professionalDescription", data });
+    await askProfileStep(bot, chatId, "professionalDescription");
+    return;
+  } else if (step === "professionalCategoryOther") {
+    if (!text) return;
+    data.professionalCategory = text;
+  } else if (step === "professionalDescription") {
+    data.professionalDescription = text;
+  }
+
+  const next = nextProfileStep(step, data);
+  if (!next) {
+    await saveProfile(bot, chatId, userId, data);
+    return;
+  }
+  await setPending(userId, { mode: "profile_wizard", step: next, data });
+  await askProfileStep(bot, chatId, next);
+}
+
+// ---------------------------------------------------------------------
+// Work section — نشر (post)
+// ---------------------------------------------------------------------
+const JOB_POSTING_STEP_ORDER: JobPostingStep[] = ["title", "keywords", "workersCount", "governorate", "city", "description", "contactMethod", "contactValue"];
+function nextJobPostingStep(step: JobPostingStep): JobPostingStep | null {
+  const i = JOB_POSTING_STEP_ORDER.indexOf(step);
+  return i >= 0 && i + 1 < JOB_POSTING_STEP_ORDER.length ? JOB_POSTING_STEP_ORDER[i + 1] : null;
+}
+async function askJobPostingStep(bot: TelegramBot, chatId: number, step: JobPostingStep) {
+  switch (step) {
+    case "title":
+      await bot.api.sendMessage(chatId, "📢 نشر وظيفة شاغرة\n\nما مسمى الوظيفة؟", { reply_markup: plainBackMenu() });
+      break;
+    case "keywords":
+      await bot.api.sendMessage(chatId, "أضف كلمات مفتاحية تصف الوظيفة (مفصولة بفواصل) — تُستخدم في مطابقة بحث الباحثين عن عمل:");
+      break;
+    case "workersCount":
+      await bot.api.sendMessage(chatId, "كم عدد العمال المطلوبين؟", { reply_markup: skipMenu() });
+      break;
+    case "governorate":
+      await bot.api.sendMessage(chatId, "في أي محافظة؟");
+      break;
+    case "city":
+      await bot.api.sendMessage(chatId, "في أي مدينة؟");
+      break;
+    case "description":
+      await bot.api.sendMessage(chatId, "وصف إضافي للوظيفة (اختياري):", { reply_markup: skipMenu() });
+      break;
+    case "contactMethod":
+      await bot.api.sendMessage(chatId, "وسيلة التواصل لهذه الوظيفة:", { reply_markup: contactMethodMenu() });
+      break;
+    case "contactValue":
+      await bot.api.sendMessage(chatId, "أرسل معرّف تلجرام أو رقم واتساب للتواصل بخصوص هذه الوظيفة:", { reply_markup: plainBackMenu() });
+      break;
+  }
+}
+async function startJobPostingWizard(bot: TelegramBot, chatId: number, userId: string) {
+  await setPending(userId, { mode: "job_posting_wizard", step: "title", data: {} });
+  await askJobPostingStep(bot, chatId, "title");
+}
+async function consumeJobPostingStep(bot: TelegramBot, chatId: number, userId: string, pending: Extract<PendingAction, { mode: "job_posting_wizard" }>, text: string) {
+  const { step, data } = pending;
+  if (step === "title") {
+    if (!text) return;
+    data.title = text;
+  } else if (step === "keywords") {
+    if (!text) return;
+    data.keywords = text;
+  } else if (step === "workersCount") {
+    data.workersCount = isSkip(text) ? 1 : Math.max(1, Number(text.replace(/[^0-9]/g, "")) || 1);
+  } else if (step === "governorate") {
+    if (!text) return;
+    data.governorate = text;
+  } else if (step === "city") {
+    if (!text) return;
+    data.city = text;
+  } else if (step === "description") {
+    data.description = isSkip(text) ? undefined : text;
+  } else if (step === "contactMethod") {
+    if (text !== "✈️ تلجرام" && text !== "💬 واتساب") {
+      await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: contactMethodMenu() });
+      return;
+    }
+    data.contactMethod = text === "✈️ تلجرام" ? "TELEGRAM" : "WHATSAPP";
+  } else if (step === "contactValue") {
+    if (!text) return;
+    data.contactValue = data.contactMethod === "WHATSAPP" ? text.replace(/[^0-9+]/g, "") : text.replace(/^@/, "");
+  }
+
+  const next = nextJobPostingStep(step);
+  if (!next) {
+    await prisma.jobPosting.create({
+      data: {
+        posterId: userId, title: data.title!, keywords: data.keywords!, workersCount: data.workersCount ?? 1,
+        governorate: data.governorate!, city: data.city!, description: data.description ?? null,
+        contactMethod: data.contactMethod!, contactValue: data.contactValue!,
+      },
+    });
+    await setPending(userId, null);
+    await bot.api.sendMessage(chatId, "✅ تم نشر الوظيفة الشاغرة.", { reply_markup: mainMenu() });
+    return;
+  }
+  await setPending(userId, { mode: "job_posting_wizard", step: next, data });
+  await askJobPostingStep(bot, chatId, next);
+}
+
+// ---------------------------------------------------------------------
+// Search results — shared list+detail pattern
+// ---------------------------------------------------------------------
+async function sendJobPostingResults(bot: TelegramBot, chatId: number, keyword: string, offset: number) {
+  const postings = await prisma.jobPosting.findMany({
+    where: { status: "OPEN", OR: [{ title: { contains: keyword, mode: "insensitive" } }, { keywords: { contains: keyword, mode: "insensitive" } }] },
+    orderBy: { created_at: "desc" },
+    skip: offset,
+    take: RESULTS_PAGE_SIZE,
+  });
+  if (postings.length === 0) {
+    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد وظائف مطابقة حالياً." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: mainMenu() });
+    return;
+  }
+  const kb = new InlineKeyboard();
+  const lines = postings.map((p, i) => {
+    kb.text(`👁 عرض ${i + 1}`, `jview|posting|${p.id}`).row();
+    return `${i + 1}. 🏢 ${p.title} — ${p.city} — عدد المطلوب: ${p.workersCount}`;
+  });
+  if (postings.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|posting|${encodeURIComponent(keyword)}|${offset + RESULTS_PAGE_SIZE}`);
+  await bot.api.sendMessage(chatId, `🔍 نتائج البحث عن "${keyword}":\n\n${lines.join("\n")}`, { reply_markup: kb });
+}
+
+async function sendProfessionalResults(bot: TelegramBot, chatId: number, category: string, region: string, offset: number) {
+  const pros = await prisma.jobsProfile.findMany({
+    where: {
+      roleType: "PROFESSIONAL", isPaused: false,
+      professionalCategory: { contains: category, mode: "insensitive" },
+      OR: region ? [{ city: { contains: region, mode: "insensitive" } }, { governorate: { contains: region, mode: "insensitive" } }] : undefined,
+    },
+    orderBy: { created_at: "desc" },
+    skip: offset,
+    take: RESULTS_PAGE_SIZE,
+  });
+  if (pros.length === 0) {
+    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا يوجد مهنيون مطابقون حالياً." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: mainMenu() });
+    return;
+  }
+  const kb = new InlineKeyboard();
+  const lines = pros.map((p, i) => {
+    kb.text(`👁 عرض ${i + 1}`, `jview|profile|${p.userId}`).row();
+    return `${i + 1}. 🔨 ${p.professionalCategory} — ${p.city}`;
+  });
+  if (pros.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|professional|${encodeURIComponent(category)}|${encodeURIComponent(region)}|${offset + RESULTS_PAGE_SIZE}`);
+  await bot.api.sendMessage(chatId, `🔍 نتائج البحث عن مهني "${category}":\n\n${lines.join("\n")}`, { reply_markup: kb });
+}
+
+async function sendStoreResults(bot: TelegramBot, chatId: number, offset: number) {
+  const listings = await prisma.storeListing.findMany({ where: { status: "ACTIVE" }, orderBy: { created_at: "desc" }, skip: offset, take: RESULTS_PAGE_SIZE });
+  if (listings.length === 0) {
+    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد منتجات معروضة حالياً." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: mainMenu() });
+    return;
+  }
+  const kb = new InlineKeyboard();
+  const lines = listings.map((l, i) => {
+    kb.text(`👁 عرض ${i + 1}`, `jview|listing|${l.id}`).row();
+    return `${i + 1}. 🛒 ${l.title} — $${l.price.toFixed(2)}`;
+  });
+  if (listings.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|listing||${offset + RESULTS_PAGE_SIZE}`);
+  await bot.api.sendMessage(chatId, `🛒 منتجات معروضة:\n\n${lines.join("\n")}`, { reply_markup: kb });
+}
+
+async function sendJobPostingCard(bot: TelegramBot, chatId: number, id: string) {
+  const p = await prisma.jobPosting.findUnique({ where: { id } });
+  if (!p) return;
+  const poster = await prisma.jobsProfile.findUnique({ where: { userId: p.posterId } });
+  const contactUrl = p.contactMethod === "TELEGRAM" ? `https://t.me/${p.contactValue.replace(/^@/, "")}` : `https://wa.me/${p.contactValue.replace(/[^0-9]/g, "")}`;
+  const text =
+    `${roleLabel("EMPLOYER")}${poster ? ` — ${poster.employerBusinessName || poster.name}` : ""}\n\n` +
+    `📢 ${p.title}\n📍 ${p.governorate}، ${p.city}\n👥 عدد المطلوب: ${p.workersCount}\n` +
+    (p.description ? `📝 ${p.description}\n` : "") + `🏷 ${p.keywords}\n${relativeTime(p.created_at)}`;
+  const kb = new InlineKeyboard()
+    .url("💬 تواصل", contactUrl).row()
+    .text("🚩 إبلاغ", `jreport|posting|${p.id}`).text("⛔ حظر", `jblock|${p.posterId}`);
+  await bot.api.sendMessage(chatId, text, { reply_markup: kb });
+}
+
+async function sendProfessionalCard(bot: TelegramBot, chatId: number, userId: string) {
+  const p = await prisma.jobsProfile.findUnique({ where: { userId } });
+  if (!p) return;
+  const contactUrl = p.contactMethod === "TELEGRAM" ? `https://t.me/${p.contactValue.replace(/^@/, "")}` : `https://wa.me/${p.contactValue.replace(/[^0-9]/g, "")}`;
+  const text = `${roleLabel("PROFESSIONAL")}\n\n👤 ${p.name}\n🔨 ${p.professionalCategory}\n📍 ${p.governorate}، ${p.city}\n` + (p.professionalDescription ? `📝 ${p.professionalDescription}\n` : "");
+  const kb = new InlineKeyboard()
+    .url("💬 تواصل", contactUrl).row()
+    .text("🚩 إبلاغ", `jreport|profile|${p.userId}`).text("⛔ حظر", `jblock|${p.userId}`);
+  await bot.api.sendMessage(chatId, text, { reply_markup: kb });
+}
+
+async function sendStoreListingCard(bot: TelegramBot, chatId: number, id: string) {
+  const l = await prisma.storeListing.findUnique({ where: { id } });
+  if (!l) return;
+  const seller = await prisma.jobsProfile.findUnique({ where: { userId: l.sellerId } });
+  const text =
+    `🛒 حساب: تاجر${seller ? ` — ${seller.name}` : ""}\n\n` +
+    `📦 ${l.title}\n💵 $${l.price.toFixed(2)}\n` +
+    (l.description ? `📝 ${l.description}\n` : "") +
+    `🚚 التسليم: ${l.deliveryMethod === "SHIPPING" ? "شحن (يُتفق عليه بين الطرفين)" : "يدوي (تسليم مباشر)"}\n` +
+    `💳 الدفع: ${l.paymentMethod === "ESCROW" ? "عبر البوت (حجز حتى الاستلام)" : "يدوي"}`;
+  const kb = new InlineKeyboard().text("🛍 شراء", `jbuy|${l.id}`).row().text("🚩 إبلاغ", `jreport|listing|${l.id}`).text("⛔ حظر", `jblock|${l.sellerId}`);
+  const photoIds = Array.isArray(l.photoFileIds) ? (l.photoFileIds as unknown as string[]) : [];
+  if (photoIds.length > 0) {
+    await bot.api.sendPhoto(chatId, photoIds[0], { caption: text, reply_markup: kb });
+    for (const extra of photoIds.slice(1)) await bot.api.sendPhoto(chatId, extra).catch(() => null);
+  } else {
+    await bot.api.sendMessage(chatId, text, { reply_markup: kb });
+  }
+}
+
+// ---------------------------------------------------------------------
+// Store section — بيع / شراء
+// ---------------------------------------------------------------------
+const STORE_LISTING_STEP_ORDER: StoreListingStep[] = ["title", "description", "price", "photos", "deliveryMethod", "paymentMethod"];
+function nextStoreListingStep(step: StoreListingStep): StoreListingStep | null {
+  const i = STORE_LISTING_STEP_ORDER.indexOf(step);
+  return i >= 0 && i + 1 < STORE_LISTING_STEP_ORDER.length ? STORE_LISTING_STEP_ORDER[i + 1] : null;
+}
+function deliveryMenu(): Keyboard {
+  return new Keyboard().text("🚚 تسليم يدوي").text("📦 شحن").row().text(backLabel()).resized();
+}
+function paymentMenu(): Keyboard {
+  return new Keyboard().text("💳 عبر البوت (حجز آمن)").text("🤝 يدوي").row().text(backLabel()).resized();
+}
+async function askStoreListingStep(bot: TelegramBot, chatId: number, step: StoreListingStep) {
+  switch (step) {
+    case "title":
+      await bot.api.sendMessage(chatId, "💰 عرض منتج للبيع\n\nما عنوان المنتج؟", { reply_markup: plainBackMenu() });
+      break;
+    case "description":
+      await bot.api.sendMessage(chatId, "صف المنتج (الحالة، التفاصيل...):", { reply_markup: skipMenu() });
+      break;
+    case "price":
+      await bot.api.sendMessage(chatId, "ما السعر بالدولار؟");
+      break;
+    case "photos":
+      await bot.api.sendMessage(chatId, "أرسل صور المنتج (حتى 5 صور)، ثم اضغط «تم» عند الانتهاء:", {
+        reply_markup: new Keyboard().text("✅ تم").row().text(backLabel()).resized(),
+      });
+      break;
+    case "deliveryMethod":
+      await bot.api.sendMessage(chatId, "طريقة التسليم؟ (الشحن يُتفق عليه بينك وبين المشتري خارج البوت)", { reply_markup: deliveryMenu() });
+      break;
+    case "paymentMethod":
+      await bot.api.sendMessage(
+        chatId,
+        "طريقة الدفع؟ «عبر البوت» يحجز المبلغ حتى يؤكد المشتري الاستلام، «يدوي» يكتفي البوت بربطكما لتتفقا مباشرة.",
+        { reply_markup: paymentMenu() }
+      );
+      break;
+  }
+}
+async function startStoreListingWizard(bot: TelegramBot, chatId: number, userId: string) {
+  await setPending(userId, { mode: "store_listing_wizard", step: "title", data: { photoFileIds: [] } });
+  await askStoreListingStep(bot, chatId, "title");
+}
+async function consumeStoreListingStep(bot: TelegramBot, chatId: number, userId: string, pending: Extract<PendingAction, { mode: "store_listing_wizard" }>, text: string) {
+  const { step, data } = pending;
+  if (step === "title") {
+    if (!text) return;
+    data.title = text;
+  } else if (step === "description") {
+    data.description = isSkip(text) ? undefined : text;
+  } else if (step === "price") {
+    const price = Number(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(price) || price <= 0) {
+      await bot.api.sendMessage(chatId, "أرسل سعراً صحيحاً.");
+      return;
+    }
+    data.price = price;
+  } else if (step === "photos") {
+    if (text !== "✅ تم") {
+      await bot.api.sendMessage(chatId, "أرسل صورة، أو اضغط «✅ تم».");
+      return;
+    }
+  } else if (step === "deliveryMethod") {
+    if (text !== "🚚 تسليم يدوي" && text !== "📦 شحن") {
+      await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: deliveryMenu() });
+      return;
+    }
+    data.deliveryMethod = text === "📦 شحن" ? "SHIPPING" : "PICKUP_MANUAL";
+  } else if (step === "paymentMethod") {
+    if (text !== "💳 عبر البوت (حجز آمن)" && text !== "🤝 يدوي") {
+      await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: paymentMenu() });
+      return;
+    }
+    data.paymentMethod = text === "🤝 يدوي" ? "MANUAL" : "ESCROW";
+  }
+
+  const next = nextStoreListingStep(step);
+  if (!next) {
+    await prisma.storeListing.create({
+      data: {
+        sellerId: userId, title: data.title!, description: data.description ?? null, price: data.price!,
+        photoFileIds: data.photoFileIds as any, deliveryMethod: data.deliveryMethod!, paymentMethod: data.paymentMethod!,
+      },
+    });
+    await setPending(userId, null);
+    await bot.api.sendMessage(chatId, "✅ تم نشر المنتج في المتجر.", { reply_markup: mainMenu() });
+    return;
+  }
+  await setPending(userId, { mode: "store_listing_wizard", step: next, data });
+  await askStoreListingStep(bot, chatId, next);
+}
+
+const STORE_WANTED_STEP_ORDER: StoreWantedStep[] = ["title", "description", "budget"];
+function nextStoreWantedStep(step: StoreWantedStep): StoreWantedStep | null {
+  const i = STORE_WANTED_STEP_ORDER.indexOf(step);
+  return i >= 0 && i + 1 < STORE_WANTED_STEP_ORDER.length ? STORE_WANTED_STEP_ORDER[i + 1] : null;
+}
+async function askStoreWantedStep(bot: TelegramBot, chatId: number, step: StoreWantedStep) {
+  switch (step) {
+    case "title":
+      await bot.api.sendMessage(chatId, "🛍 أريد شراء\n\nماذا تريد أن تشتري؟", { reply_markup: plainBackMenu() });
+      break;
+    case "description":
+      await bot.api.sendMessage(chatId, "أضف تفاصيل (اختياري):", { reply_markup: skipMenu() });
+      break;
+    case "budget":
+      await bot.api.sendMessage(chatId, "ميزانيتك التقريبية بالدولار (اختياري):", { reply_markup: skipMenu() });
+      break;
+  }
+}
+async function startStoreWantedWizard(bot: TelegramBot, chatId: number, userId: string) {
+  await setPending(userId, { mode: "store_wanted_wizard", step: "title", data: {} });
+  await askStoreWantedStep(bot, chatId, "title");
+}
+async function consumeStoreWantedStep(bot: TelegramBot, chatId: number, userId: string, pending: Extract<PendingAction, { mode: "store_wanted_wizard" }>, text: string) {
+  const { step, data } = pending;
+  if (step === "title") {
+    if (!text) return;
+    data.title = text;
+  } else if (step === "description") {
+    data.description = isSkip(text) ? undefined : text;
+  } else if (step === "budget") {
+    data.budget = isSkip(text) ? null : Number(text.replace(/[^0-9.]/g, "")) || null;
+  }
+  const next = nextStoreWantedStep(step);
+  if (!next) {
+    await prisma.storeWantedListing.create({ data: { buyerId: userId, title: data.title!, description: data.description ?? null, budget: data.budget ?? null } });
+    await setPending(userId, null);
+    await bot.api.sendMessage(chatId, "✅ تم نشر طلبك في المتجر.", { reply_markup: mainMenu() });
+    return;
+  }
+  await setPending(userId, { mode: "store_wanted_wizard", step: next, data });
+  await askStoreWantedStep(bot, chatId, next);
+}
+
+// ---------------------------------------------------------------------
+// StoreOrder — purchase + escrow
+// ---------------------------------------------------------------------
+async function startPurchase(bot: TelegramBot, chatId: number, buyerId: string, listingId: string) {
+  const listing = await prisma.storeListing.findUnique({ where: { id: listingId } });
+  if (!listing || listing.status !== "ACTIVE") {
+    await bot.api.sendMessage(chatId, "لم يعد هذا المنتج متاحاً.");
+    return;
+  }
+  if (listing.sellerId === buyerId) {
+    await bot.api.sendMessage(chatId, "لا يمكنك شراء منتجك الخاص.");
+    return;
+  }
+  if (listing.paymentMethod === "MANUAL") {
+    const seller = await prisma.jobsProfile.findUnique({ where: { userId: listing.sellerId } });
+    const contactUrl = seller ? (seller.contactMethod === "TELEGRAM" ? `https://t.me/${seller.contactValue.replace(/^@/, "")}` : `https://wa.me/${seller.contactValue.replace(/[^0-9]/g, "")}`) : null;
+    await bot.api.sendMessage(
+      chatId,
+      `🤝 هذا المنتج دفعه يدوي — تواصل مع البائع مباشرة للاتفاق على السعر والتسليم.${contactUrl ? `\n${contactUrl}` : ""}`,
+      { reply_markup: mainMenu() }
+    );
+    return;
+  }
+  const charge = await chargeJobsUser(buyerId, listing.price, "ESCROW_HOLD");
+  if (!charge.ok) {
+    await bot.api.sendMessage(
+      chatId,
+      `❌ رصيدك $${charge.balance.toFixed(2)} لا يكفي (السعر $${listing.price.toFixed(2)}). أودِع من هنا:\n${depositLink(buyerId)}`,
+      { reply_markup: mainMenu() }
+    );
+    return;
+  }
+  const order = await prisma.storeOrder.create({
+    data: { buyerId, sellerId: listing.sellerId, listingId: listing.id, amount: listing.price, deliveryMethod: listing.deliveryMethod, status: "ESCROWED", escrowedAt: new Date() },
+  });
+  await bot.api.sendMessage(
+    chatId,
+    `✅ تم حجز $${listing.price.toFixed(2)} من رصيدك لهذا الطلب. تواصل مع البائع لترتيب التسليم، واضغط الزر أدناه فقط بعد استلام المنتج فعلياً.`,
+    { reply_markup: new InlineKeyboard().text("✅ لقد استلمت المنتج", `jreceived|${order.id}`).row().text("⚠️ فتح نزاع", `jdispute|${order.id}`) }
+  );
+  await bot.api
+    .sendMessage(Number(listing.sellerId), `🛒 طلب جديد على "${listing.title}" — تم حجز المبلغ. رتّب التسليم مع المشتري، وسيتحرر المبلغ عند تأكيده الاستلام.`)
+    .catch(() => null);
+}
+
+async function confirmReceived(bot: TelegramBot, chatId: number, buyerId: string, orderId: string) {
+  const order = await prisma.storeOrder.findUnique({ where: { id: orderId } });
+  if (!order || order.buyerId !== buyerId || order.status !== "ESCROWED") {
+    await bot.api.sendMessage(chatId, "هذا الطلب غير متاح لهذا الإجراء.");
+    return;
+  }
+  await creditJobsUser(order.sellerId, order.amount, "ESCROW_RELEASE");
+  await prisma.storeOrder.update({ where: { id: order.id }, data: { status: "RELEASED", releasedAt: new Date() } });
+  await bot.api.sendMessage(chatId, "✅ تم تأكيد الاستلام وتحويل المبلغ للبائع.", { reply_markup: mainMenu() });
+  await bot.api.sendMessage(Number(order.sellerId), `✅ أكّد المشتري استلام طلبه — تم إضافة $${order.amount.toFixed(2)} لرصيدك.`).catch(() => null);
+}
+
+// ---------------------------------------------------------------------
+// Dispute center — each side submits evidence separately
+// ---------------------------------------------------------------------
+async function openDispute(bot: TelegramBot, chatId: number, userId: string, orderId: string) {
+  const order = await prisma.storeOrder.findUnique({ where: { id: orderId } });
+  if (!order || order.status !== "ESCROWED" || (order.buyerId !== userId && order.sellerId !== userId)) {
+    await bot.api.sendMessage(chatId, "لا يمكن فتح نزاع على هذا الطلب.");
+    return;
+  }
+  await prisma.jobsDispute.upsert({
+    where: { orderId },
+    update: {},
+    create: { orderId, openedBy: userId },
+  });
+  const side = order.buyerId === userId ? "buyer" : "seller";
+  await setPending(userId, { mode: "dispute_statement", orderId, side });
+  const otherSide = side === "buyer" ? order.sellerId : order.buyerId;
+  await bot.api.sendMessage(chatId, "⚠️ تم فتح نزاع. اكتب إفادتك بخصوص هذا الطلب (ما حدث بالتفصيل):", { reply_markup: plainBackMenu() });
+  await bot.api
+    .sendMessage(Number(otherSide), `⚠️ فتح الطرف الآخر نزاعاً على طلب بقيمة $${order.amount.toFixed(2)}. سيُطلب منك إفادتك أيضاً.`, {
+      reply_markup: new InlineKeyboard().text("📝 تقديم إفادتي", `jdisputestate|${orderId}`),
+    })
+    .catch(() => null);
+}
+async function submitDisputeStatement(bot: TelegramBot, chatId: number, userId: string, orderId: string, side: "buyer" | "seller", statement: string) {
+  await setPending(userId, { mode: "dispute_evidence", orderId, side, statement });
+  await bot.api.sendMessage(chatId, "أرسل صورة كدليل إن وُجدت، أو اضغط «تخطّي»:", { reply_markup: skipMenu() });
+}
+async function submitDisputeEvidence(bot: TelegramBot, chatId: number, userId: string, orderId: string, side: "buyer" | "seller", statement: string, photoFileId: string | null) {
+  const field = side === "buyer" ? { buyerStatement: statement, buyerEvidencePhotoIds: photoFileId ? [photoFileId] : [] } : { sellerStatement: statement, sellerEvidencePhotoIds: photoFileId ? [photoFileId] : [] };
+  const dispute = await prisma.jobsDispute.update({ where: { orderId }, data: field as any });
+  const bothIn = !!dispute.buyerStatement && !!dispute.sellerStatement;
+  if (bothIn) await prisma.jobsDispute.update({ where: { orderId }, data: { status: "BOTH_SUBMITTED" } });
+  await setPending(userId, null);
+  await bot.api.sendMessage(chatId, "✅ تم إرسال إفادتك للإدارة.", { reply_markup: mainMenu() });
+  if (bothIn && SUPER_ADMIN_ID) {
+    const order = await prisma.storeOrder.findUnique({ where: { id: orderId } });
+    await bot.api
+      .sendMessage(
+        Number(SUPER_ADMIN_ID),
+        `⚠️ نزاع جاهز للمراجعة — طلب #${shortId(orderId)} بقيمة $${order?.amount.toFixed(2)}\n\n` +
+          `🟦 المشتري (#${shortId(order?.buyerId || "")}):\n${dispute.buyerStatement}\n\n` +
+          `🟥 البائع (#${shortId(order?.sellerId || "")}):\n${dispute.sellerStatement}`,
+        { reply_markup: new InlineKeyboard().text("✅ الإفراج للبائع", `jresolve|${orderId}|seller`).text("↩️ استرداد للمشتري", `jresolve|${orderId}|buyer`) }
+      )
+      .catch(() => null);
+  }
+}
+async function resolveDispute(bot: TelegramBot, chatId: number, orderId: string, winner: "buyer" | "seller") {
+  const order = await prisma.storeOrder.findUnique({ where: { id: orderId } });
+  if (!order || order.status !== "ESCROWED") {
+    await bot.api.sendMessage(chatId, "هذا الطلب لم يعد بحالة نزاع نشطة.");
+    return;
+  }
+  if (winner === "seller") {
+    await creditJobsUser(order.sellerId, order.amount, "ESCROW_RELEASE");
+  } else {
+    await creditJobsUser(order.buyerId, order.amount, "ESCROW_REFUND");
+  }
+  await prisma.storeOrder.update({ where: { id: order.id }, data: { status: winner === "seller" ? "RELEASED" : "REFUNDED", releasedAt: new Date() } });
+  await prisma.jobsDispute.update({ where: { orderId }, data: { status: "RESOLVED", resolution: winner === "seller" ? "RELEASED_TO_SELLER" : "REFUNDED_TO_BUYER", resolvedAt: new Date() } });
+  await bot.api.sendMessage(chatId, "✅ تم تنفيذ القرار.");
+  await bot.api.sendMessage(Number(order.buyerId), winner === "buyer" ? "✅ تم استرداد مبلغ طلبك بعد مراجعة النزاع." : "❌ تقرر تحويل مبلغ الطلب للبائع بعد مراجعة النزاع.").catch(() => null);
+  await bot.api.sendMessage(Number(order.sellerId), winner === "seller" ? "✅ تم تحويل مبلغ الطلب لرصيدك بعد مراجعة النزاع." : "❌ تقرر استرداد مبلغ الطلب للمشتري بعد مراجعة النزاع.").catch(() => null);
+}
+
+// ---------------------------------------------------------------------
+// Admin panel
+// ---------------------------------------------------------------------
+async function sendAdminStats(bot: TelegramBot, chatId: number) {
+  const notAdmin = { id: { not: SUPER_ADMIN_ID || "__none__" } };
+  const [totalUsers, seekers, employers, professionals, traders, openPostings, activeListings, escrowedOrders, openDisputes, pendingReports, pendingInbox] = await Promise.all([
+    prisma.jobsUser.count({ where: notAdmin }),
+    prisma.jobsProfile.count({ where: { roleType: "SEEKER" } }),
+    prisma.jobsProfile.count({ where: { roleType: "EMPLOYER" } }),
+    prisma.jobsProfile.count({ where: { roleType: "PROFESSIONAL" } }),
+    prisma.jobsProfile.count({ where: { roleType: "TRADER" } }),
+    prisma.jobPosting.count({ where: { status: "OPEN" } }),
+    prisma.storeListing.count({ where: { status: "ACTIVE" } }),
+    prisma.storeOrder.count({ where: { status: "ESCROWED" } }),
+    prisma.jobsDispute.count({ where: { status: { not: "RESOLVED" } } }),
+    prisma.jobsReport.count({ where: { status: "PENDING" } }),
+    prisma.jobsAdminMessage.count({ where: { status: "PENDING" } }),
+  ]);
+  const text =
+    `📊 إحصائيات بوت فرص العمل\n\n👥 إجمالي المستخدمين: ${totalUsers}\n` +
+    `👷 باحثون: ${seekers} | 🏢 معلنو وظائف: ${employers} | 🔨 مهنيون: ${professionals} | 🛒 تجار: ${traders}\n\n` +
+    `📢 وظائف شاغرة مفتوحة: ${openPostings}\n🛒 منتجات معروضة: ${activeListings}\n💰 طلبات محجوزة حالياً: ${escrowedOrders}\n\n` +
+    `⚠️ نزاعات مفتوحة: ${openDisputes}\n🚩 بلاغات معلّقة: ${pendingReports}\n📥 رسائل واردة غير مقروءة: ${pendingInbox}`;
+  await bot.api.sendMessage(chatId, text);
+}
+async function sendAdminInboxSummary(bot: TelegramBot, chatId: number) {
+  const [messages, reports, disputes] = await Promise.all([
+    prisma.jobsAdminMessage.findMany({ where: { status: "PENDING" }, orderBy: { created_at: "asc" }, take: 10 }),
+    prisma.jobsReport.findMany({ where: { status: "PENDING" }, orderBy: { created_at: "asc" }, take: 10 }),
+    prisma.jobsDispute.findMany({ where: { status: "BOTH_SUBMITTED" }, orderBy: { created_at: "asc" }, take: 10 }),
+  ]);
+  if (messages.length === 0 && reports.length === 0 && disputes.length === 0) {
+    await bot.api.sendMessage(chatId, "✅ لا توجد رسائل أو بلاغات أو نزاعات بانتظار المراجعة.");
+    return;
+  }
+  for (const m of messages) {
+    await bot.api
+      .sendMessage(chatId, `📩 رسالة من #${shortId(m.senderId)}\n${relativeTime(m.created_at)}\n\n${m.text}`, {
+        reply_markup: new InlineKeyboard().text("↩️ رد", `jadmin_reply|${m.senderId}|${m.id}`).text("✅ مقروءة", `jadmin_read|${m.id}`),
+      })
+      .catch(() => null);
+  }
+  for (const r of reports) {
+    const text = `🚩 بلاغ من #${shortId(r.reporterId)} ضد #${shortId(r.targetId)} (${r.targetKind === "listing" ? "منتج" : r.targetKind === "posting" ? "وظيفة" : "ملف"})\n${relativeTime(r.created_at)}\n\nالسبب: ${r.reason}`;
+    const kb = new InlineKeyboard().text("🙈 تجاهل", `jrep_ignore|${r.id}`).text("⛔ حظر المُبلَّغ عنه", `jrep_ban|${r.id}|${r.targetId}`);
+    if (r.evidencePhotoFileId) await bot.api.sendPhoto(chatId, r.evidencePhotoFileId, { caption: text, reply_markup: kb }).catch(() => null);
+    else await bot.api.sendMessage(chatId, text, { reply_markup: kb }).catch(() => null);
+  }
+  for (const d of disputes) {
+    const order = await prisma.storeOrder.findUnique({ where: { id: d.orderId } });
+    await bot.api
+      .sendMessage(
+        chatId,
+        `⚠️ نزاع طلب #${shortId(d.orderId)} — $${order?.amount.toFixed(2)}\n\n🟦 المشتري:\n${d.buyerStatement}\n\n🟥 البائع:\n${d.sellerStatement}`,
+        { reply_markup: new InlineKeyboard().text("✅ الإفراج للبائع", `jresolve|${d.orderId}|seller`).text("↩️ استرداد للمشتري", `jresolve|${d.orderId}|buyer`) }
+      )
+      .catch(() => null);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Main dispatcher
+// ---------------------------------------------------------------------
+export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, update: any) {
+  if (update.callback_query) {
+    await handleJobsCallback(bot, botRow, update.callback_query);
+    return;
+  }
+  const msg = update.message;
+  if (!msg?.from || !msg.chat) return;
+  const chatId = msg.chat.id;
+  const tgUserId = String(msg.from.id);
+
+  if (SUPER_ADMIN_ID && tgUserId === SUPER_ADMIN_ID) {
+    const text = String(msg.text || "").trim();
+    const adminUser = await ensureJobsUser(botRow.id, tgUserId);
+    const adminPending = adminUser.pendingAction as PendingAction | null;
+    if (text === "/start") {
+      await setPending(tgUserId, null);
+      await bot.api.sendMessage(chatId, "🛠 لوحة تحكم بوت فرص العمل.", { reply_markup: adminMenu() });
+      return;
+    }
+    if (adminPending?.mode === "admin_broadcast" && text) {
+      await setPending(tgUserId, null);
+      const recipients = await prisma.jobsUser.findMany({ where: { id: { not: SUPER_ADMIN_ID } }, select: { id: true } });
+      let sent = 0;
+      for (const r of recipients) {
+        try {
+          await bot.api.sendMessage(Number(r.id), `📢 إعلان من الإدارة:\n\n${text}`);
+          sent++;
+        } catch {}
+      }
+      await bot.api.sendMessage(chatId, `✅ تم الإرسال إلى ${sent} من أصل ${recipients.length}.`);
+      return;
+    }
+    if (adminPending?.mode === "admin_lookup" && text) {
+      await setPending(tgUserId, null);
+      const targetId = text.replace(/[^0-9]/g, "");
+      const profile = await prisma.jobsProfile.findUnique({ where: { userId: targetId } });
+      const user = await prisma.jobsUser.findUnique({ where: { id: targetId } });
+      if (!user) {
+        await bot.api.sendMessage(chatId, "لم يتم العثور على مستخدم بهذا الآيدي.");
+        return;
+      }
+      await bot.api.sendMessage(
+        chatId,
+        `🆔 ${targetId}\n💰 الرصيد: $${user.balance.toFixed(2)}\n🚫 محظور: ${user.isBanned ? "نعم" : "لا"}\n\n` +
+          (profile ? `${roleLabel(profile.roleType)}\nالاسم: ${profile.name}` : "لا يوجد ملف شخصي.")
+      );
+      return;
+    }
+    if (adminPending?.mode === "admin_unban" && text) {
+      await setPending(tgUserId, null);
+      const targetId = text.replace(/[^0-9]/g, "");
+      await prisma.jobsUser.update({ where: { id: targetId }, data: { isBanned: false, mutedUntil: null } }).catch(() => null);
+      await bot.api.sendMessage(chatId, `✅ تم رفع الحظر/الكتم عن ${targetId}.`);
+      return;
+    }
+    if (adminPending?.mode === "admin_channel" && text) {
+      await setPending(tgUserId, null);
+      await prisma.bot.update({ where: { id: botRow.id }, data: { requiredChannel: isSkip(text) ? null : text.replace(/^@/, "") } });
+      await bot.api.sendMessage(chatId, isSkip(text) ? "✅ تم إلغاء اشتراط الاشتراك الإجباري." : `✅ تم تعيين قناة الاشتراك الإجباري: @${text.replace(/^@/, "")}`);
+      return;
+    }
+    if (adminPending?.mode === "admin_reply" && text) {
+      await setPending(tgUserId, null);
+      await bot.api.sendMessage(Number(adminPending.targetUserId), `↩️ رد من الإدارة:\n\n${text}`).catch(() => null);
+      await prisma.jobsAdminMessage.update({ where: { id: adminPending.messageId }, data: { status: "READ" } }).catch(() => null);
+      await bot.api.sendMessage(chatId, "✅ تم إرسال ردك.");
+      return;
+    }
+    if (text === "📊 الإحصائيات") return sendAdminStats(bot, chatId);
+    if (text === "📥 رسائل واردة") return sendAdminInboxSummary(bot, chatId);
+    if (text === "💰 المحفظة") {
+      const [totalBalance, totalEscrowed] = await Promise.all([
+        prisma.jobsUser.aggregate({ _sum: { balance: true } }),
+        prisma.storeOrder.aggregate({ where: { status: "ESCROWED" }, _sum: { amount: true } }),
+      ]);
+      await bot.api.sendMessage(chatId, `💰 محفظة البوت\n\nإجمالي أرصدة المستخدمين: $${(totalBalance._sum.balance || 0).toFixed(2)}\nمبالغ محجوزة حالياً (Escrow): $${(totalEscrowed._sum.amount || 0).toFixed(2)}`);
+      return;
+    }
+    if (text === "🔎 بحث عن مستخدم") {
+      await setPending(tgUserId, { mode: "admin_lookup" });
+      await bot.api.sendMessage(chatId, "أرسل آيدي المستخدم:");
+      return;
+    }
+    if (text === "📡 قناة الاشتراك الإجباري") {
+      await setPending(tgUserId, { mode: "admin_channel" });
+      await bot.api.sendMessage(chatId, "أرسل معرّف القناة (@channel)، أو اضغط تخطّي لإلغاء الاشتراط الحالي:", { reply_markup: skipMenu() });
+      return;
+    }
+    if (text === "🔓 رفع حظر/كتم") {
+      await setPending(tgUserId, { mode: "admin_unban" });
+      await bot.api.sendMessage(chatId, "أرسل آيدي المستخدم:");
+      return;
+    }
+    return;
+  }
+
+  const user = await ensureJobsUser(botRow.id, tgUserId);
+  await prisma.jobsUser.update({ where: { id: tgUserId }, data: { lastActiveAt: new Date() } }).catch(() => null);
+
+  if (user.isBanned) {
+    await bot.api.sendMessage(chatId, "🚫 تم حظرك من استخدام هذا البوت من قِبل الإدارة.");
+    return;
+  }
+  if (user.mutedUntil && user.mutedUntil > new Date()) {
+    await bot.api.sendMessage(chatId, "🔇 أنت مكتوم مؤقتاً. حاول لاحقاً.");
+    return;
+  }
+
+  // Mandatory subscription channel gate (owner spec, 2026-09-05) — same
+  // pattern as AD_BOT's requiredChannel.
+  if (botRow.requiredChannel) {
+    try {
+      const member = await bot.api.getChatMember(`@${botRow.requiredChannel}`, Number(tgUserId));
+      if (!["creator", "administrator", "member"].includes(member.status)) {
+        await bot.api.sendMessage(chatId, `📡 يجب الاشتراك في القناة أولاً: @${botRow.requiredChannel}`);
+        return;
+      }
+    } catch {
+      // channel/bot admin misconfigured — fail open rather than lock everyone out
+    }
+  }
+
+  if (msg.contact) {
+    if (String(msg.contact.user_id) === tgUserId) {
+      await prisma.jobsUser.update({ where: { id: tgUserId }, data: { phoneNumber: msg.contact.phone_number, phoneVerified: true } });
+      await bot.api.sendMessage(chatId, "✅ تم التحقق من رقم هاتفك.", { reply_markup: mainMenu() });
+    } else {
+      await bot.api.sendMessage(chatId, "⚠️ يجب مشاركة رقم هاتفك أنت.");
+    }
+    return;
+  }
+  if (!user.phoneVerified) {
+    await bot.api.sendMessage(chatId, "📱 التحقق من رقم الهاتف خطوة إلزامية قبل استخدام هذا البوت.", {
+      reply_markup: new Keyboard().requestContact("📱 مشاركة رقم الهاتف").resized(),
+    });
+    return;
+  }
+
+  const pending = user.pendingAction as PendingAction | null;
+
+  if (msg.photo && pending?.mode === "store_listing_wizard" && pending.step === "photos") {
+    if (pending.data.photoFileIds.length < 5) pending.data.photoFileIds.push(msg.photo[msg.photo.length - 1].file_id);
+    await setPending(tgUserId, pending);
+    await bot.api.sendMessage(chatId, `📷 ${pending.data.photoFileIds.length}/5 — أرسل صورة أخرى أو اضغط «✅ تم».`);
+    return;
+  }
+  if (msg.photo && pending?.mode === "report_evidence") {
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    await prisma.jobsReport.create({ data: { reporterId: tgUserId, targetId: pending.targetId, targetKind: pending.targetKind, reason: pending.reason, evidencePhotoFileId: fileId } });
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "🚩 تم إرسال بلاغك.", { reply_markup: mainMenu() });
+    return;
+  }
+  if (msg.photo && pending?.mode === "dispute_evidence") {
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    await submitDisputeEvidence(bot, chatId, tgUserId, pending.orderId, pending.side, pending.statement, fileId);
+    return;
+  }
+
+  const text = String(msg.text || "").trim();
+  if (!text) return;
+
+  if (isBack(text)) {
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "🏠 القائمة الرئيسية:", { reply_markup: mainMenu() });
+    return;
+  }
+  if (text === "/start") {
+    await setPending(tgUserId, null);
+    const profile = await prisma.jobsProfile.findUnique({ where: { userId: tgUserId } });
+    if (!profile) {
+      await startProfileWizard(bot, chatId, tgUserId);
+    } else {
+      await bot.api.sendMessage(chatId, `أهلاً بك مجدداً، ${profile.name} 👋`, { reply_markup: mainMenu() });
+    }
+    return;
+  }
+
+  // ---- Pending wizards ----
+  if (pending?.mode === "profile_wizard") return consumeProfileStep(bot, chatId, tgUserId, pending, text);
+  if (pending?.mode === "job_posting_wizard") return consumeJobPostingStep(bot, chatId, tgUserId, pending, text);
+  if (pending?.mode === "store_listing_wizard") return consumeStoreListingStep(bot, chatId, tgUserId, pending, text);
+  if (pending?.mode === "store_wanted_wizard") return consumeStoreWantedStep(bot, chatId, tgUserId, pending, text);
+  if (pending?.mode === "job_search_keyword") {
+    const keyword = isSkip(text) && pending.fallbackKeyword ? pending.fallbackKeyword : text;
+    await setPending(tgUserId, null);
+    return sendJobPostingResults(bot, chatId, keyword, 0);
+  }
+  if (pending?.mode === "professional_search_category") {
+    if (text === OTHER_CATEGORY_LABEL) {
+      await setPending(tgUserId, { mode: "professional_search_category_custom" });
+      await bot.api.sendMessage(chatId, "اكتب اسم المهنة التي تبحث عنها:", { reply_markup: plainBackMenu() });
+      return;
+    }
+    if (!PROFESSIONAL_CATEGORIES.includes(text)) {
+      await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: professionalCategoryMenu() });
+      return;
+    }
+    await setPending(tgUserId, { mode: "professional_search_region", category: text });
+    await bot.api.sendMessage(chatId, "في أي منطقة (محافظة أو مدينة)؟ أو اضغط تخطّي للبحث في كل المناطق:", { reply_markup: skipMenu() });
+    return;
+  }
+  if (pending?.mode === "professional_search_category_custom") {
+    if (!text) return;
+    await setPending(tgUserId, { mode: "professional_search_region", category: text });
+    await bot.api.sendMessage(chatId, "في أي منطقة (محافظة أو مدينة)؟ أو اضغط تخطّي للبحث في كل المناطق:", { reply_markup: skipMenu() });
+    return;
+  }
+  if (pending?.mode === "professional_search_region") {
+    await setPending(tgUserId, null);
+    return sendProfessionalResults(bot, chatId, pending.category, isSkip(text) ? "" : text, 0);
+  }
+  if (pending?.mode === "report_reason") {
+    await setPending(tgUserId, { mode: "report_evidence", targetId: pending.targetId, targetKind: pending.targetKind, reason: text });
+    await bot.api.sendMessage(chatId, "أرسل صورة كدليل إن وُجدت، أو اضغط «تخطّي»:", { reply_markup: skipMenu() });
+    return;
+  }
+  if (pending?.mode === "report_evidence") {
+    if (isSkip(text)) {
+      await prisma.jobsReport.create({ data: { reporterId: tgUserId, targetId: pending.targetId, targetKind: pending.targetKind, reason: pending.reason } });
+      await setPending(tgUserId, null);
+      await bot.api.sendMessage(chatId, "🚩 تم إرسال بلاغك.", { reply_markup: mainMenu() });
+      return;
+    }
+    await bot.api.sendMessage(chatId, "أرسل صورة، أو اضغط «تخطّي».");
+    return;
+  }
+  if (pending?.mode === "dispute_statement") {
+    if (!text) return;
+    return submitDisputeStatement(bot, chatId, tgUserId, pending.orderId, pending.side, text);
+  }
+  if (pending?.mode === "dispute_evidence") {
+    if (isSkip(text)) return submitDisputeEvidence(bot, chatId, tgUserId, pending.orderId, pending.side, pending.statement, null);
+    await bot.api.sendMessage(chatId, "أرسل صورة، أو اضغط «تخطّي».");
+    return;
+  }
+  if (pending?.mode === "contact_admin_compose") {
+    const saved = await prisma.jobsAdminMessage.create({ data: { senderId: tgUserId, text } });
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "✅ تم إرسال رسالتك للإدارة.", { reply_markup: mainMenu() });
+    if (SUPER_ADMIN_ID) {
+      await bot.api
+        .sendMessage(Number(SUPER_ADMIN_ID), `📩 رسالة جديدة من #${shortId(tgUserId)}:\n\n${text}`, {
+          reply_markup: new InlineKeyboard().text("↩️ رد", `jadmin_reply|${tgUserId}|${saved.id}`),
+        })
+        .catch(() => null);
+    }
+    return;
+  }
+
+  // ---- Main navigation ----
+  const profile = await prisma.jobsProfile.findUnique({ where: { userId: tgUserId } });
+  if (!profile && text !== "ℹ️ معلومات") {
+    await startProfileWizard(bot, chatId, tgUserId);
+    return;
+  }
+
+  if (text === "👤 ملفي الشخصي") {
+    await bot.api.sendMessage(
+      chatId,
+      `${roleLabel(profile!.roleType)}\n\n👤 ${profile!.name}، ${profile!.age}\n🌍 ${profile!.country}، ${profile!.governorate}، ${profile!.city}\n` +
+        (profile!.seekerProfession ? `💼 يبحث عن: ${profile!.seekerProfession}\n` : "") +
+        (profile!.employerBusinessName ? `🏢 ${profile!.employerBusinessName}\n` : "") +
+        (profile!.professionalCategory ? `🔨 ${profile!.professionalCategory}\n` : ""),
+      { reply_markup: mainMenu() }
+    );
+    return;
+  }
+  if (text === "💰 رصيدي وإيداع") {
+    await bot.api.sendMessage(chatId, `💰 رصيدك الحالي: $${user.balance.toFixed(2)}\n\nللإيداع، افتح الرابط:\n${depositLink(tgUserId)}`, { reply_markup: mainMenu() });
+    return;
+  }
+  if (text === "ℹ️ معلومات") {
+    await bot.api.sendMessage(
+      chatId,
+      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اكتب: مراسلة الأدمن",
+      { reply_markup: mainMenu() }
+    );
+    return;
+  }
+  if (text === "مراسلة الأدمن") {
+    await setPending(tgUserId, { mode: "contact_admin_compose" });
+    await bot.api.sendMessage(chatId, "✍️ اكتب رسالتك للإدارة:", { reply_markup: plainBackMenu() });
+    return;
+  }
+
+  if (text === "💼 قسم العمل") {
+    await bot.api.sendMessage(chatId, "💼 قسم العمل:", { reply_markup: workMenu() });
+    return;
+  }
+  if (text === "📢 نشر") {
+    if (profile!.roleType === "EMPLOYER") return startJobPostingWizard(bot, chatId, tgUserId);
+    if (profile!.roleType === "PROFESSIONAL") {
+      await bot.api.sendMessage(chatId, "ملفك كمهني هو إعلانك — يمكنك تعديله من «👤 ملفي الشخصي». لتحديث الوصف أعد إنشاء الملف.", { reply_markup: workMenu() });
+      return;
+    }
+    await bot.api.sendMessage(chatId, "⚠️ النشر متاح فقط لملفات «معلن وظيفة» و«مهني».", { reply_markup: workMenu() });
+    return;
+  }
+  if (text === "🔍 بحث") {
+    await bot.api.sendMessage(chatId, "ماذا تريد أن تبحث عنه؟", { reply_markup: workSearchMenu() });
+    return;
+  }
+  if (text === "🔍 عن مهني") {
+    await setPending(tgUserId, { mode: "professional_search_category" });
+    await bot.api.sendMessage(chatId, "اختر الحرفة المطلوبة:", { reply_markup: professionalCategoryMenu() });
+    return;
+  }
+  if (text === "🔍 عن وظيفة شاغرة") {
+    if (profile!.roleType === "SEEKER" && profile!.seekerProfession) {
+      await setPending(tgUserId, { mode: "job_search_keyword", fallbackKeyword: profile!.seekerProfession });
+      await bot.api.sendMessage(chatId, "اكتب كلمة بحث، أو اضغط «⏭ تخطّي» للبحث التلقائي بمهنتك المسجّلة:", { reply_markup: skipMenu() });
+      return;
+    }
+    await setPending(tgUserId, { mode: "job_search_keyword" });
+    await bot.api.sendMessage(chatId, "اكتب مسمى الوظيفة أو كلمة مفتاحية:", { reply_markup: plainBackMenu() });
+    return;
+  }
+
+  if (text === "🛒 قسم المتجر") {
+    await bot.api.sendMessage(chatId, "🛒 قسم المتجر:", { reply_markup: storeMenu() });
+    return;
+  }
+  if (text === "🔍 تصفح المنتجات") {
+    return sendStoreResults(bot, chatId, 0);
+  }
+  if (text === "💰 بيع") {
+    if (profile!.roleType !== "TRADER") {
+      await bot.api.sendMessage(chatId, "⚠️ البيع متاح فقط لملفات «تاجر».", { reply_markup: storeMenu() });
+      return;
+    }
+    return startStoreListingWizard(bot, chatId, tgUserId);
+  }
+  if (text === "🛍 شراء") {
+    if (profile!.roleType !== "TRADER") {
+      await bot.api.sendMessage(chatId, "⚠️ نشر طلب شراء متاح فقط لملفات «تاجر». يمكنك تصفح المتجر بحرية رغم ذلك.", { reply_markup: storeMenu() });
+      return;
+    }
+    return startStoreWantedWizard(bot, chatId, tgUserId);
+  }
+
+  await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: mainMenu() });
+}
+
+async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
+  const chatId = cq.message?.chat?.id;
+  const tgUserId = String(cq.from.id);
+  const data = String(cq.data || "");
+  if (!chatId) return;
+
+  if (data.startsWith("jadmin_") || data.startsWith("jrep_") || data.startsWith("jresolve|")) {
+    if (!SUPER_ADMIN_ID || tgUserId !== SUPER_ADMIN_ID) {
+      await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+      return;
+    }
+    if (data.startsWith("jadmin_reply|")) {
+      const [, targetUserId, messageId] = data.split("|");
+      await ensureJobsUser(botRow.id, tgUserId);
+      await setPending(tgUserId, { mode: "admin_reply", targetUserId, messageId });
+      await bot.api.sendMessage(chatId, "اكتب ردك:");
+      await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+      return;
+    }
+    if (data.startsWith("jadmin_read|")) {
+      const messageId = data.split("|")[1];
+      await prisma.jobsAdminMessage.update({ where: { id: messageId }, data: { status: "READ" } }).catch(() => null);
+      await bot.api.answerCallbackQuery(cq.id, { text: "✅ تم" }).catch(() => null);
+      return;
+    }
+    if (data.startsWith("jrep_ignore|")) {
+      const reportId = data.split("|")[1];
+      await prisma.jobsReport.update({ where: { id: reportId }, data: { status: "REVIEWED" } }).catch(() => null);
+      await bot.api.answerCallbackQuery(cq.id, { text: "تم التجاهل" }).catch(() => null);
+      return;
+    }
+    if (data.startsWith("jrep_ban|")) {
+      const [, reportId, targetId] = data.split("|");
+      await prisma.jobsUser.update({ where: { id: targetId }, data: { isBanned: true } }).catch(() => null);
+      await prisma.jobsReport.update({ where: { id: reportId }, data: { status: "REVIEWED" } }).catch(() => null);
+      await bot.api.answerCallbackQuery(cq.id, { text: "⛔ تم الحظر" }).catch(() => null);
+      return;
+    }
+    if (data.startsWith("jresolve|")) {
+      const [, orderId, winner] = data.split("|");
+      await resolveDispute(bot, chatId, orderId, winner as "buyer" | "seller");
+      await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+      return;
+    }
+    return;
+  }
+
+  await ensureJobsUser(botRow.id, tgUserId);
+
+  if (data.startsWith("jview|")) {
+    const [, kind, id] = data.split("|");
+    if (kind === "posting") await sendJobPostingCard(bot, chatId, id);
+    else if (kind === "profile") await sendProfessionalCard(bot, chatId, id);
+    else if (kind === "listing") await sendStoreListingCard(bot, chatId, id);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jmore|")) {
+    const parts = data.split("|");
+    if (parts[1] === "posting") await sendJobPostingResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]));
+    else if (parts[1] === "professional") await sendProfessionalResults(bot, chatId, decodeURIComponent(parts[2]), decodeURIComponent(parts[3]), Number(parts[4]));
+    else if (parts[1] === "listing") await sendStoreResults(bot, chatId, Number(parts[3]));
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jbuy|")) {
+    const listingId = data.split("|")[1];
+    await startPurchase(bot, chatId, tgUserId, listingId);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jreceived|")) {
+    const orderId = data.split("|")[1];
+    await confirmReceived(bot, chatId, tgUserId, orderId);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jdispute|")) {
+    const orderId = data.split("|")[1];
+    await openDispute(bot, chatId, tgUserId, orderId);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jdisputestate|")) {
+    const orderId = data.split("|")[1];
+    const order = await prisma.storeOrder.findUnique({ where: { id: orderId } });
+    if (order && (order.buyerId === tgUserId || order.sellerId === tgUserId)) {
+      const side = order.buyerId === tgUserId ? "buyer" : "seller";
+      await setPending(tgUserId, { mode: "dispute_statement", orderId, side });
+      await bot.api.sendMessage(chatId, "اكتب إفادتك بخصوص هذا الطلب:", { reply_markup: plainBackMenu() });
+    }
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jreport|")) {
+    const [, targetKind, targetId] = data.split("|");
+    await setPending(tgUserId, { mode: "report_reason", targetId, targetKind: targetKind as any });
+    await bot.api.sendMessage(chatId, "🚩 اكتب سبب البلاغ:", { reply_markup: plainBackMenu() });
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jblock|")) {
+    const targetId = data.split("|")[1];
+    await prisma.jobsBlock.upsert({ where: { blockerId_blockedId: { blockerId: tgUserId, blockedId: targetId } }, update: {}, create: { blockerId: tgUserId, blockedId: targetId } }).catch(() => null);
+    await bot.api.answerCallbackQuery(cq.id, { text: "⛔ تم الحظر" }).catch(() => null);
+    return;
+  }
+  await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+}

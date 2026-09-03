@@ -3,6 +3,7 @@ import { Bot as TelegramBot } from "grammy";
 import { prisma } from "@/lib/prisma";
 import { handleAdBotUpdate } from "@/lib/adBotLogic";
 import { handleMarriageBotUpdate } from "@/lib/matchBotLogic";
+import { handleJobsBotUpdate } from "@/lib/jobsBotLogic";
 
 // Default Vercel Hobby function timeout is 10s — raised for headroom since
 // MARRIAGE_BOT's random-chat search now does a brief (~3s) animated
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: { botId: stri
         await handleAdBotUpdate(bot, botRow, body);
       } else if (botRow.template === "MARRIAGE_BOT") {
         await handleMarriageBotUpdate(bot, botRow, body);
+      } else if (botRow.template === "JOBS_BOT") {
+        await handleJobsBotUpdate(bot, botRow, body);
       } else {
         // STORE / HOSPITAL: the owner's blueprint only ever specified AD_BOT
         // logic in detail — these templates get a minimal working /start so

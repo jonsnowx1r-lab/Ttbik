@@ -37,13 +37,16 @@ migration file ends with the same `GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLE "X" TO service_role;` line the others do, and always name the
 file explicitly in the completion report — every time, no exceptions.
 
-## Ownership (updated 2026-09-02 after the Prisma+grammy rebuild — supersedes the block below)
+## Ownership (updated 2026-09-05 — JOBS_BOT added, supersedes the block below)
 - Claude owns and is the sole editor of the whole bot engine: `prisma/schema.prisma`
-  (AD_BOT + MARRIAGE_BOT models), `src/lib/adBotLogic.ts`, `src/lib/matchBotLogic.ts`,
-  `src/services/ton-service.ts`, `src/app/api/telegram/[botId]/route.ts`,
-  `src/app/api/bots/deploy/route.ts`, `src/app/bots/page.tsx`, every
-  AD_BOT/MARRIAGE_BOT `prisma/migration_*.sql` — plus site shell, admin, orders,
-  migrations, env/Vercel as before.
+  (AD_BOT + MARRIAGE_BOT + JOBS_BOT models), `src/lib/adBotLogic.ts`,
+  `src/lib/matchBotLogic.ts`, `src/lib/jobsBotLogic.ts`, `src/services/ton-service.ts`,
+  `src/services/marriageTonService.ts`, `src/services/jobsTonService.ts`,
+  `src/app/api/telegram/[botId]/route.ts`, `src/app/api/bots/deploy/route.ts`,
+  `src/app/bots/page.tsx`, every AD_BOT/MARRIAGE_BOT/JOBS_BOT `prisma/migration_*.sql`
+  — plus site shell, admin, orders, migrations, env/Vercel as before. JOBS_BOT is a
+  second owner-only private bot (like MARRIAGE_BOT — see Product rules below):
+  never sold, never activated for anyone but the platform owner.
 - Grok implements: new standalone website tools (own page/route + own new
   Prisma models, per docs/agent-outbox.md task O1), or a brand-new bot
   template that only ADDS a sibling branch to the shared dispatcher files
@@ -89,12 +92,21 @@ file explicitly in the completion report — every time, no exceptions.
   docs/claude-feature-backlog.md. That is strictly an in-bot upsell; it
   does not make the template itself sellable or deployable by anyone but
   the owner.
-- Neither AD_BOT's nor MARRIAGE_BOT's source/build is exposed anywhere for
-  download/copy — keep it that way (unlike the free FAQ/auto-reply bots,
-  which deliberately ship full source). Before adding any admin/debug/
-  export endpoint that touches Bot rows, make sure it can't leak a working
-  AD_BOT/MARRIAGE_BOT token, template code, or webhook secret to anyone
-  but the owner.
+- **JOBS_BOT (owner spec, 2026-09-05) is the same as MARRIAGE_BOT: a
+  private, owner-only bot template, never sold or activated for anyone
+  else.** Job-marketplace + buy/sell store with escrow payments. Gated by
+  `JOBS_BOT_CREATOR_PASSWORD` (separate env var from
+  `MARRIAGE_BOT_CREATOR_PASSWORD`, though the owner may set both to the
+  same value). Fully isolated financial ledger (`JobsUser.balance` +
+  `JobsTransaction`) — never shares a table with AD_BOT's or MARRIAGE_BOT's
+  money, same reasoning as MARRIAGE_BOT's own ledger split (see
+  MatchTransaction's schema comment).
+- Neither AD_BOT's, MARRIAGE_BOT's, nor JOBS_BOT's source/build is exposed
+  anywhere for download/copy — keep it that way (unlike the free
+  FAQ/auto-reply bots, which deliberately ship full source). Before
+  adding any admin/debug/export endpoint that touches Bot rows, make sure
+  it can't leak a working token, template code, or webhook secret to
+  anyone but the owner.
 - Locked-code-for-sale catalog products (order-manager-bot, ad-slot-bot,
   landing-page-generator, workflow-templates, invoice-generator,
   whatsapp-catalog) are permanently deleted, not just deactivated — the

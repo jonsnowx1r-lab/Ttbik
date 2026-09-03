@@ -29,16 +29,22 @@ on this branch:
    this task doesn't replace it.
 
 ### Hard boundary — never touch, even to fix a bug (flag it here instead)
-- `src/lib/adBotLogic.ts`, `src/lib/matchBotLogic.ts`, `src/services/ton-service.ts`
+- `src/lib/adBotLogic.ts`, `src/lib/matchBotLogic.ts`, `src/lib/jobsBotLogic.ts`,
+  `src/services/ton-service.ts`, `src/services/marriageTonService.ts`,
+  `src/services/jobsTonService.ts`
 - `prisma/schema.prisma`: the AD_BOT models (User/Ad/Transaction/BotPurchase/
-  PlatformSettings/TonTransaction/...) and MARRIAGE_BOT models
+  PlatformSettings/TonTransaction/...), MARRIAGE_BOT models
   (MatchUser/MatchProfile/PartnerPreference/MatchLike/MatchBlock/MatchReport/
-  RandomChatQueue/RandomChatSession/AdminMessage)
-- The `AD_BOT` and `MARRIAGE_BOT` branches inside `src/app/api/telegram/[botId]/route.ts`,
-  `src/app/api/bots/deploy/route.ts`, `src/app/bots/page.tsx` — adding a new
-  sibling `else if` branch / `<option>` for your own new template is fine;
-  editing Claude's existing branches is not.
-- Any `prisma/migration_5_ton_wallet.sql` .. `migration_10_marriage_bot_admin_inbox.sql`
+  RandomChatQueue/RandomChatSession/AdminMessage/MatchTransaction/
+  MatchPhotoPermission/MatchProfileVisit), and JOBS_BOT models
+  (JobsUser/JobsProfile/JobPosting/StoreListing/StoreWantedListing/StoreOrder/
+  JobsDispute/JobsReport/JobsBlock/JobsAdminMessage/JobsTransaction)
+- The `AD_BOT`, `MARRIAGE_BOT`, and `JOBS_BOT` branches inside
+  `src/app/api/telegram/[botId]/route.ts`, `src/app/api/bots/deploy/route.ts`,
+  `src/app/bots/page.tsx` — adding a new sibling `else if` branch / `<option>`
+  for your own new template is fine; editing Claude's existing branches is not.
+- Any `prisma/migration_5_ton_wallet.sql` .. `migration_10_marriage_bot_admin_inbox.sql`,
+  or any `prisma/migration_1[3-9]_*`/`migration_2*_jobs_bot_*.sql`
 
 Old `src/lib/botEngine.ts` and the Supabase-JS `hosted_bots`/`bot_members`/
 `bot_wallet_tx`/`bot_ads`/`bot_appointments` system are permanently gone
