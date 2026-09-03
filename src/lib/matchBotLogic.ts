@@ -1,6 +1,6 @@
 import { Bot as TelegramBot, Keyboard, InlineKeyboard } from "grammy";
 import { prisma } from "@/lib/prisma";
-import type { Bot as BotRow, MatchProfile, PartnerPreference } from "@prisma/client";
+import type { Bot as BotRow, MatchProfile, MatchUser, PartnerPreference } from "@prisma/client";
 
 /**
  * MARRIAGE_BOT template (owner spec, 2026-09-02) — a fully independent
@@ -23,13 +23,45 @@ const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_TELEGRAM_ID || "";
 const RANDOM_CHAT_WINDOW_SECONDS = 60;
 const SKIP_COOLDOWN_HOURS = 24;
 const ONLINE_THRESHOLD_MINUTES = 5;
+const CONTACT_REQUEST_THRESHOLD = 15; // messages exchanged before offering the formal-contact-request button
+
+// Duplicated (not imported) from adBotLogic.ts's own BANNED_WORDS list on
+// purpose — MARRIAGE_BOT's logic never imports from or edits AD_BOT's
+// files (owner directive, 2026-09-05), same reasoning as
+// marriageTonService.ts not importing from ton-service.ts. A first-pass
+// net for the obvious cases in random chat; anything past this reaches
+// the existing 🚩 إبلاغ report path instead.
+const MATCH_BANNED_WORDS = [
+  "مخدرات",
+  "قمار",
+  "كازينو",
+  "اباحي",
+  "إباحي",
+  "دعارة",
+  "احتيال",
+  "نصب",
+  "porn",
+  "xxx",
+  "nude",
+  "escort",
+  "casino",
+  "gambling",
+  "drugs",
+  "cocaine",
+  "scam",
+  "phishing",
+];
+function containsMatchBannedWords(text: string): boolean {
+  const lower = text.toLowerCase();
+  return MATCH_BANNED_WORDS.some((w) => lower.includes(w.toLowerCase()));
+}
 
 function shortId(id: string): string {
   return id.slice(-6);
 }
 
 type Gender = "MALE" | "FEMALE";
-type ProfileStep = "gender" | "name" | "age" | "country" | "job" | "education" | "attributes" | "contactMethod" | "contactValue" | "photo";
+type ProfileStep = "gender" | "name" | "age" | "country" | "job" | "education" | "attributes" | "contactMethod" | "contactValue" | "photo" | "voice";
 type PrefStep = "country" | "ageMin" | "ageMax" | "job" | "education" | "attributes";
 type ProfileDraft = {
   gender?: Gender;
@@ -41,6 +73,8 @@ type ProfileDraft = {
   attributes?: string | null;
   contactMethod?: "TELEGRAM" | "WHATSAPP";
   contactValue?: string;
+  photoFileId?: string | null;
+  voiceFileId?: string | null;
 };
 type PrefDraft = {
   country?: string;
@@ -175,7 +209,7 @@ async function isMutuallyBlocked(aId: string, bId: string): Promise<boolean> {
 // ---------------------------------------------------------------------
 // Profile wizard
 // ---------------------------------------------------------------------
-const PROFILE_STEP_ORDER: ProfileStep[] = ["gender", "name", "age", "country", "job", "education", "attributes", "contactMethod", "contactValue", "photo"];
+const PROFILE_STEP_ORDER: ProfileStep[] = ["gender", "name", "age", "country", "job", "education", "attributes", "contactMethod", "contactValue", "photo", "voice"];
 function nextProfileStep(step: ProfileStep): ProfileStep | null {
   const i = PROFILE_STEP_ORDER.indexOf(step);
   return i >= 0 && i + 1 < PROFILE_STEP_ORDER.length ? PROFILE_STEP_ORDER[i + 1] : null;
@@ -212,6 +246,13 @@ async function askProfileStep(bot: TelegramBot, chatId: number, step: ProfileSte
     case "photo":
       await bot.api.sendMessage(chatId, "أرسل صورة شخصية لملفك (اختياري):", { reply_markup: photoStepMenu() });
       break;
+    case "voice":
+      await bot.api.sendMessage(
+        chatId,
+        "🎙 أرسل رسالة صوتية قصيرة (حوالي 15 ثانية) تعرّف فيها بنفسك وبما تبحث عنه — اختياري، ويمنح الطرف الآخر انطباعاً حقيقياً عنك قبل بدء الحديث:",
+        { reply_markup: photoStepMenu() }
+      );
+      break;
   }
 }
 
@@ -220,7 +261,7 @@ async function startProfileWizard(bot: TelegramBot, chatId: number, userId: stri
   await askProfileStep(bot, chatId, "gender");
 }
 
-async function saveProfile(bot: TelegramBot, chatId: number, userId: string, data: ProfileDraft, photoFileId?: string) {
+async function saveProfile(bot: TelegramBot, chatId: number, userId: string, data: ProfileDraft) {
   const shared = {
     gender: data.gender!,
     name: data.name!,
@@ -235,8 +276,8 @@ async function saveProfile(bot: TelegramBot, chatId: number, userId: string, dat
   };
   await prisma.matchProfile.upsert({
     where: { userId },
-    update: { ...shared, ...(photoFileId ? { photoFileId } : {}) },
-    create: { userId, ...shared, photoFileId: photoFileId ?? null },
+    update: { ...shared, ...(data.photoFileId ? { photoFileId: data.photoFileId } : {}), ...(data.voiceFileId ? { voiceFileId: data.voiceFileId } : {}) },
+    create: { userId, ...shared, photoFileId: data.photoFileId ?? null, voiceFileId: data.voiceFileId ?? null },
   });
   await setPending(userId, null);
   await bot.api.sendMessage(
@@ -265,6 +306,13 @@ async function notifyAdminNewProfile(bot: TelegramBot, profile: MatchProfile) {
       await bot.api.sendPhoto(Number(SUPER_ADMIN_ID), profile.photoFileId, { caption: text, reply_markup: kb });
     } else {
       await bot.api.sendMessage(Number(SUPER_ADMIN_ID), text, { reply_markup: kb });
+    }
+    // Admin review is always the one context that sees the real photo
+    // directly (the consent-gating on sendSearchCard is for other members
+    // browsing search results, not for moderation) — same for the voice
+    // intro, so the admin can actually judge it before approving.
+    if (profile.voiceFileId) {
+      await bot.api.sendVoice(Number(SUPER_ADMIN_ID), profile.voiceFileId).catch(() => null);
     }
   } catch {
     // admin unreachable — not fatal, they can still review later once they message the bot
@@ -310,8 +358,10 @@ async function consumeProfileStep(bot: TelegramBot, chatId: number, userId: stri
   } else if (step === "photo") {
     // An actual photo attachment is caught earlier in the main dispatcher
     // before this function ever runs — any text reaching here (the skip
-    // button, or anything else) means "no photo", handled by the
-    // fallthrough to saveProfile below since "photo" is the last step.
+    // button, or anything else) means "no photo".
+  } else if (step === "voice") {
+    // Same pattern as "photo" above — an actual voice message is caught
+    // earlier in the main dispatcher; text reaching here means "no voice intro".
   }
 
   const next = nextProfileStep(step);
@@ -449,11 +499,37 @@ function likeButtonLabel(count: number): string {
   return `❤️ إعجاب (${count})`;
 }
 
-async function sendSearchCard(bot: TelegramBot, chatId: number, targetUserId: string) {
-  const [profile, targetUser, likeCount] = await Promise.all([
+// Seriousness Score (owner spec, 2026-09-05) — a trust signal computed
+// entirely from data that already exists (profile completeness, phone
+// verification, report history). No new user input, nothing a user can
+// directly game by claiming anything — it's the same honest-signal
+// approach as the Verified Badge, just free and automatic. Capped at
+// 100; a 40-point floor for reaching an APPROVED profile at all (the only
+// state this function is ever called for), minus up to 30 for reports.
+function computeSeriousnessScore(profile: MatchProfile, user: MatchUser, reportsReceived: number): number {
+  let score = 40;
+  if (user.phoneVerified) score += 20;
+  if (profile.photoFileId) score += 15;
+  if (profile.job) score += 8;
+  if (profile.education) score += 8;
+  if (profile.attributes) score += 9;
+  score -= Math.min(30, reportsReceived * 10);
+  return Math.max(0, Math.min(100, score));
+}
+
+function seriousnessLabel(score: number): string {
+  if (score >= 80) return `🟢 مؤشر الجدية: مرتفع (${score}%)`;
+  if (score >= 50) return `🟡 مؤشر الجدية: متوسط (${score}%)`;
+  return `🟠 مؤشر الجدية: أساسي (${score}%)`;
+}
+
+async function sendSearchCard(bot: TelegramBot, chatId: number, targetUserId: string, viewerId: string) {
+  const [profile, targetUser, likeCount, reportsReceived, photoPermission] = await Promise.all([
     prisma.matchProfile.findUnique({ where: { userId: targetUserId } }),
     prisma.matchUser.findUnique({ where: { id: targetUserId } }),
     prisma.matchLike.count({ where: { toUserId: targetUserId } }),
+    prisma.matchReport.count({ where: { targetId: targetUserId } }),
+    prisma.matchPhotoPermission.findUnique({ where: { ownerId_viewerId: { ownerId: targetUserId, viewerId } } }),
   ]);
   if (!profile || !targetUser) return false;
 
@@ -464,6 +540,7 @@ async function sendSearchCard(bot: TelegramBot, chatId: number, targetUserId: st
     profile.education ? `🎓 ${profile.education}` : null,
     profile.attributes ? `📝 ${profile.attributes}` : null,
     presenceLabel(targetUser.lastActiveAt),
+    seriousnessLabel(computeSeriousnessScore(profile, targetUser, reportsReceived)),
   ].filter((l): l is string => !!l);
 
   // Callback data carries the full Telegram ID, not a shortId suffix — a
@@ -478,10 +555,22 @@ async function sendSearchCard(bot: TelegramBot, chatId: number, targetUserId: st
   kb.text("🚩 إبلاغ", `mreport|${targetUserId}`).text("⛔ حظر", `mblock|${targetUserId}`);
 
   const text = lines.join("\n");
-  if (profile.photoFileId) {
+  const photoGranted = photoPermission?.status === "GRANTED";
+  if (profile.photoFileId && photoGranted) {
     await bot.api.sendPhoto(chatId, profile.photoFileId, { caption: text, reply_markup: kb });
+  } else if (profile.photoFileId) {
+    // Photo access is consent-gated (owner spec, 2026-09-05): the real
+    // photo is never sent until the profile owner explicitly grants this
+    // specific viewer permission (see the mphotoreq/mphotoyes/mphotono
+    // callbacks). Stronger privacy than a cosmetic blur — nothing leaks
+    // at all pre-consent, not even a blurred silhouette.
+    kb.row().text("🔒 اطلب رؤية الصورة", `mphotoreq|${targetUserId}`);
+    await bot.api.sendMessage(chatId, `🔒 (الصورة مخفية — اطلب إذن صاحب الملف لعرضها)\n\n${text}`, { reply_markup: kb });
   } else {
     await bot.api.sendMessage(chatId, `📷 (بلا صورة)\n\n${text}`, { reply_markup: kb });
+  }
+  if (profile.voiceFileId) {
+    await bot.api.sendVoice(chatId, profile.voiceFileId).catch(() => null);
   }
   return true;
 }
@@ -493,7 +582,7 @@ async function advanceSearch(bot: TelegramBot, chatId: number, userId: string, p
     const stillBlocked = await isMutuallyBlocked(userId, targetId);
     const stillApproved = await prisma.matchProfile.findUnique({ where: { userId: targetId }, select: { status: true } });
     if (!stillBlocked && stillApproved?.status === "APPROVED") {
-      const sent = await sendSearchCard(bot, chatId, targetId);
+      const sent = await sendSearchCard(bot, chatId, targetId, userId);
       if (sent) {
         await setPending(userId, { mode: "search_browsing", queue: pending.queue, index: idx + 1 });
         return;
@@ -537,7 +626,7 @@ async function showLikedBy(bot: TelegramBot, chatId: number, userId: string) {
     if (await isMutuallyBlocked(userId, like.fromUserId)) continue;
     const profile = await prisma.matchProfile.findUnique({ where: { userId: like.fromUserId } });
     if (!profile || profile.status !== "APPROVED" || profile.isHidden) continue;
-    await sendSearchCard(bot, chatId, like.fromUserId);
+    await sendSearchCard(bot, chatId, like.fromUserId, userId);
   }
 }
 
@@ -594,6 +683,75 @@ async function handleMatchCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
       }
     }
     await bot.api.answerCallbackQuery(cq.id, { text: "🚩 تم إرسال بلاغك" }).catch(() => null);
+    return;
+  }
+  if (data.startsWith("mphotoreq|")) {
+    const ownerId = data.split("|")[1];
+    await prisma.matchPhotoPermission
+      .upsert({
+        where: { ownerId_viewerId: { ownerId, viewerId: tgUserId } },
+        update: {},
+        create: { ownerId, viewerId: tgUserId, status: "PENDING" },
+      })
+      .catch(() => null);
+    await bot.api
+      .sendMessage(Number(ownerId), `🔒 يرغب أحد الأعضاء (#${shortId(tgUserId)}) برؤية صورتك في نتائج البحث. هل توافق؟`, {
+        reply_markup: new InlineKeyboard().text("✅ نعم، اسمح بالرؤية", `mphotoyes|${tgUserId}`).text("❌ لا", `mphotono|${tgUserId}`),
+      })
+      .catch(() => null);
+    await bot.api.answerCallbackQuery(cq.id, { text: "تم إرسال طلبك، بانتظار موافقة صاحب الملف" }).catch(() => null);
+    return;
+  }
+  if (data.startsWith("mphotoyes|") || data.startsWith("mphotono|")) {
+    const viewerId = data.split("|")[1];
+    const approve = data.startsWith("mphotoyes|");
+    await prisma.matchPhotoPermission
+      .updateMany({ where: { ownerId: tgUserId, viewerId }, data: { status: approve ? "GRANTED" : "DENIED" } })
+      .catch(() => null);
+    if (approve) {
+      const profile = await prisma.matchProfile.findUnique({ where: { userId: tgUserId } });
+      if (profile?.photoFileId) {
+        await bot.api.sendPhoto(Number(viewerId), profile.photoFileId, { caption: "🔓 تم منحك إذن مشاهدة الصورة." }).catch(() => null);
+      }
+    } else {
+      await bot.api.sendMessage(Number(viewerId), "❌ لم يوافق صاحب الملف على مشاركة صورته.").catch(() => null);
+    }
+    await bot.api.answerCallbackQuery(cq.id, { text: approve ? "✅ تم السماح" : "تم الرفض" }).catch(() => null);
+    return;
+  }
+  if (data.startsWith("mexit|")) {
+    const code = data.split("|")[1];
+    const label = EXIT_REASON_LABELS[code] || EXIT_REASON_LABELS.other;
+    if (pending?.mode === "random_chatting") {
+      await endRandomChat(bot, tgUserId, pending.sessionId, pending.partnerId, "end", label);
+    }
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data === "mcontact") {
+    if (pending?.mode !== "random_chatting") {
+      await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+      return;
+    }
+    const session = await prisma.randomChatSession.findUnique({ where: { id: pending.sessionId } });
+    if (!session || session.status !== "ACTIVE") {
+      await bot.api.answerCallbackQuery(cq.id, { text: "انتهت هذه المحادثة." }).catch(() => null);
+      return;
+    }
+    if (!session.contactRequestedBy) {
+      await prisma.randomChatSession.update({ where: { id: session.id }, data: { contactRequestedBy: tgUserId } }).catch(() => null);
+      await bot.api
+        .sendMessage(Number(pending.partnerId), "📇 يرغب الطرف الآخر بتبادل بيانات التواصل الرسمي معك. إن وافقت، اضغط الزر:", {
+          reply_markup: new InlineKeyboard().text("✅ أوافق على التبادل", "mcontact"),
+        })
+        .catch(() => null);
+      await bot.api.answerCallbackQuery(cq.id, { text: "تم إرسال الطلب، بانتظار موافقة الطرف الآخر" }).catch(() => null);
+    } else if (session.contactRequestedBy === tgUserId) {
+      await bot.api.answerCallbackQuery(cq.id, { text: "طلبك قيد الانتظار بالفعل" }).catch(() => null);
+    } else {
+      await revealContacts(bot, tgUserId, pending.partnerId);
+      await bot.api.answerCallbackQuery(cq.id, { text: "✅ تم تبادل بيانات التواصل" }).catch(() => null);
+    }
     return;
   }
   if (data.startsWith("mblock|")) {
@@ -717,7 +875,50 @@ async function animateSearchingMessage(bot: TelegramBot, chatId: number) {
     .catch((e) => console.error("[randomChat] final edit FAILED", e));
 }
 
-async function endRandomChat(bot: TelegramBot, tgUserId: string, sessionId: string, partnerId: string, reason: "end" | "block") {
+// Respectful exit system (owner spec, 2026-09-05) — ending a random chat
+// used to just vanish on the other side with a bare "انتهت المحادثة."
+// Now the leaving side picks a short polite reason first (see
+// exitReasonKeyboard below) and the partner gets a proper closing message
+// instead of an abrupt cutoff. The reason is optional (a plain "⛔ حظر" or
+// the global back-button escape hatch still end instantly without one).
+const EXIT_REASON_LABELS: Record<string, string> = {
+  no_match: "عدم توافق في الشروط",
+  satisfied: "اكتفيت من المحادثة، شكراً",
+  no_time: "لا يوجد وقت كافٍ حالياً",
+  other: "إنهاء المحادثة",
+};
+
+function exitReasonKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🙏 عدم توافق بالشروط", "mexit|no_match")
+    .row()
+    .text("✅ اكتفيت، شكراً", "mexit|satisfied")
+    .row()
+    .text("⏱ لا وقت كافٍ الآن", "mexit|no_time")
+    .row()
+    .text("➡️ إنهاء بدون سبب محدد", "mexit|other");
+}
+
+// Formal contact request (owner spec, 2026-09-05) — once both sides
+// explicitly agree (see the "mcontact" callback), reveal each side's own
+// declared contact info from their MatchProfile, same contactMethod/
+// contactValue already used on the search-result card's "💬 رسالة"
+// button. Random chat has no MatchProfile requirement, so either side may
+// not have one — handled gracefully rather than erroring.
+async function revealContacts(bot: TelegramBot, userA: string, userB: string) {
+  const [profileA, profileB] = await Promise.all([
+    prisma.matchProfile.findUnique({ where: { userId: userA } }),
+    prisma.matchProfile.findUnique({ where: { userId: userB } }),
+  ]);
+  const contactLine = (p: MatchProfile | null) =>
+    p
+      ? `📇 بيانات التواصل: ${p.contactMethod === "TELEGRAM" ? "@" + p.contactValue.replace(/^@/, "") : p.contactValue}`
+      : "لم يُكمل الطرف الآخر ملفاً شخصياً يحوي بيانات تواصل — يمكنكما تبادلها يدوياً إن رغبتما.";
+  await bot.api.sendMessage(Number(userA), `✅ تم الاتفاق على تبادل التواصل الرسمي.\n${contactLine(profileB)}`).catch(() => null);
+  await bot.api.sendMessage(Number(userB), `✅ تم الاتفاق على تبادل التواصل الرسمي.\n${contactLine(profileA)}`).catch(() => null);
+}
+
+async function endRandomChat(bot: TelegramBot, tgUserId: string, sessionId: string, partnerId: string, reason: "end" | "block", exitReasonLabel?: string) {
   await prisma.randomChatSession.update({ where: { id: sessionId }, data: { status: "ENDED", ended_at: new Date() } }).catch(() => null);
   if (reason === "block") {
     await prisma.matchBlock.upsert({
@@ -728,8 +929,12 @@ async function endRandomChat(bot: TelegramBot, tgUserId: string, sessionId: stri
   }
   await setPending(tgUserId, null);
   await setPending(partnerId, null);
+  const partnerText =
+    reason === "block" || !exitReasonLabel
+      ? "انتهت المحادثة."
+      : `🙏 أنهى الطرف الآخر المحادثة (السبب: ${exitReasonLabel}). شكراً لوقتك، ونتمنى لك التوفيق في إيجاد شريك مناسب.`;
   await bot.api.sendMessage(Number(tgUserId), "انتهت المحادثة.", { reply_markup: mainMenu() }).catch(() => null);
-  await bot.api.sendMessage(Number(partnerId), "انتهت المحادثة.", { reply_markup: mainMenu() }).catch(() => null);
+  await bot.api.sendMessage(Number(partnerId), partnerText, { reply_markup: mainMenu() }).catch(() => null);
 }
 
 // ---------------------------------------------------------------------
@@ -1124,10 +1329,29 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
 
   const pending = user.pendingAction as PendingAction | null;
 
-  // Photo step must be checked before the text-only bailout below.
+  // Photo/voice steps must be checked before the text-only bailout below —
+  // neither is a text message, so the normal consumeProfileStep dispatch
+  // (which only handles msg.text) never sees them.
   if (msg.photo && pending?.mode === "profile_wizard" && pending.step === "photo") {
-    const fileId = msg.photo[msg.photo.length - 1].file_id;
-    await saveProfile(bot, chatId, tgUserId, pending.data, fileId);
+    pending.data.photoFileId = msg.photo[msg.photo.length - 1].file_id;
+    const next = nextProfileStep("photo");
+    if (!next) {
+      await saveProfile(bot, chatId, tgUserId, pending.data);
+    } else {
+      await setPending(tgUserId, { mode: "profile_wizard", step: next, data: pending.data });
+      await askProfileStep(bot, chatId, next);
+    }
+    return;
+  }
+  if (msg.voice && pending?.mode === "profile_wizard" && pending.step === "voice") {
+    pending.data.voiceFileId = msg.voice.file_id;
+    const next = nextProfileStep("voice");
+    if (!next) {
+      await saveProfile(bot, chatId, tgUserId, pending.data);
+    } else {
+      await setPending(tgUserId, { mode: "profile_wizard", step: next, data: pending.data });
+      await askProfileStep(bot, chatId, next);
+    }
     return;
   }
 
@@ -1153,7 +1377,9 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
   // Active random chat: relay text, or handle its own control buttons.
   if (pending?.mode === "random_chatting") {
     if (text === "⏹ إنهاء المحادثة") {
-      await endRandomChat(bot, tgUserId, pending.sessionId, pending.partnerId, "end");
+      await bot.api
+        .sendMessage(chatId, "قبل الإنهاء — اختر سبباً مختصراً (تُرسَل رسالة شكر لطيفة تلقائياً للطرف الآخر بدل الاختفاء المفاجئ):", { reply_markup: exitReasonKeyboard() })
+        .catch(() => null);
       return;
     }
     if (text === "⛔ حظر") {
@@ -1168,7 +1394,22 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
       await bot.api.sendMessage(chatId, "🚩 تم إرسال بلاغك.");
       return;
     }
+    if (containsMatchBannedWords(text)) {
+      await bot.api.sendMessage(chatId, "⚠️ هذه الرسالة تحتوي على محتوى غير مسموح به ولم يتم إرسالها.").catch(() => null);
+      return;
+    }
     await bot.api.sendMessage(Number(pending.partnerId), text).catch(() => null);
+
+    const updatedSession = await prisma.randomChatSession
+      .update({ where: { id: pending.sessionId }, data: { messageCount: { increment: 1 } } })
+      .catch(() => null);
+    if (updatedSession && !updatedSession.contactOfferSent && updatedSession.messageCount >= CONTACT_REQUEST_THRESHOLD) {
+      await prisma.randomChatSession.update({ where: { id: pending.sessionId }, data: { contactOfferSent: true } }).catch(() => null);
+      const offerKb = new InlineKeyboard().text("📇 طلب تبادل التواصل الرسمي", "mcontact");
+      const offerText = "💬 المحادثة مستمرة بشكل جيد. عند الرغبة، يمكنكما طلب تبادل بيانات التواصل الرسمي لمتابعة الأمر بجدية أكبر:";
+      await bot.api.sendMessage(chatId, offerText, { reply_markup: offerKb }).catch(() => null);
+      await bot.api.sendMessage(Number(pending.partnerId), offerText, { reply_markup: offerKb }).catch(() => null);
+    }
     return;
   }
 
