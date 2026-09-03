@@ -6,13 +6,32 @@ import { isOwnerServer } from "@/lib/isOwner";
 import AdServiceWorker from "@/components/AdServiceWorker";
 import AdSlot from "@/components/AdSlot";
 import MultitagScript from "@/components/MultitagScript";
-import VignetteScript from "@/components/VignetteScript";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+const SITE_TITLE = "سوق تولز — سوق الخدمات الرقمية المصغّرة";
+const SITE_DESCRIPTION =
+  "سوق تولز: منصة لبيع خدمات وأدوات رقمية جاهزة (بوتات، أدوات ذكاء اصطناعي، أتمتة) بأسعار رمزية وتسليم فوري، بالإضافة لأدوات مجانية حقيقية تعمل مباشرة في متصفحك.";
+
 export const metadata: Metadata = {
-  title: "سوق تولز — سوق الخدمات الرقمية المصغّرة",
-  description:
-    "سوق تولز: منصة لبيع خدمات وأدوات رقمية جاهزة (بوتات، أدوات ذكاء اصطناعي، أتمتة) بأسعار رمزية وتسليم فوري.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: "%s | سوق تولز" },
+  description: SITE_DESCRIPTION,
+  keywords: ["سوق تولز", "خدمات رقمية", "أدوات مجانية", "بوت تليجرام", "أدوات ذكاء اصطناعي", "متجر خدمات مصغرة"],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "ar_AR",
+    url: "/",
+    siteName: "سوق تولز",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
   other: {
     // Monetag (3nbf4.com) site-ownership verification — meta-tag method,
     // an alternative to the sw_1.js service-worker file also present at
@@ -21,12 +40,21 @@ export const metadata: Metadata = {
   },
 };
 
+const ORGANIZATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "سوق تولز",
+  url: SITE_URL,
+  description: SITE_DESCRIPTION,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const isOwner = isOwnerServer();
 
   return (
     <html lang="ar" dir="rtl">
       <body className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_JSON_LD) }} />
         <AdServiceWorker />
         {/* Monetag In-Page Push (zone 11710148) — passive, no visual footprint, safe site-wide */}
         <Script
@@ -38,7 +66,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <MultitagScript />
-        <VignetteScript />
         <AnalyticsTracker isOwner={isOwner} />
         {isOwner && (
           <div className="bg-emerald-600 py-1.5 text-center text-xs font-bold text-white">
