@@ -4,6 +4,7 @@ import type { Category, Service } from "@/types";
 import StorefrontBrowser from "@/components/StorefrontBrowser";
 import SectionBackdrop from "@/components/SectionBackdrop";
 import AdSlot from "@/components/AdSlot";
+import { FREE_TOOLS } from "@/lib/freeTools";
 
 export const revalidate = 30;
 
@@ -61,6 +62,33 @@ export default async function HomePage() {
       <div className="mx-auto max-w-6xl px-4 py-6">
         <AdSlot position="in-content" label="بين الترحيب والأقسام" />
       </div>
+
+      <section className="mx-auto max-w-6xl px-4 py-8">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-extrabold text-slate-900 sm:text-2xl">🎁 أدوات مجانية بالكامل</h2>
+            <p className="mt-1 text-sm text-slate-600">بلا تسجيل، بلا حدود استخدام — جرّبها الآن مباشرة.</p>
+          </div>
+          <Link href="/free-tools" className="text-sm font-bold text-brand-700 hover:text-brand-800">
+            كل الأدوات ←
+          </Link>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FREE_TOOLS.map((tool) => (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <span className="inline-block rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                مجاني
+              </span>
+              <h3 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{tool.title}</h3>
+              <p className="mt-1 text-sm text-slate-500">{tool.desc}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {visible.length > 0 && <StorefrontBrowser categories={visible} services={services} />}
     </div>

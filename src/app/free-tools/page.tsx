@@ -3,64 +3,14 @@ import Link from "next/link";
 import AdSlot from "@/components/AdSlot";
 import AdsterraNative from "@/components/AdsterraNative";
 import SectionBackdrop from "@/components/SectionBackdrop";
+import { FREE_TOOLS } from "@/lib/freeTools";
 
 export const metadata: Metadata = {
   title: "أدوات مجانية | سوق تولز",
   description: "أدوات مجانية بالكامل لأصحاب المشاريع الصغيرة، بلا تسجيل وبلا حدود استخدام.",
 };
 
-const TOOLS = [
-  {
-    href: "/free-tools/crypto-converter",
-    title: "محول عملات رقمية (TON / BTC / ETH)",
-    desc: "أسعار حية لـ TON وبيتكوين وإيثريوم وUSDT مقابل الدولار والريال — مفيد لمحفظة TON.",
-  },
-  {
-    href: "/free-tools/invoice-generator",
-    title: "مولّد فواتير وعقود بسيطة",
-    desc: "فاتورة أو عقد خدمة عربي جاهز للطباعة/PDF — بنود، ضريبة، توقيعات. بلا تسجيل.",
-  },
-  {
-    href: "/free-tools/cv-generator",
-    title: "مولّد سيرة ذاتية عربي + PDF",
-    desc: "أنشئ سيرة ذاتية عربية احترافية واحفظها كـ PDF من المتصفح — نص عربي صحيح، بلا تسجيل.",
-  },
-  {
-    href: "/free-tools/digital-card",
-    title: "بطاقة أعمال رقمية (Linktree)",
-    desc: "صفحة روابط واحدة: اسم، نبذة، صورة، وأزرار روابط — مع عداد مشاهدات حقيقي.",
-  },
-  {
-    href: "/free-tools/url-shortener",
-    title: "مصغّر روابط + عداد نقرات",
-    desc: "اختصر أي رابط واحصل على رابط قصير على نطاق الموقع مع عداد نقرات حقيقي.",
-  },
-  {
-    href: "/free-tools/image-optimizer",
-    title: "ضغط وتحويل الصور (WebP/JPEG/PNG)",
-    desc: "اضغط صورك وحوّل صيغتها فوراً داخل متصفحك — بلا رفع لأي خادم وبلا حدود استخدام.",
-  },
-  {
-    href: "/free-tools/whatsapp-link",
-    title: "مولد رابط الطلب عبر واتساب",
-    desc: "رابط جاهز يفتح محادثة واتساب مع رسالة طلب معبّأة تلقائياً لمنتجك.",
-  },
-  {
-    href: "/free-tools/business-name-generator",
-    title: "مولد أسماء المشاريع والمتاجر",
-    desc: "8 اقتراحات أسماء لمشروعك خلال ثوانٍ بالذكاء الاصطناعي.",
-  },
-  {
-    href: "/free-tools/writing-assistant",
-    title: "مساعد الكتابة الذكي",
-    desc: "منشور سوشيال ميديا، مقالة مدونة، وصف منتج، أو ترجمة نص عمل — بالذكاء الاصطناعي.",
-  },
-  {
-    href: "/free-tools/text-analyzer",
-    title: "محلل النصوص الذكي",
-    desc: "لخّص تقريراً طويلاً، أو حلّل تقييمات عملائك بالجملة مع رد مقترح لكل واحد.",
-  },
-];
+const TOOLS = FREE_TOOLS;
 
 // Catalog services (from قسم "الرد والدعم") priced at $0 — full source-code
 // templates, delivered instantly on their own /service/[slug] page since
