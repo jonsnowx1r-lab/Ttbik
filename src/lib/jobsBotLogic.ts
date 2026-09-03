@@ -250,19 +250,19 @@ function nextProfileStep(step: ProfileStep, data: ProfileDraft): ProfileStep | n
 async function askProfileStep(bot: TelegramBot, chatId: number, step: ProfileStep) {
   switch (step) {
     case "name":
-      await bot.api.sendMessage(chatId, "👋 لنبدأ بإنشاء ملفك الشخصي.\n\nما اسمك؟");
+      await bot.api.sendMessage(chatId, "👋 لنبدأ بإنشاء ملفك الشخصي.\n\nما اسمك؟", { reply_markup: plainBackMenu() });
       break;
     case "age":
-      await bot.api.sendMessage(chatId, "كم عمرك؟");
+      await bot.api.sendMessage(chatId, "كم عمرك؟", { reply_markup: plainBackMenu() });
       break;
     case "country":
-      await bot.api.sendMessage(chatId, "ما هي دولتك؟");
+      await bot.api.sendMessage(chatId, "ما هي دولتك؟", { reply_markup: plainBackMenu() });
       break;
     case "governorate":
-      await bot.api.sendMessage(chatId, "ما هي محافظتك؟");
+      await bot.api.sendMessage(chatId, "ما هي محافظتك؟", { reply_markup: plainBackMenu() });
       break;
     case "city":
-      await bot.api.sendMessage(chatId, "ما هي مدينتك؟");
+      await bot.api.sendMessage(chatId, "ما هي مدينتك؟", { reply_markup: plainBackMenu() });
       break;
     case "contactMethod":
       await bot.api.sendMessage(chatId, "ما وسيلة التواصل التي تفضلها؟", { reply_markup: contactMethodMenu() });
@@ -279,10 +279,10 @@ async function askProfileStep(bot: TelegramBot, chatId: number, step: ProfileSte
       );
       break;
     case "seekerProfession":
-      await bot.api.sendMessage(chatId, "ما المهنة التي تتقنها أو تبحث عنها؟ (تُستخدم للمطابقة مع الوظائف الشاغرة)");
+      await bot.api.sendMessage(chatId, "ما المهنة التي تتقنها أو تبحث عنها؟ (تُستخدم للمطابقة مع الوظائف الشاغرة)", { reply_markup: plainBackMenu() });
       break;
     case "employerBusinessName":
-      await bot.api.sendMessage(chatId, "ما اسم عملك/شركتك/متجرك؟");
+      await bot.api.sendMessage(chatId, "ما اسم عملك/شركتك/متجرك؟", { reply_markup: plainBackMenu() });
       break;
     case "professionalCategory":
       await bot.api.sendMessage(chatId, "اختر الحرفة/الخدمة التي تقدّمها:", { reply_markup: professionalCategoryMenu() });
@@ -417,16 +417,16 @@ async function askJobPostingStep(bot: TelegramBot, chatId: number, step: JobPost
       await bot.api.sendMessage(chatId, "📢 نشر وظيفة شاغرة\n\nما مسمى الوظيفة؟", { reply_markup: plainBackMenu() });
       break;
     case "keywords":
-      await bot.api.sendMessage(chatId, "أضف كلمات مفتاحية تصف الوظيفة (مفصولة بفواصل) — تُستخدم في مطابقة بحث الباحثين عن عمل:");
+      await bot.api.sendMessage(chatId, "أضف كلمات مفتاحية تصف الوظيفة (مفصولة بفواصل) — تُستخدم في مطابقة بحث الباحثين عن عمل:", { reply_markup: plainBackMenu() });
       break;
     case "workersCount":
       await bot.api.sendMessage(chatId, "كم عدد العمال المطلوبين؟", { reply_markup: skipMenu() });
       break;
     case "governorate":
-      await bot.api.sendMessage(chatId, "في أي محافظة؟");
+      await bot.api.sendMessage(chatId, "في أي محافظة؟", { reply_markup: plainBackMenu() });
       break;
     case "city":
-      await bot.api.sendMessage(chatId, "في أي مدينة؟");
+      await bot.api.sendMessage(chatId, "في أي مدينة؟", { reply_markup: plainBackMenu() });
       break;
     case "description":
       await bot.api.sendMessage(chatId, "وصف إضافي للوظيفة (اختياري):", { reply_markup: skipMenu() });
@@ -620,7 +620,7 @@ async function askStoreListingStep(bot: TelegramBot, chatId: number, step: Store
       await bot.api.sendMessage(chatId, "صف المنتج (الحالة، التفاصيل...):", { reply_markup: skipMenu() });
       break;
     case "price":
-      await bot.api.sendMessage(chatId, "ما السعر بالدولار؟");
+      await bot.api.sendMessage(chatId, "ما السعر بالدولار؟", { reply_markup: plainBackMenu() });
       break;
     case "photos":
       await bot.api.sendMessage(chatId, "أرسل صور المنتج (حتى 5 صور)، ثم اضغط «تم» عند الانتهاء:", {
