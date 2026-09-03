@@ -124,6 +124,8 @@ type PendingAction =
   | { mode: "dispute_statement"; orderId: string; side: "buyer" | "seller" }
   | { mode: "dispute_evidence"; orderId: string; side: "buyer" | "seller"; statement: string }
   | { mode: "contact_admin_compose" }
+  | { mode: "suggestion_compose" }
+  | { mode: "suggestion_confirm"; text: string }
   | { mode: "admin_broadcast" }
   | { mode: "admin_lookup" }
   | { mode: "admin_unban" }
@@ -157,7 +159,7 @@ function mainMenu(): Keyboard {
   return new Keyboard()
     .text("💼 قسم العمل").text("🛒 قسم المتجر").row()
     .text("👤 ملفي الشخصي").text("💰 رصيدي وإيداع").row()
-    .text("ℹ️ معلومات")
+    .text("ℹ️ معلومات").text("💡 اقتراح")
     .resized();
 }
 function workMenu(): Keyboard {
@@ -1659,6 +1661,14 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
     }
     return;
   }
+  if (pending?.mode === "suggestion_compose" || pending?.mode === "suggestion_confirm") {
+    if (!text) return;
+    await setPending(tgUserId, { mode: "suggestion_confirm", text });
+    await bot.api.sendMessage(chatId, `💡 اقتراحك:\n\n${text}\n\nإن أردت تعديله أرسل نصاً جديداً، أو اضغط تأكيد للإرسال.`, {
+      reply_markup: new InlineKeyboard().text("✅ تأكيد", "jsuggestion_confirm"),
+    });
+    return;
+  }
 
   // ---- Main navigation ----
   const profile = await prisma.jobsProfile.findUnique({ where: { userId: tgUserId } });
@@ -1690,8 +1700,17 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
   if (text === "ℹ️ معلومات") {
     await bot.api.sendMessage(
       chatId,
-      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اكتب: مراسلة الأدمن",
+      "ℹ️ بوت فرص العمل والمتجر\n\nابحث عن وظيفة أو مهني، أنشر وظيفة شاغرة، أو بع/اشترِ في المتجر بأمان عبر نظام الحجز الآمن.\n📩 للتواصل مع الإدارة اكتب: مراسلة الأدمن\n💡 لاقتراح خاصية جديدة أو تعديل محدد، استخدم زر «اقتراح».",
       { reply_markup: mainMenu() }
+    );
+    return;
+  }
+  if (text === "💡 اقتراح") {
+    await setPending(tgUserId, { mode: "suggestion_compose" });
+    await bot.api.sendMessage(
+      chatId,
+      "💡 هذا الزر يُستخدم فقط إن كان لديك اقتراح للإدارة لإضافة خاصية جديدة أو تعديل شيء محدد في البوت.\n\nاكتب رسالتك واضغط تأكيد.",
+      { reply_markup: plainBackMenu() }
     );
     return;
   }
@@ -1879,6 +1898,25 @@ async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
     await bot.api
       .sendMessage(chatId, isPaused ? "⏸ تم إيقاف ظهورك في نتائج البحث عن مهنيين." : "▶️ تم تفعيل ظهورك في نتائج البحث مجدداً.", { reply_markup: mainMenu() })
       .catch(() => null);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data === "jsuggestion_confirm") {
+    const pending = (await prisma.jobsUser.findUnique({ where: { id: tgUserId } }))?.pendingAction as PendingAction | null;
+    if (pending?.mode !== "suggestion_confirm") {
+      await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+      return;
+    }
+    const saved = await prisma.jobsAdminMessage.create({ data: { senderId: tgUserId, text: `💡 اقتراح:\n${pending.text}` } });
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "✅ تم إرسال اقتراحك للإدارة، شكراً لك!", { reply_markup: mainMenu() });
+    if (SUPER_ADMIN_ID) {
+      await bot.api
+        .sendMessage(Number(SUPER_ADMIN_ID), `💡 اقتراح جديد من #${shortId(tgUserId)}:\n\n${pending.text}`, {
+          reply_markup: new InlineKeyboard().text("↩️ رد", `jadmin_reply|${tgUserId}|${saved.id}`),
+        })
+        .catch(() => null);
+    }
     await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     return;
   }
