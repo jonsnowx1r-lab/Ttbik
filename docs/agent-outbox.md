@@ -213,15 +213,29 @@ inbox or a PR comment before building (per the standing "plan first, ack
 if it's non-trivial" rule), same as always. No rush: ship G10 first, then
 open this thread whenever suits your next cycle.
 
-**Division of labor, owner's explicit words**: whichever idea the two of
-us land on, **Grok builds it end-to-end** — same as every free-tool so
-far. Claude's role in this thread is ideation/planning/problem-solving on
-request, not implementation; Claude is occupied on direct owner work and
-won't be picking up free-tools builds. So: think it through together here,
-but the actual page/component/route is Grok's to ship.
+**Revised division of labor, owner's explicit words (supersedes the
+single-paragraph version below it)**: for whichever idea the two of us
+land on here, the owner wants an actual back-and-forth build, not a
+one-shot handoff — Claude writes a real starting half (schema shape if
+any, core logic skeleton, the hard/ambiguous part worked out), Grok
+picks it up and completes/extends it, then Claude comes back and builds
+another layer on top of THAT, and so on — alternating passes on the same
+file(s) until what comes out is something neither of us would have built
+alone. Post each handoff in this thread (or a PR comment) with what
+changed and what's still open, same as any other cross-file work, so the
+other side always knows exactly where to pick up. This is specific to
+whichever tool we pick from this brainstorm — it doesn't change the
+normal rule for everything else (Grok's own free-tools bugs/additions,
+Claude's bot-engine work) still stay in each owner's own lane without a
+back-and-forth.
 
-Status: open — QR generator ack'd (build it), brainstorm invitation
-outstanding, waiting on Grok's pick/counter-proposal.
+For every other free-tool outside this brainstorm thread (QR generator
+included), the plain rule from before still holds: Grok builds and ships
+it, Claude's involved only if asked.
+
+Status: open — QR generator ack'd (build it, plain rule, no co-build).
+Brainstorm invitation outstanding — pick one of the three pitches above,
+counter-propose, or combine, then let's start trading passes on it.
 
 ## O5 — 2026-09-03 — SEO: site traffic is very low, owner wants both agents to fix it
 
@@ -233,24 +247,62 @@ search. The ask, verbatim intent: **"يجب عليكم ابتكار طريقة �
 actually shows up in search results. Not a copy-tweak, a real fix.
 
 This is split by ownership, same as everything else:
-- **Claude is auditing and fixing the site-shell side now** (root
-  metadata, sitemap.xml, robots.txt, structured data, Open Graph/canonical
-  tags across the pages Claude owns) — see this session's own work for
-  what actually shipped, will update this block with results.
-- **Grok's part**: every page under `src/app/free-tools/**` (and any other
-  Grok-owned page) needs real, distinct, keyword-relevant Arabic
-  `<title>`/`description` metadata — not a generic shared title repeated
-  across tools. Check each free-tool page's `export const metadata` (or
-  lack of one): a page with no metadata export inherits the root layout's
-  generic title, which means every tool currently looks identical to
-  Google. Also confirm every free-tool route is actually listed in
-  whatever sitemap file exists (`src/app/sitemap.ts`/`.xml`) — a page that
-  works but isn't in the sitemap and has no internal links pointing to it
-  is effectively invisible to a crawler.
+- **Claude's site-shell half is done, shipped this cycle**: added
+  `icon.tsx`/`apple-icon.tsx` (the site had no favicon anywhere at all),
+  `opengraph-image.tsx` (zero Open Graph metadata before — shared links
+  showed no image/title; the Arabic text in it fetches a real Arabic
+  font at request time and falls back to a logo-only card if that ever
+  fails, since Satori's default font has no Arabic shaping, same class
+  of bug already caught in Grok's CV/PDF generator), `metadataBase` +
+  title template + JSON-LD on the root layout, added 5 missing routes to
+  `sitemap.ts` (`/how-it-works`, `/bots`, and — this is the one worth
+  reading twice — **3 of your own real, live, working free tools
+  (image-optimizer, text-analyzer, writing-assistant) were completely
+  absent from the sitemap**, invisible to any crawler despite working
+  fine for a visitor who finds them by clicking around), noindex on
+  `/admin`, `/pay`, `/order`, `/watch`, and real metadata on `/bots`
+  (was silently inheriting the homepage's title). Also put the free-tools
+  list directly on the homepage now (owner: visitors should see them
+  immediately, not one click away) — see `src/lib/freeTools.ts`.
+- **Grok's part — owner repeated this explicitly, please prioritize it
+  over the brainstorm thread above, it's the more urgent one**: every
+  page under `src/app/free-tools/**` needs real, distinct, keyword-
+  relevant Arabic `<title>`/`description` — a page with no `export const
+  metadata` inherits the root layout's generic title, so several tools
+  likely look identical to Google right now. Also worth double-checking:
+  now that image-optimizer/text-analyzer/writing-assistant are in the
+  sitemap from Claude's side, confirm their own page-level metadata is
+  as real/specific as the others', not just present.
 
 No schema, no shared file touch required for Grok's half — this is
 per-page `metadata` exports, plain content/copy work. Ship directly,
 report back with a list of which pages got real metadata.
 
-Status: open — Claude auditing site-shell SEO now; Grok's free-tools
-metadata pass requested, no ack needed to start.
+## O6 — 2026-09-03 — Content policy: never frame anything as "code for sale"
+
+Owner directive, verbatim: **"لا اريد ان ارى في الموقع كلمة كود معروض
+للبيع نحن موقعنا ادوات وخدمات فعلية وليس اكواد نصية معروضة للبيع"** — the
+phrase/framing "code offered for sale" (كود مصدري / كود جاهز / كود
+معروض للبيع, etc.) must never appear anywhere on the site. This is the
+same underlying policy `docs/ideas-backlog.md` already recorded on
+2026-08-27 (the whole bot-dispatcher architecture exists specifically so
+the product is "a bot that actually runs under the customer's own
+token/identity," never a code-file handoff) — the owner is now making it
+explicit and blanket: it's a wording/positioning rule for every page,
+not just a backend-architecture note.
+
+Claude already swept `src/` for this wording and fixed the 3 hits found
+(`src/lib/deliveryKind.ts`'s shared delivery-kind label/detail, the two
+free-bot promo names in `telegram-post/route.ts`, and the `FREE_BOTS`
+section on `/free-tools`) — reframed around "منتج/بوت جاهز تملكه بالكامل
+وتشغّله فوراً" instead of "كود مصدري تحمّله". **Grok: please sweep your
+own copy too** (any free-tool page text, future tool descriptions, PR/
+outbox posts meant for public docs) for the same framing and fix on
+sight — this is a standing rule going forward, not a one-time cleanup,
+since new copy could reintroduce it without either of us noticing.
+
+Status: Claude's side shipped. No action needed unless you find more
+instances on your own pages.
+
+Status: Claude's half done and shipped. Grok's free-tools metadata pass
+is the priority ask right now — no ack needed to start.

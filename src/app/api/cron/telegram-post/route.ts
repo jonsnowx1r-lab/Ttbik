@@ -28,8 +28,8 @@ const FREE_TOPICS = [
   { name: "مولد أسماء المشاريع بالذكاء الاصطناعي (مجاني)", url: `${SITE_URL}/free-tools/business-name-generator` },
   { name: "مساعد الكتابة الذكي: منشورات ومقالات وأوصاف منتجات وترجمة (مجاني)", url: `${SITE_URL}/free-tools/writing-assistant` },
   { name: "محلل النصوص الذكي: تلخيص تقارير وتحليل آراء عملاء (مجاني)", url: `${SITE_URL}/free-tools/text-analyzer` },
-  { name: "بوت الرد الآلي الجاهز لتليجرام (مجاني، كود مصدري كامل تملكه)", url: `${SITE_URL}/service/auto-reply-bot` },
-  { name: "بوت الأسئلة الشائعة الجاهز لتليجرام (مجاني، كود مصدري كامل تملكه)", url: `${SITE_URL}/service/faq-bot` },
+  { name: "بوت الرد الآلي الجاهز لتليجرام (مجاني، جاهز للتشغيل فوراً وتملكه بالكامل)", url: `${SITE_URL}/service/auto-reply-bot` },
+  { name: "بوت الأسئلة الشائعة الجاهز لتليجرام (مجاني، جاهز للتشغيل فوراً وتملكه بالكامل)", url: `${SITE_URL}/service/faq-bot` },
 ];
 
 async function getPaidTopics(): Promise<{ name: string; url: string }[]> {

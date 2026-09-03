@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 
 const TOOLS = FREE_TOOLS;
 
-// Catalog services (from قسم "الرد والدعم") priced at $0 — full source-code
-// templates, delivered instantly on their own /service/[slug] page since
+// Catalog services (from قسم "الرد والدعم") priced at $0 — a ready-to-run
+// product delivered instantly on their own /service/[slug] page since
 // price_usd = 0 skips the paid order flow entirely. Listed here too so
 // "مجاني" actually means findable in the free section, not just labeled
 // as free while still living under the paid catalog.
@@ -21,12 +21,12 @@ const FREE_BOTS = [
   {
     href: "/service/faq-bot",
     title: "بوت الأسئلة الشائعة",
-    desc: "بوت يجيب تلقائياً على الأسئلة المتكررة لعملائك من قائمة تجهزها أنت — كود مصدري كامل تملكه.",
+    desc: "بوت يجيب تلقائياً على الأسئلة المتكررة لعملائك من قائمة تجهزها أنت — جاهز للتشغيل فوراً وتملكه بالكامل.",
   },
   {
     href: "/service/auto-reply-bot",
     title: "بوت الرد الآلي",
-    desc: "بوت تليجرام يرد تلقائياً على استفسارات عملائك على مدار الساعة — كود مصدري كامل تملكه.",
+    desc: "بوت تليجرام يرد تلقائياً على استفسارات عملائك على مدار الساعة — جاهز للتشغيل فوراً وتملكه بالكامل.",
   },
 ];
 
@@ -81,7 +81,7 @@ export default function FreeToolsPage() {
       </div>
 
       <h2 className="mt-10 text-lg font-extrabold text-slate-900">🤖 بوتات جاهزة مجانية</h2>
-      <p className="mt-1 text-sm text-slate-600">كود مصدري كامل تملكه، تنزّله وتستضيفه بنفسك — بلا أي مقابل.</p>
+      <p className="mt-1 text-sm text-slate-600">بوت جاهز تشغّله بتوكنك الخاص فوراً وتملكه بالكامل — بلا أي مقابل.</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {FREE_BOTS.map((bot) => (
           <Link
