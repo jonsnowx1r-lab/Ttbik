@@ -11,6 +11,11 @@ export const metadata: Metadata = {
 
 const TOOLS = [
   {
+    href: "/free-tools/cv-generator",
+    title: "مولّد سيرة ذاتية عربي + PDF",
+    desc: "أنشئ سيرة ذاتية عربية احترافية واحفظها كـ PDF من المتصفح — نص عربي صحيح، بلا تسجيل.",
+  },
+  {
     href: "/free-tools/digital-card",
     title: "بطاقة أعمال رقمية (Linktree)",
     desc: "صفحة روابط واحدة: اسم، نبذة، صورة، وأزرار روابط — مع عداد مشاهدات حقيقي.",
