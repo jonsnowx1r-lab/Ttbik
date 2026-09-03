@@ -579,7 +579,7 @@ async function sendStoreResults(bot: TelegramBot, chatId: number, keyword: strin
   const listings = await prisma.storeListing.findMany({
     where: {
       status: "ACTIVE",
-      sellerId: { notIn: blocked },
+      sellerId: { notIn: [...blocked, viewerId] }, // never show a viewer their own listing here — that lives in "📂 طلباتي"
       ...(keyword ? { OR: [{ title: { contains: keyword, mode: "insensitive" } }, { description: { contains: keyword, mode: "insensitive" } }] } : {}),
     },
     orderBy: { created_at: "desc" },
@@ -616,7 +616,7 @@ async function sendWantedResults(bot: TelegramBot, chatId: number, keyword: stri
   const wanted = await prisma.storeWantedListing.findMany({
     where: {
       status: "ACTIVE",
-      buyerId: { notIn: blocked },
+      buyerId: { notIn: [...blocked, viewerId] }, // never show a viewer their own request here — that lives in "📂 طلباتي"
       ...(keyword ? { OR: [{ title: { contains: keyword, mode: "insensitive" } }, { description: { contains: keyword, mode: "insensitive" } }] } : {}),
     },
     orderBy: { created_at: "desc" },
