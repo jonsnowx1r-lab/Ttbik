@@ -111,6 +111,7 @@ type PendingAction =
   | { mode: "job_posting_wizard"; step: JobPostingStep; data: JobPostingDraft }
   | { mode: "job_search_keyword"; fallbackKeyword?: string }
   | { mode: "store_search_keyword" }
+  | { mode: "wanted_search_keyword" }
   | { mode: "professional_search_category" }
   | { mode: "professional_search_category_custom" }
   | { mode: "professional_search_region"; category: string }
@@ -167,6 +168,12 @@ function storeMenu(): Keyboard {
     .text("📂 طلباتي").row()
     .text(backLabel())
     .resized();
+}
+function storeBrowseMenu(): Keyboard {
+  return new Keyboard().text("🛒 تصفح للبيع").text("🛍 تصفح للشراء").row().text(backLabel()).resized();
+}
+function storeSearchMenu(): Keyboard {
+  return new Keyboard().text("🔍 بحث عن منتج للبيع").text("🔍 بحث عن طلب شراء").row().text(backLabel()).resized();
 }
 function myOrdersMenu(): Keyboard {
   return new Keyboard().text("🛍 طلباتي (شراء)").text("💰 طلباتي (بيع)").row().text(backLabel()).resized();
@@ -595,10 +602,39 @@ function orderStatusLabel(status: string): string {
   return status === "ACTIVE" ? "🟢 نشط" : status === "SOLD" ? "✅ مباع" : `⚪️ ${status}`;
 }
 
-// "📂 طلباتي" — a personal view of the current user's own posts, not a
-// public browse (owner spec, 2026-09-06): sellers had no way to see their
-// own active listings anywhere, and the earlier public "browse everyone's
-// wanted listings" button is replaced by this since it caused confusion.
+// Public browse/search of everyone's buy requests — the "🛍 تصفح للشراء" /
+// "🔍 بحث عن طلب شراء" side of the store, mirroring sendStoreResults for
+// sell listings (owner spec, 2026-09-06: browsing "تصفح المنتجات" and
+// searching only ever surfaced sell listings, never buy requests).
+async function sendWantedResults(bot: TelegramBot, chatId: number, keyword: string, offset: number, viewerId: string) {
+  const blocked = await blockedPeerIds(viewerId);
+  const wanted = await prisma.storeWantedListing.findMany({
+    where: {
+      status: "ACTIVE",
+      buyerId: { notIn: blocked },
+      ...(keyword ? { OR: [{ title: { contains: keyword, mode: "insensitive" } }, { description: { contains: keyword, mode: "insensitive" } }] } : {}),
+    },
+    orderBy: { created_at: "desc" },
+    skip: offset,
+    take: RESULTS_PAGE_SIZE,
+  });
+  if (wanted.length === 0) {
+    await bot.api.sendMessage(chatId, offset === 0 ? "😔 لا توجد طلبات شراء مطابقة حالياً." : "🔚 لا يوجد المزيد من النتائج.", { reply_markup: mainMenu() });
+    return;
+  }
+  const kb = new InlineKeyboard();
+  const lines = wanted.map((w, i) => {
+    kb.text(`👁 عرض ${i + 1}`, `jview|wanted|${w.id}`).row();
+    return `${i + 1}. 🛍 ${w.title}${w.budget ? ` — ميزانية تقريبية: $${w.budget.toFixed(2)}` : ""}`;
+  });
+  if (wanted.length === RESULTS_PAGE_SIZE) kb.text("➡️ 5 نتائج أخرى", `jmore|wanted|${encodeURIComponent(keyword)}|${offset + RESULTS_PAGE_SIZE}`);
+  const title = keyword ? `🔍 نتائج البحث عن طلب شراء "${keyword}":` : "🛍 طلبات شراء معروضة:";
+  await bot.api.sendMessage(chatId, `${title}\n\n${lines.join("\n")}`, { reply_markup: kb });
+}
+
+// "📂 طلباتي" — a personal view of the current user's own posts, distinct
+// from the public browse above (owner spec, 2026-09-06): sellers had no
+// way to see their own active listings anywhere before this existed.
 async function sendMyWantedListings(bot: TelegramBot, chatId: number, userId: string, offset: number) {
   const wanted = await prisma.storeWantedListing.findMany({
     where: { buyerId: userId },
@@ -1243,6 +1279,10 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
     await setPending(tgUserId, null);
     return sendStoreResults(bot, chatId, text, 0, tgUserId);
   }
+  if (pending?.mode === "wanted_search_keyword") {
+    await setPending(tgUserId, null);
+    return sendWantedResults(bot, chatId, text, 0, tgUserId);
+  }
   if (pending?.mode === "professional_search_category") {
     if (text === OTHER_CATEGORY_LABEL) {
       await setPending(tgUserId, { mode: "professional_search_category_custom" });
@@ -1379,11 +1419,27 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
     return;
   }
   if (text === "🔍 تصفح المنتجات") {
+    await bot.api.sendMessage(chatId, "🔍 تصفح المنتجات:", { reply_markup: storeBrowseMenu() });
+    return;
+  }
+  if (text === "🛒 تصفح للبيع") {
     return sendStoreResults(bot, chatId, "", 0, tgUserId);
   }
+  if (text === "🛍 تصفح للشراء") {
+    return sendWantedResults(bot, chatId, "", 0, tgUserId);
+  }
   if (text === "🔍 بحث عن منتج") {
+    await bot.api.sendMessage(chatId, "🔍 ابحث في:", { reply_markup: storeSearchMenu() });
+    return;
+  }
+  if (text === "🔍 بحث عن منتج للبيع") {
     await setPending(tgUserId, { mode: "store_search_keyword" });
     await bot.api.sendMessage(chatId, "اكتب اسم المنتج أو كلمة مفتاحية:", { reply_markup: plainBackMenu() });
+    return;
+  }
+  if (text === "🔍 بحث عن طلب شراء") {
+    await setPending(tgUserId, { mode: "wanted_search_keyword" });
+    await bot.api.sendMessage(chatId, "اكتب كلمة مفتاحية تصف ما يبحث عنه المشترون:", { reply_markup: plainBackMenu() });
     return;
   }
   if (text === "📂 طلباتي") {
@@ -1482,6 +1538,7 @@ async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
     if (parts[1] === "posting") await sendJobPostingResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]), tgUserId);
     else if (parts[1] === "professional") await sendProfessionalResults(bot, chatId, decodeURIComponent(parts[2]), decodeURIComponent(parts[3]), Number(parts[4]), tgUserId);
     else if (parts[1] === "listing") await sendStoreResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]), tgUserId);
+    else if (parts[1] === "wanted") await sendWantedResults(bot, chatId, decodeURIComponent(parts[2]), Number(parts[3]), tgUserId);
     else if (parts[1] === "mywanted") await sendMyWantedListings(bot, chatId, tgUserId, Number(parts[3]));
     else if (parts[1] === "mylistings") await sendMyStoreListings(bot, chatId, tgUserId, Number(parts[3]));
     await bot.api.answerCallbackQuery(cq.id).catch(() => null);
