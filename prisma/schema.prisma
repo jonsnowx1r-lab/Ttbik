@@ -620,6 +620,32 @@ model StoreOrder {
   created_at     DateTime  @default(now())
 }
 
+// A price negotiation attached to either someone's StoreListing (a buyer
+// proposing a price instead of paying the listed price outright) or
+// someone's StoreWantedListing (a seller proposing to fulfill a buyer's
+// request) — owner spec, 2026-09-06. buyerId/sellerId are fixed roles
+// regardless of which side initiated the offer; `price`/`lastOfferBy`
+// track the current number on the table as either side counters it.
+// Accepting always executes the deal at the CURRENT `price`, crediting
+// `sellerId`/debiting `buyerId` — whoever proposed that price last is
+// irrelevant once accepted. A WANTED-kind accept has no real StoreListing
+// to attach the resulting StoreOrder to, so one is synthesized on the fly
+// (see finalizeAcceptedOffer in jobsBotLogic.ts) — this keeps every
+// existing escrow/dispute/auto-release code path working unchanged.
+model StoreOffer {
+  id          String   @id @default(uuid())
+  kind        String // LISTING | WANTED
+  listingId   String?
+  wantedId    String?
+  buyerId     String
+  sellerId    String
+  price       Float
+  lastOfferBy String
+  status      String   @default("PENDING") // PENDING | ACCEPTED | REJECTED
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
 // Dispute on an ESCROWED StoreOrder (owner spec, 2026-09-05) — each side
 // submits their statement/evidence independently (the bot never shows
 // one party what the other already wrote, so neither can tailor a
