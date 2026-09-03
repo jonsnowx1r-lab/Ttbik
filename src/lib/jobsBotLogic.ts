@@ -117,8 +117,8 @@ type PendingAction =
   | { mode: "professional_search_category" }
   | { mode: "professional_search_category_custom" }
   | { mode: "professional_search_region"; category: string }
-  | { mode: "store_listing_wizard"; step: StoreListingStep; data: StoreListingDraft }
-  | { mode: "store_wanted_wizard"; step: StoreWantedStep; data: StoreWantedDraft }
+  | { mode: "store_listing_wizard"; step: StoreListingStep; data: StoreListingDraft; editingId?: string }
+  | { mode: "store_wanted_wizard"; step: StoreWantedStep; data: StoreWantedDraft; editingId?: string }
   | { mode: "report_reason"; targetId: string; targetKind: "profile" | "posting" | "listing" | "wanted" }
   | { mode: "report_evidence"; targetId: string; targetKind: "profile" | "posting" | "listing" | "wanted"; reason: string }
   | { mode: "dispute_statement"; orderId: string; side: "buyer" | "seller" }
@@ -165,7 +165,7 @@ function workMenu(): Keyboard {
 }
 function storeMenu(): Keyboard {
   return new Keyboard()
-    .text("💰 بيع").text("🛍 شراء").row()
+    .text("💰 أمر بيع").text("🛍 أمر شراء").row()
     .text("🔍 بحث عن منتج").text("🔍 تصفح المنتجات").row()
     .text("📂 طلباتي").row()
     .text(backLabel())
@@ -602,9 +602,69 @@ async function sendStoreResults(bot: TelegramBot, chatId: number, keyword: strin
 
 function orderStatusLabel(status: string): string {
   if (status === "ACTIVE") return "🟢 نشط";
+  if (status === "PAUSED") return "⏸ متوقف مؤقتاً";
   if (status === "SOLD") return "✅ مباع";
   if (status === "FULFILLED") return "✅ تم تلبيته";
+  if (status === "REMOVED") return "🗑 محذوف";
   return `⚪️ ${status}`;
+}
+
+// Owner-only management actions on a StoreListing/StoreWantedListing —
+// only reachable via "📂 طلباتي" (owner spec, 2026-09-06): a seller/buyer
+// had no way to edit, pause, or remove what they already posted.
+async function toggleListingStatus(bot: TelegramBot, chatId: number, userId: string, listingId: string) {
+  const l = await prisma.storeListing.findUnique({ where: { id: listingId } });
+  if (!l || l.sellerId !== userId) {
+    await bot.api.sendMessage(chatId, "غير مسموح.");
+    return;
+  }
+  if (l.status !== "ACTIVE" && l.status !== "PAUSED") {
+    await bot.api.sendMessage(chatId, "لا يمكن تغيير حالة هذا المنتج.");
+    return;
+  }
+  const newStatus = l.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+  await prisma.storeListing.update({ where: { id: listingId }, data: { status: newStatus } });
+  await bot.api.sendMessage(chatId, newStatus === "ACTIVE" ? "▶️ تم تفعيل المنتج، وهو الآن ظاهر في التصفح." : "⏸ تم إيقاف المنتج مؤقتاً، لن يظهر في التصفح حتى تُعيد تفعيله.");
+}
+async function deleteListing(bot: TelegramBot, chatId: number, userId: string, listingId: string) {
+  const l = await prisma.storeListing.findUnique({ where: { id: listingId } });
+  if (!l || l.sellerId !== userId) {
+    await bot.api.sendMessage(chatId, "غير مسموح.");
+    return;
+  }
+  if (l.status !== "ACTIVE" && l.status !== "PAUSED") {
+    await bot.api.sendMessage(chatId, "لا يمكن حذف هذا المنتج.");
+    return;
+  }
+  await prisma.storeListing.update({ where: { id: listingId }, data: { status: "REMOVED" } });
+  await bot.api.sendMessage(chatId, "🗑 تم حذف المنتج.");
+}
+async function toggleWantedStatus(bot: TelegramBot, chatId: number, userId: string, wantedId: string) {
+  const w = await prisma.storeWantedListing.findUnique({ where: { id: wantedId } });
+  if (!w || w.buyerId !== userId) {
+    await bot.api.sendMessage(chatId, "غير مسموح.");
+    return;
+  }
+  if (w.status !== "ACTIVE" && w.status !== "PAUSED") {
+    await bot.api.sendMessage(chatId, "لا يمكن تغيير حالة هذا الطلب.");
+    return;
+  }
+  const newStatus = w.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+  await prisma.storeWantedListing.update({ where: { id: wantedId }, data: { status: newStatus } });
+  await bot.api.sendMessage(chatId, newStatus === "ACTIVE" ? "▶️ تم تفعيل طلبك، وهو الآن ظاهر في التصفح." : "⏸ تم إيقاف طلبك مؤقتاً، لن يظهر في التصفح حتى تُعيد تفعيله.");
+}
+async function deleteWanted(bot: TelegramBot, chatId: number, userId: string, wantedId: string) {
+  const w = await prisma.storeWantedListing.findUnique({ where: { id: wantedId } });
+  if (!w || w.buyerId !== userId) {
+    await bot.api.sendMessage(chatId, "غير مسموح.");
+    return;
+  }
+  if (w.status !== "ACTIVE" && w.status !== "PAUSED") {
+    await bot.api.sendMessage(chatId, "لا يمكن حذف هذا الطلب.");
+    return;
+  }
+  await prisma.storeWantedListing.update({ where: { id: wantedId }, data: { status: "REMOVED" } });
+  await bot.api.sendMessage(chatId, "🗑 تم حذف طلبك.");
 }
 
 // Public browse/search of everyone's buy requests — the "🛍 تصفح للشراء" /
@@ -716,7 +776,8 @@ async function sendProfessionalCard(bot: TelegramBot, chatId: number, userId: st
 async function sendStoreListingCard(bot: TelegramBot, chatId: number, id: string, viewerId: string) {
   const l = await prisma.storeListing.findUnique({ where: { id } });
   if (!l) return;
-  if (await isBlocked(viewerId, l.sellerId)) {
+  const isOwner = viewerId === l.sellerId;
+  if (!isOwner && (await isBlocked(viewerId, l.sellerId))) {
     await bot.api.sendMessage(chatId, "🚫 غير متاح.");
     return;
   }
@@ -729,8 +790,15 @@ async function sendStoreListingCard(bot: TelegramBot, chatId: number, id: string
     `💳 الدفع: ${l.paymentMethod === "ESCROW" ? "عبر البوت (حجز حتى الاستلام)" : "يدوي"}\n` +
     `📌 الحالة: ${orderStatusLabel(l.status)}`;
   const kb = new InlineKeyboard();
-  if (l.status === "ACTIVE" && viewerId !== l.sellerId) kb.text("🛍 شراء (عرض سعر)", `jbuy|${l.id}`).row();
-  kb.text("🚩 إبلاغ", `jreport|listing|${l.id}`).text("⛔ حظر", `jblock|${l.sellerId}`);
+  if (isOwner) {
+    if (l.status === "ACTIVE" || l.status === "PAUSED") {
+      kb.text("✏️ تعديل", `jeditlisting|${l.id}`).row();
+      kb.text(l.status === "ACTIVE" ? "⏸ إيقاف" : "▶️ تفعيل", `jtogglelisting|${l.id}`).text("🗑 حذف", `jdeletelisting|${l.id}`);
+    }
+  } else {
+    if (l.status === "ACTIVE") kb.text("🛍 شراء (عرض سعر)", `jbuy|${l.id}`).row();
+    kb.text("🚩 إبلاغ", `jreport|listing|${l.id}`).text("⛔ حظر", `jblock|${l.sellerId}`);
+  }
   const photoIds = Array.isArray(l.photoFileIds) ? (l.photoFileIds as unknown as string[]) : [];
   if (photoIds.length > 0) {
     await bot.api.sendPhoto(chatId, photoIds[0], { caption: text, reply_markup: kb });
@@ -743,7 +811,8 @@ async function sendStoreListingCard(bot: TelegramBot, chatId: number, id: string
 async function sendStoreWantedCard(bot: TelegramBot, chatId: number, id: string, viewerId: string) {
   const w = await prisma.storeWantedListing.findUnique({ where: { id } });
   if (!w) return;
-  if (await isBlocked(viewerId, w.buyerId)) {
+  const isOwner = viewerId === w.buyerId;
+  if (!isOwner && (await isBlocked(viewerId, w.buyerId))) {
     await bot.api.sendMessage(chatId, "🚫 غير متاح.");
     return;
   }
@@ -756,9 +825,16 @@ async function sendStoreWantedCard(bot: TelegramBot, chatId: number, id: string,
     `📌 الحالة: ${orderStatusLabel(w.status)}\n` +
     relativeTime(w.created_at);
   const kb = new InlineKeyboard();
-  if (w.status === "ACTIVE" && viewerId !== w.buyerId) kb.text("💰 بيع (تقديم عرض)", `jselloffer|${w.id}`).row();
-  if (contactUrl) kb.url("💬 تواصل", contactUrl).row();
-  kb.text("🚩 إبلاغ", `jreport|wanted|${w.id}`).text("⛔ حظر", `jblock|${w.buyerId}`);
+  if (isOwner) {
+    if (w.status === "ACTIVE" || w.status === "PAUSED") {
+      kb.text("✏️ تعديل", `jeditwanted|${w.id}`).row();
+      kb.text(w.status === "ACTIVE" ? "⏸ إيقاف" : "▶️ تفعيل", `jtogglewanted|${w.id}`).text("🗑 حذف", `jdeletewanted|${w.id}`);
+    }
+  } else {
+    if (w.status === "ACTIVE") kb.text("💰 بيع (تقديم عرض)", `jselloffer|${w.id}`).row();
+    if (contactUrl) kb.url("💬 تواصل", contactUrl).row();
+    kb.text("🚩 إبلاغ", `jreport|wanted|${w.id}`).text("⛔ حظر", `jblock|${w.buyerId}`);
+  }
   await bot.api.sendMessage(chatId, text, { reply_markup: kb });
 }
 
@@ -804,8 +880,14 @@ async function askStoreListingStep(bot: TelegramBot, chatId: number, step: Store
       break;
   }
 }
-async function startStoreListingWizard(bot: TelegramBot, chatId: number, userId: string) {
-  await setPending(userId, { mode: "store_listing_wizard", step: "title", data: { photoFileIds: [] } });
+async function startStoreListingWizard(bot: TelegramBot, chatId: number, userId: string, editingId?: string) {
+  let photoFileIds: string[] = [];
+  if (editingId) {
+    const existing = await prisma.storeListing.findUnique({ where: { id: editingId } });
+    if (existing) photoFileIds = Array.isArray(existing.photoFileIds) ? (existing.photoFileIds as unknown as string[]) : [];
+    if (editingId) await bot.api.sendMessage(chatId, "✏️ تعديل المنتج — أعد إدخال كل الحقول (الصور الحالية تبقى ما لم ترسل صوراً جديدة).");
+  }
+  await setPending(userId, { mode: "store_listing_wizard", step: "title", data: { photoFileIds }, editingId });
   await askStoreListingStep(bot, chatId, "title");
 }
 async function consumeStoreListingStep(bot: TelegramBot, chatId: number, userId: string, pending: Extract<PendingAction, { mode: "store_listing_wizard" }>, text: string) {
@@ -843,17 +925,22 @@ async function consumeStoreListingStep(bot: TelegramBot, chatId: number, userId:
 
   const next = nextStoreListingStep(step);
   if (!next) {
-    await prisma.storeListing.create({
-      data: {
-        sellerId: userId, title: data.title!, description: data.description ?? null, price: data.price!,
-        photoFileIds: data.photoFileIds as any, deliveryMethod: data.deliveryMethod!, paymentMethod: data.paymentMethod!,
-      },
-    });
+    const fields = {
+      title: data.title!, description: data.description ?? null, price: data.price!,
+      photoFileIds: data.photoFileIds as any, deliveryMethod: data.deliveryMethod!, paymentMethod: data.paymentMethod!,
+    };
+    if (pending.editingId) {
+      await prisma.storeListing.update({ where: { id: pending.editingId }, data: fields });
+      await setPending(userId, null);
+      await bot.api.sendMessage(chatId, "✅ تم تحديث منتجك.", { reply_markup: mainMenu() });
+      return;
+    }
+    await prisma.storeListing.create({ data: { sellerId: userId, ...fields } });
     await setPending(userId, null);
     await bot.api.sendMessage(chatId, "✅ تم نشر المنتج في المتجر.", { reply_markup: mainMenu() });
     return;
   }
-  await setPending(userId, { mode: "store_listing_wizard", step: next, data });
+  await setPending(userId, { mode: "store_listing_wizard", step: next, data, editingId: pending.editingId });
   await askStoreListingStep(bot, chatId, next);
 }
 
@@ -875,8 +962,9 @@ async function askStoreWantedStep(bot: TelegramBot, chatId: number, step: StoreW
       break;
   }
 }
-async function startStoreWantedWizard(bot: TelegramBot, chatId: number, userId: string) {
-  await setPending(userId, { mode: "store_wanted_wizard", step: "title", data: {} });
+async function startStoreWantedWizard(bot: TelegramBot, chatId: number, userId: string, editingId?: string) {
+  if (editingId) await bot.api.sendMessage(chatId, "✏️ تعديل الطلب — أعد إدخال كل الحقول.");
+  await setPending(userId, { mode: "store_wanted_wizard", step: "title", data: {}, editingId });
   await askStoreWantedStep(bot, chatId, "title");
 }
 async function consumeStoreWantedStep(bot: TelegramBot, chatId: number, userId: string, pending: Extract<PendingAction, { mode: "store_wanted_wizard" }>, text: string) {
@@ -891,12 +979,19 @@ async function consumeStoreWantedStep(bot: TelegramBot, chatId: number, userId: 
   }
   const next = nextStoreWantedStep(step);
   if (!next) {
-    await prisma.storeWantedListing.create({ data: { buyerId: userId, title: data.title!, description: data.description ?? null, budget: data.budget ?? null } });
+    const fields = { title: data.title!, description: data.description ?? null, budget: data.budget ?? null };
+    if (pending.editingId) {
+      await prisma.storeWantedListing.update({ where: { id: pending.editingId }, data: fields });
+      await setPending(userId, null);
+      await bot.api.sendMessage(chatId, "✅ تم تحديث طلبك.", { reply_markup: mainMenu() });
+      return;
+    }
+    await prisma.storeWantedListing.create({ data: { buyerId: userId, ...fields } });
     await setPending(userId, null);
     await bot.api.sendMessage(chatId, "✅ تم نشر طلبك في المتجر.", { reply_markup: mainMenu() });
     return;
   }
-  await setPending(userId, { mode: "store_wanted_wizard", step: next, data });
+  await setPending(userId, { mode: "store_wanted_wizard", step: next, data, editingId: pending.editingId });
   await askStoreWantedStep(bot, chatId, next);
 }
 
@@ -1646,14 +1741,14 @@ export async function handleJobsBotUpdate(bot: TelegramBot, botRow: BotRow, upda
   if (text === "💰 طلباتي (بيع)") {
     return sendMyStoreListings(bot, chatId, tgUserId, 0);
   }
-  if (text === "💰 بيع") {
+  if (text === "💰 أمر بيع") {
     if (profile!.roleType !== "TRADER") {
       await bot.api.sendMessage(chatId, "⚠️ البيع متاح فقط لملفات «تاجر».", { reply_markup: storeMenu() });
       return;
     }
     return startStoreListingWizard(bot, chatId, tgUserId);
   }
-  if (text === "🛍 شراء") {
+  if (text === "🛍 أمر شراء") {
     if (profile!.roleType !== "TRADER") {
       await bot.api.sendMessage(chatId, "⚠️ نشر طلب شراء متاح فقط لملفات «تاجر». يمكنك تصفح المتجر بحرية رغم ذلك.", { reply_markup: storeMenu() });
       return;
@@ -1747,6 +1842,48 @@ async function handleJobsCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
   if (data.startsWith("jselloffer|")) {
     const wantedId = data.split("|")[1];
     await startOffer(bot, chatId, tgUserId, "WANTED", wantedId);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jeditlisting|")) {
+    const listingId = data.split("|")[1];
+    const l = await prisma.storeListing.findUnique({ where: { id: listingId } });
+    if (!l || l.sellerId !== tgUserId) {
+      await bot.api.answerCallbackQuery(cq.id, { text: "غير مسموح" }).catch(() => null);
+      return;
+    }
+    await startStoreListingWizard(bot, chatId, tgUserId, listingId);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jtogglelisting|")) {
+    await toggleListingStatus(bot, chatId, tgUserId, data.split("|")[1]);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jdeletelisting|")) {
+    await deleteListing(bot, chatId, tgUserId, data.split("|")[1]);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jeditwanted|")) {
+    const wantedId = data.split("|")[1];
+    const w = await prisma.storeWantedListing.findUnique({ where: { id: wantedId } });
+    if (!w || w.buyerId !== tgUserId) {
+      await bot.api.answerCallbackQuery(cq.id, { text: "غير مسموح" }).catch(() => null);
+      return;
+    }
+    await startStoreWantedWizard(bot, chatId, tgUserId, wantedId);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jtogglewanted|")) {
+    await toggleWantedStatus(bot, chatId, tgUserId, data.split("|")[1]);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
+    return;
+  }
+  if (data.startsWith("jdeletewanted|")) {
+    await deleteWanted(bot, chatId, tgUserId, data.split("|")[1]);
     await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     return;
   }
