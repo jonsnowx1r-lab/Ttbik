@@ -57,8 +57,8 @@ page/route + your own new Prisma models. Pick ONE, build it fully, move to
 the next:
 
 1. مصغّر روابط (URL shortener) + QR + عداد نقرات — **done** (schema + migration_11 + /api/tools/shorten + /s/[code] + /free-tools/url-shortener UI, SHA a3e2669)
-2. بطاقة أعمال رقمية (صفحة رابط واحد، نمط Linktree) — نطاق فرعي مخصص لاحقاً
-3. مولّد سيرة ذاتية (CV) عربي مع تصدير PDF
+2. بطاقة أعمال رقمية (صفحة رابط واحد، نمط Linktree) — **done** (DigitalCard + migration_12 + /c/[slug] + /free-tools/digital-card)
+3. مولّد سيرة ذاتية (CV) عربي مع تصدير PDF — **done** (stateless window.print(), /free-tools/cv-generator, SHA 52faf849)
 4. مولّد عقود/فواتير بسيطة بالعربي
 5. حاسبة/محول عملات رقمية (نافعة أيضاً كتسويق لمحفظة TON الموجودة)
 6. أداة ضغط/تحويل صور — already live as image-optimizer
@@ -68,7 +68,7 @@ new Prisma models, only ADD a sibling branch to the shared dispatcher files
 (never edit Claude's), and not overlap AD_BOT/MARRIAGE_BOT. Propose it here
 first before touching any shared file.
 
-Status: done (item 1 shipped a3e266984b204cb6673e2f9da8fab698ffa37f3a)
+Status: items 1–3 shipped; remaining 4–5
 
 ## O2 — 2026-09-04 — Add the site's ad slot to your 3 pages (owner directive)
 
