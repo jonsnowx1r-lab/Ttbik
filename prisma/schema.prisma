@@ -243,6 +243,15 @@ model MatchUser {
   mutedUntil     DateTime? // admin action from a reviewed report — temporary block, lifts on its own once past
   created_at     DateTime  @default(now())
 
+  // MARRIAGE_BOT's own wallet fields (owner spec, 2026-09-05) — deliberately
+  // separate from AD_BOT's User.balance/User.tonMemo. Reusing that table
+  // would have meant a MARRIAGE_BOT deposit crediting the exact same
+  // balance as any AD_BOT the same Telegram user has elsewhere (both
+  // NOWPayments' webhook and the TON scanner key purely off Telegram ID) —
+  // confirmed as a real risk, not a theoretical one. See MatchTransaction.
+  balance        Float     @default(0.0)
+  tonMemo        String?   @unique
+
   profile        MatchProfile?
   preference     PartnerPreference?
   likesGiven     MatchLike[]        @relation("LikesGiven")
@@ -253,6 +262,28 @@ model MatchUser {
   reportsReceived MatchReport[]     @relation("ReportsReceived")
   queueEntries   RandomChatQueue[]
   adminMessages  AdminMessage[]
+  transactions   MatchTransaction[]
+}
+
+// MARRIAGE_BOT's own financial ledger — fully isolated from AD_BOT's
+// User/Transaction/TonTransaction tables. Nothing in adBotLogic.ts or
+// ton-service.ts ever reads or writes this table, and nothing that touches
+// this table ever reads or writes prisma.user/prisma.transaction. Real-world
+// custody (the one NOWPayments merchant account, the one shared TON hot
+// wallet) is still pooled with AD_BOT's — that's normal, like a bank's
+// omnibus account — but the internal bookkeeping never crosses over.
+model MatchTransaction {
+  id         String    @id @default(uuid())
+  userId     String
+  user       MatchUser @relation(fields: [userId], references: [id])
+  amount     Float
+  currency   String // USD-equivalent value credited/charged
+  type       String // DEPOSIT | BOOST | VERIFIED_BADGE | EXTRA_PHOTOS | PROFILE_VISITORS | ADVANCED_FILTERS | SUPER_LIKE | VIP_MEMBERSHIP | REFERRAL_REWARD
+  status     String    @default("COMPLETED")
+  txHash     String? // NOWPayments payment_id / TON on-chain tx hash — IPN & scan idempotency
+  created_at DateTime  @default(now())
+
+  @@unique([txHash])
 }
 
 // Own profile — goes through SUPER_ADMIN manual approval (status) before
