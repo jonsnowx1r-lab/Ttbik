@@ -252,6 +252,24 @@ model MatchUser {
   balance        Float     @default(0.0)
   tonMemo        String?   @unique
 
+  // Paid feature unlocks (owner spec, 2026-09-05) — one-time purchases,
+  // permanent once bought (unlike boostedUntil/vipUntil, which expire).
+  advancedFiltersUnlocked Boolean  @default(false)
+  profileVisitorsUnlocked Boolean  @default(false)
+  extraPhotosUnlocked     Boolean  @default(false)
+  // Golden VIP membership — while active, also grants advanced filters,
+  // profile visitors, incognito, and a continuously-refreshed boost
+  // without needing the individual one-time unlocks. See isVipActive().
+  vipUntil                DateTime?
+  // Referral growth (owner spec, 2026-09-05) — set once at account
+  // creation from a /start ref_<id> deep link; never overwritten after.
+  referredBy              String?
+  // Guards against re-granting the referrer's reward if this user's
+  // profile gets re-approved later (editing an approved profile sends it
+  // back to PENDING for re-review) — the reward is a one-time thing per
+  // referred person, not per approval event.
+  referralRewardGranted   Boolean  @default(false)
+
   profile        MatchProfile?
   preference     PartnerPreference?
   likesGiven     MatchLike[]        @relation("LikesGiven")
@@ -299,14 +317,39 @@ model MatchProfile {
   job           String?
   education     String?
   attributes    String? // free-text description (height, build, etc.)
+  city          String? // optional, free for everyone to set — only usable as a SEARCH filter by someone with advanced filters unlocked (see hasAdvancedFilters)
+  maritalStatus String? // optional, same as above
   contactMethod String // TELEGRAM | WHATSAPP
   contactValue  String // @username, or a phone number for a wa.me link
   photoFileId   String? // Telegram file_id of the uploaded profile photo — null shows an empty placeholder
+  photoFileId2  String? // paid extra photo slot (see EXTRA_PHOTOS feature) — sent as a follow-up message, not part of the main card
+  photoFileId3  String? // paid extra photo slot
   voiceFileId   String? // Telegram file_id of an optional short (~15s) voice intro — recorded as a normal Telegram voice message, no new upload UI needed
   status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
   isHidden      Boolean   @default(false) // user-toggled pause — excluded from search results without deleting the profile
+  // Paid features (owner spec, 2026-09-05) — see MatchTransaction for the
+  // pricing/charge side.
+  boostedUntil  DateTime? // profile sorts first in search results until this timestamp — PROFILE_BOOST purchase, or continuously refreshed while MatchUser.vipUntil is active
+  verificationStatus String @default("NONE") // NONE | PENDING | VERIFIED | REJECTED — the ☑️ badge shown next to the name on search cards
+  verificationPhotoFileId String? // ID photo submitted for the verification review — visible only to SUPER_ADMIN, never shown to other users
+  isIncognito   Boolean   @default(false) // only has effect while the owner's MatchUser.vipUntil is active — see isVipActive()
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
+}
+
+// Who viewed whose profile in search results (owner spec, 2026-09-05) —
+// upserted per (owner, viewer) pair so this stays one row per relationship
+// (most-recent visit), not an ever-growing log. Powers the paid "من زار
+// ملفي" feature. A visit is skipped entirely when the VIEWER has
+// incognito active (see sendSearchCard) — incognito hides your own
+// activity from others, not what others did to you.
+model MatchProfileVisit {
+  id        String   @id @default(uuid())
+  ownerId   String
+  viewerId  String
+  visitedAt DateTime @default(now())
+
+  @@unique([ownerId, viewerId])
 }
 
 // Photo access consent (owner spec, 2026-09-05) — a profile's photo is
@@ -338,6 +381,11 @@ model PartnerPreference {
   job        String?
   education  String?
   attributes String?
+  // Advanced filters (paid, owner spec, 2026-09-05) — only ever set/used
+  // once MatchUser.advancedFiltersUnlocked (or an active VIP membership)
+  // is true; harmless if set otherwise, just unused by buildSearchQueue.
+  city            String?
+  maritalStatus   String?
   updated_at DateTime  @updatedAt
 }
 
@@ -347,6 +395,7 @@ model MatchLike {
   fromUser   MatchUser @relation("LikesGiven", fields: [fromUserId], references: [id])
   toUserId   String
   toUser     MatchUser @relation("LikesReceived", fields: [toUserId], references: [id])
+  note       String? // Super Like (paid, owner spec, 2026-09-05) — a short message attached to the like, visible only inside the recipient's own "من أعجب بي" list, never pushed as a forced DM
   created_at DateTime  @default(now())
 
   @@unique([fromUserId, toUserId])

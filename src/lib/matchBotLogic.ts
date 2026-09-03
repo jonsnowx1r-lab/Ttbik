@@ -25,6 +25,18 @@ const SKIP_COOLDOWN_HOURS = 24;
 const ONLINE_THRESHOLD_MINUTES = 5;
 const CONTACT_REQUEST_THRESHOLD = 15; // messages exchanged before offering the formal-contact-request button
 
+// Paid feature pricing (owner spec, 2026-09-05) — USD-equivalent, charged
+// from MatchUser.balance (see the MARRIAGE_BOT ledger). All one-time
+// purchases are permanent unlocks except Boost (24h) and VIP (30 days).
+const PRICE_BOOST_24H = 2;
+const PRICE_VERIFIED_BADGE = 3;
+const PRICE_EXTRA_PHOTOS = 2;
+const PRICE_PROFILE_VISITORS = 2;
+const PRICE_ADVANCED_FILTERS = 2;
+const PRICE_SUPER_LIKE = 1;
+const PRICE_VIP_30D = 8;
+const VIP_DAYS = 30;
+
 // Duplicated (not imported) from adBotLogic.ts's own BANNED_WORDS list on
 // purpose — MARRIAGE_BOT's logic never imports from or edits AD_BOT's
 // files (owner directive, 2026-09-05), same reasoning as
@@ -61,7 +73,9 @@ function shortId(id: string): string {
 }
 
 type Gender = "MALE" | "FEMALE";
-type ProfileStep = "gender" | "name" | "age" | "country" | "job" | "education" | "attributes" | "contactMethod" | "contactValue" | "photo" | "voice";
+type ProfileStep =
+  | "gender" | "name" | "age" | "country" | "job" | "education" | "attributes"
+  | "city" | "maritalStatus" | "contactMethod" | "contactValue" | "photo" | "voice";
 type PrefStep = "country" | "ageMin" | "ageMax" | "job" | "education" | "attributes";
 type ProfileDraft = {
   gender?: Gender;
@@ -71,6 +85,8 @@ type ProfileDraft = {
   job?: string | null;
   education?: string | null;
   attributes?: string | null;
+  city?: string | null;
+  maritalStatus?: string | null;
   contactMethod?: "TELEGRAM" | "WHATSAPP";
   contactValue?: string;
   photoFileId?: string | null;
@@ -97,7 +113,11 @@ type PendingAction =
   | { mode: "admin_lookup" }
   | { mode: "admin_unban" }
   | { mode: "contact_admin_compose" }
-  | { mode: "admin_reply"; targetUserId: string; messageId: string };
+  | { mode: "admin_reply"; targetUserId: string; messageId: string }
+  | { mode: "verify_badge_photo" }
+  | { mode: "extra_photo_upload"; slot: 2 | 3 }
+  | { mode: "advanced_filter_wizard"; step: "city" | "maritalStatus"; data: { city?: string | null; maritalStatus?: string | null } }
+  | { mode: "superlike_note"; targetUserId: string };
 
 const SKIP_LABEL = "⏭ غير محدد / لا يهم";
 
@@ -108,7 +128,21 @@ function mainMenu(): Keyboard {
   return new Keyboard()
     .text("👤 ملفي الشخصي").text("💍 مواصفات الشريك").row()
     .text("🔍 البحث عن شريك").text("🔀 مراسلة عشوائية").row()
-    .text("💌 من أعجب بي").text("ℹ️ معلومات")
+    .text("💌 من أعجب بي").text("ℹ️ معلومات").row()
+    .text("⭐ الترقيات والمزايا")
+    .resized();
+}
+function upgradesMenu(): Keyboard {
+  return new Keyboard()
+    .text("💰 رصيدي وإيداع").row()
+    .text(`🚀 رفع ملفي ($${PRICE_BOOST_24H}/24س)`).row()
+    .text(`☑️ طلب التوثيق ($${PRICE_VERIFIED_BADGE})`).row()
+    .text(`🖼 صور إضافية ($${PRICE_EXTRA_PHOTOS})`).row()
+    .text(`👀 من زار ملفي ($${PRICE_PROFILE_VISITORS})`).row()
+    .text(`🎯 فلاتر متقدمة ($${PRICE_ADVANCED_FILTERS})`).row()
+    .text(`👑 العضوية الذهبية ($${PRICE_VIP_30D}/شهر)`).row()
+    .text("🕶 وضع التخفي (ضمن الذهبية)").row()
+    .text(backLabel())
     .resized();
 }
 function infoMenu(): Keyboard {
@@ -178,10 +212,10 @@ async function setPending(userId: string, action: PendingAction | null) {
   await prisma.matchUser.update({ where: { id: userId }, data: { pendingAction: action as any } });
 }
 
-async function ensureMatchUser(botId: string, tgUserId: string) {
+async function ensureMatchUser(botId: string, tgUserId: string, referredBy?: string) {
   const existing = await prisma.matchUser.findUnique({ where: { id: tgUserId } });
   if (existing) return existing;
-  return prisma.matchUser.create({ data: { id: tgUserId, botId } });
+  return prisma.matchUser.create({ data: { id: tgUserId, botId, referredBy: referredBy && referredBy !== tgUserId ? referredBy : null } });
 }
 
 function relativeTime(date: Date): string {
@@ -207,9 +241,51 @@ async function isMutuallyBlocked(aId: string, bId: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------
+// Paid features — shared helpers (owner spec, 2026-09-05)
+// ---------------------------------------------------------------------
+function isVipActive(user: Pick<MatchUser, "vipUntil">): boolean {
+  return !!user.vipUntil && user.vipUntil > new Date();
+}
+function hasAdvancedFilters(user: Pick<MatchUser, "advancedFiltersUnlocked" | "vipUntil">): boolean {
+  return user.advancedFiltersUnlocked || isVipActive(user);
+}
+function hasProfileVisitors(user: Pick<MatchUser, "profileVisitorsUnlocked" | "vipUntil">): boolean {
+  return user.profileVisitorsUnlocked || isVipActive(user);
+}
+function isEffectivelyBoosted(profile: Pick<MatchProfile, "boostedUntil">, user: Pick<MatchUser, "vipUntil">): boolean {
+  return (!!profile.boostedUntil && profile.boostedUntil > new Date()) || isVipActive(user);
+}
+
+function depositLink(userId: string): string {
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app").replace(/\/$/, "");
+  return `${base}/pay/marriage?uid=${userId}`;
+}
+function insufficientBalanceText(userId: string, needed: number, have: number): string {
+  return `❌ رصيدك الحالي $${have.toFixed(2)} لا يكفي (المطلوب $${needed.toFixed(2)}). أودِع من هنا:\n${depositLink(userId)}`;
+}
+
+// Deducts `amount` from the user's MARRIAGE_BOT balance and logs a
+// MatchTransaction — atomically, so a crash between the two is
+// impossible. Returns ok:false (charging nothing) if the balance is too
+// low; the caller is responsible for showing insufficientBalanceText.
+async function chargeMatchUser(userId: string, amount: number, type: string): Promise<{ ok: boolean; balance: number }> {
+  const user = await prisma.matchUser.findUnique({ where: { id: userId } });
+  const balance = Number(user?.balance || 0);
+  if (balance < amount) return { ok: false, balance };
+  await prisma.$transaction([
+    prisma.matchUser.update({ where: { id: userId }, data: { balance: { decrement: amount } } }),
+    prisma.matchTransaction.create({ data: { userId, amount, currency: "internal", type, status: "COMPLETED" } }),
+  ]);
+  return { ok: true, balance: balance - amount };
+}
+
+// ---------------------------------------------------------------------
 // Profile wizard
 // ---------------------------------------------------------------------
-const PROFILE_STEP_ORDER: ProfileStep[] = ["gender", "name", "age", "country", "job", "education", "attributes", "contactMethod", "contactValue", "photo", "voice"];
+const PROFILE_STEP_ORDER: ProfileStep[] = [
+  "gender", "name", "age", "country", "job", "education", "attributes",
+  "city", "maritalStatus", "contactMethod", "contactValue", "photo", "voice",
+];
 function nextProfileStep(step: ProfileStep): ProfileStep | null {
   const i = PROFILE_STEP_ORDER.indexOf(step);
   return i >= 0 && i + 1 < PROFILE_STEP_ORDER.length ? PROFILE_STEP_ORDER[i + 1] : null;
@@ -236,6 +312,12 @@ async function askProfileStep(bot: TelegramBot, chatId: number, step: ProfileSte
       break;
     case "attributes":
       await bot.api.sendMessage(chatId, "أرسل وصفاً موجزاً لمواصفاتك (الطول، اللون، إلخ):", { reply_markup: skipMenu() });
+      break;
+    case "city":
+      await bot.api.sendMessage(chatId, "أرسل مدينة سكنك (اختياري):", { reply_markup: skipMenu() });
+      break;
+    case "maritalStatus":
+      await bot.api.sendMessage(chatId, "أرسل حالتك الاجتماعية (أعزب/مطلق/أرمل...) (اختياري):", { reply_markup: skipMenu() });
       break;
     case "contactMethod":
       await bot.api.sendMessage(chatId, "ما هي وسيلة التواصل التي تفضلها لتلقي الرسائل؟", { reply_markup: contactMethodMenu() });
@@ -270,6 +352,8 @@ async function saveProfile(bot: TelegramBot, chatId: number, userId: string, dat
     job: data.job ?? null,
     education: data.education ?? null,
     attributes: data.attributes ?? null,
+    city: data.city ?? null,
+    maritalStatus: data.maritalStatus ?? null,
     contactMethod: data.contactMethod!,
     contactValue: data.contactValue!,
     status: "PENDING",
@@ -346,6 +430,10 @@ async function consumeProfileStep(bot: TelegramBot, chatId: number, userId: stri
     data.education = isSkip(text) ? null : text;
   } else if (step === "attributes") {
     data.attributes = isSkip(text) ? null : text;
+  } else if (step === "city") {
+    data.city = isSkip(text) ? null : text;
+  } else if (step === "maritalStatus") {
+    data.maritalStatus = isSkip(text) ? null : text;
   } else if (step === "contactMethod") {
     if (text !== "✈️ تلجرام" && text !== "💬 واتساب") {
       await bot.api.sendMessage(chatId, "اختر من القائمة.", { reply_markup: contactMethodMenu() });
@@ -469,7 +557,10 @@ async function buildSearchQueue(botId: string, selfId: string, selfProfile: Matc
   const blocks = await prisma.matchBlock.findMany({ where: { OR: [{ blockerId: selfId }, { blockedId: selfId }] } });
   const blockedIds = new Set(blocks.flatMap((b) => [b.blockerId, b.blockedId]).filter((id) => id !== selfId));
 
-  const filtered: MatchProfile[] = [];
+  const selfUser = await prisma.matchUser.findUnique({ where: { id: selfId } });
+  const useAdvancedFilters = selfUser ? hasAdvancedFilters(selfUser) : false;
+
+  const filtered: typeof candidates = [];
   for (const c of candidates) {
     if (blockedIds.has(c.userId)) continue;
     if (c.country.trim().toLowerCase() !== selfPref.country.trim().toLowerCase()) continue;
@@ -477,6 +568,13 @@ async function buildSearchQueue(botId: string, selfId: string, selfProfile: Matc
     if (!looseMatch(c.job, selfPref.job)) continue;
     if (!looseMatch(c.education, selfPref.education)) continue;
     if (!looseMatch(c.attributes, selfPref.attributes)) continue;
+    // Advanced filters (paid, owner spec, 2026-09-05) — only applied if
+    // the searcher has unlocked them; harmless no-op otherwise since
+    // looseMatch(x, null) always passes.
+    if (useAdvancedFilters) {
+      if (!looseMatch(c.city, selfPref.city)) continue;
+      if (!looseMatch(c.maritalStatus, selfPref.maritalStatus)) continue;
+    }
 
     if (!sameCountry) {
       // Cross-country: mutual match — the candidate's own preference must
@@ -491,6 +589,12 @@ async function buildSearchQueue(botId: string, selfId: string, selfProfile: Matc
     }
     filtered.push(c);
   }
+
+  // Profile Boost (paid, owner spec, 2026-09-05) — boosted profiles sort
+  // first, within the already-matched/filtered set (never bypasses the
+  // actual matching rules above, just re-orders who's seen first among
+  // equally-eligible candidates).
+  filtered.sort((a, b) => (isEffectivelyBoosted(b, b.user) ? 1 : 0) - (isEffectivelyBoosted(a, a.user) ? 1 : 0));
 
   return filtered.slice(0, 20).map((c) => c.userId);
 }
@@ -524,23 +628,27 @@ function seriousnessLabel(score: number): string {
 }
 
 async function sendSearchCard(bot: TelegramBot, chatId: number, targetUserId: string, viewerId: string) {
-  const [profile, targetUser, likeCount, reportsReceived, photoPermission] = await Promise.all([
+  const [profile, targetUser, likeCount, reportsReceived, photoPermission, viewer] = await Promise.all([
     prisma.matchProfile.findUnique({ where: { userId: targetUserId } }),
     prisma.matchUser.findUnique({ where: { id: targetUserId } }),
     prisma.matchLike.count({ where: { toUserId: targetUserId } }),
     prisma.matchReport.count({ where: { targetId: targetUserId } }),
     prisma.matchPhotoPermission.findUnique({ where: { ownerId_viewerId: { ownerId: targetUserId, viewerId } } }),
+    prisma.matchUser.findUnique({ where: { id: viewerId }, include: { profile: true } }),
   ]);
   if (!profile || !targetUser) return false;
 
   const lines = [
-    `👤 ${profile.name}، ${profile.age}`,
+    `👤 ${profile.name}، ${profile.age}${profile.verificationStatus === "VERIFIED" ? " ☑️" : ""}`,
     `🌍 ${profile.country}`,
     profile.job ? `💼 ${profile.job}` : null,
     profile.education ? `🎓 ${profile.education}` : null,
     profile.attributes ? `📝 ${profile.attributes}` : null,
+    profile.city ? `🏙 ${profile.city}` : null,
+    profile.maritalStatus ? `💍 ${profile.maritalStatus}` : null,
     presenceLabel(targetUser.lastActiveAt),
     seriousnessLabel(computeSeriousnessScore(profile, targetUser, reportsReceived)),
+    isEffectivelyBoosted(profile, targetUser) ? "🚀 ملف مرفوع" : null,
   ].filter((l): l is string => !!l);
 
   // Callback data carries the full Telegram ID, not a shortId suffix — a
@@ -548,7 +656,7 @@ async function sendSearchCard(bot: TelegramBot, chatId: number, targetUserId: st
   // collision risk between different users; the full ID easily fits
   // Telegram's 64-byte callback_data limit anyway.
   const kb = new InlineKeyboard();
-  kb.text(likeButtonLabel(likeCount), `mlike|${targetUserId}`);
+  kb.text(likeButtonLabel(likeCount), `mlike|${targetUserId}`).text(`⭐ سوبر لايك`, `msuperlike|${targetUserId}`).row();
   const contactUrl = profile.contactMethod === "TELEGRAM" ? `https://t.me/${profile.contactValue.replace(/^@/, "")}` : `https://wa.me/${profile.contactValue.replace(/[^0-9]/g, "")}`;
   kb.url("💬 رسالة", contactUrl).row();
   kb.text("➡️ التالي", "mnext").row();
@@ -571,6 +679,28 @@ async function sendSearchCard(bot: TelegramBot, chatId: number, targetUserId: st
   }
   if (profile.voiceFileId) {
     await bot.api.sendVoice(chatId, profile.voiceFileId).catch(() => null);
+  }
+  // Extra photos (paid, owner spec, 2026-09-05) — sent as follow-up
+  // messages, only once the main photo is actually visible to this
+  // viewer (showing them while the main photo is still consent-gated
+  // would defeat the whole point of the gate).
+  if (photoGranted) {
+    if (profile.photoFileId2) await bot.api.sendPhoto(chatId, profile.photoFileId2).catch(() => null);
+    if (profile.photoFileId3) await bot.api.sendPhoto(chatId, profile.photoFileId3).catch(() => null);
+  }
+
+  // Profile Visitors tracking (paid, owner spec, 2026-09-05) — skipped
+  // entirely when the VIEWER has incognito active (their own activity,
+  // not the profile owner's, is what incognito hides).
+  const viewerIncognito = !!viewer && !!viewer.profile?.isIncognito && isVipActive(viewer);
+  if (targetUserId !== viewerId && !viewerIncognito) {
+    await prisma.matchProfileVisit
+      .upsert({
+        where: { ownerId_viewerId: { ownerId: targetUserId, viewerId } },
+        update: { visitedAt: new Date() },
+        create: { ownerId: targetUserId, viewerId },
+      })
+      .catch(() => null);
   }
   return true;
 }
@@ -627,6 +757,9 @@ async function showLikedBy(bot: TelegramBot, chatId: number, userId: string) {
     const profile = await prisma.matchProfile.findUnique({ where: { userId: like.fromUserId } });
     if (!profile || profile.status !== "APPROVED" || profile.isHidden) continue;
     await sendSearchCard(bot, chatId, like.fromUserId, userId);
+    if (like.note) {
+      await bot.api.sendMessage(chatId, `⭐ رسالة سوبر لايك من ${profile.name}:\n\n${like.note}`).catch(() => null);
+    }
   }
 }
 
@@ -637,7 +770,7 @@ async function handleMatchCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
   const data = String(cq.data || "");
   if (!chatId) return;
 
-  if (data.startsWith("madmin_") || data.startsWith("mrep_")) {
+  if (data.startsWith("madmin_") || data.startsWith("mrep_") || data.startsWith("mverify_")) {
     if (!SUPER_ADMIN_ID || tgUserId !== SUPER_ADMIN_ID) {
       await bot.api.answerCallbackQuery(cq.id).catch(() => null);
       return;
@@ -683,6 +816,15 @@ async function handleMatchCallback(bot: TelegramBot, botRow: BotRow, cq: any) {
       }
     }
     await bot.api.answerCallbackQuery(cq.id, { text: "🚩 تم إرسال بلاغك" }).catch(() => null);
+    return;
+  }
+  if (data.startsWith("msuperlike|")) {
+    const targetId = data.split("|")[1];
+    await setPending(tgUserId, { mode: "superlike_note", targetUserId: targetId });
+    await bot.api
+      .sendMessage(chatId, `⭐ اكتب رسالة قصيرة ترافق إعجابك (سيُخصم $${PRICE_SUPER_LIKE} من رصيدك):`, { reply_markup: plainBackMenu() })
+      .catch(() => null);
+    await bot.api.answerCallbackQuery(cq.id).catch(() => null);
     return;
   }
   if (data.startsWith("mphotoreq|")) {
@@ -949,6 +1091,23 @@ async function applyProfileDecision(bot: TelegramBot, adminChatId: number, profi
       approve ? "✅ تم اعتماد ملفك الشخصي! يمكنك الآن استخدام «🔍 البحث عن شريك»." : "❌ لم تتم الموافقة على ملفك الشخصي. راجع بياناتك من «👤 ملفي الشخصي» وحاول مجدداً."
     )
     .catch(() => null);
+
+  // Referral reward (owner spec, 2026-09-05) — 24h free Boost for the
+  // referrer, granted exactly once per referred person, only on a real
+  // approval (never on rejection).
+  if (approve) {
+    const referredUser = await prisma.matchUser.findUnique({ where: { id: profile.userId } });
+    if (referredUser?.referredBy && !referredUser.referralRewardGranted) {
+      await prisma.matchUser.update({ where: { id: profile.userId }, data: { referralRewardGranted: true } }).catch(() => null);
+      const boostUntil = new Date(Date.now() + 24 * 3600 * 1000);
+      await prisma.matchProfile
+        .update({ where: { userId: referredUser.referredBy }, data: { boostedUntil: boostUntil } })
+        .catch(() => null);
+      await bot.api
+        .sendMessage(Number(referredUser.referredBy), "🎁 اعتمدت الإدارة ملف صديق دعوته! حصلت على رفع مجاني لملفك لمدة 24 ساعة.")
+        .catch(() => null);
+    }
+  }
 }
 
 async function decideProfile(bot: TelegramBot, chatId: number, idSuffix: string, approve: boolean) {
@@ -1178,6 +1337,21 @@ async function handleAdminMessage(bot: TelegramBot, chatId: number, text: string
 }
 
 async function handleAdminCallback(bot: TelegramBot, botId: string, chatId: number, data: string, cq: any) {
+  if (data.startsWith("mverify_yes|") || data.startsWith("mverify_no|")) {
+    const targetId = data.split("|")[1];
+    const approve = data.startsWith("mverify_yes|");
+    await prisma.matchProfile
+      .update({ where: { userId: targetId }, data: { verificationStatus: approve ? "VERIFIED" : "REJECTED" } })
+      .catch(() => null);
+    await bot.api
+      .sendMessage(
+        Number(targetId),
+        approve ? "☑️ تم توثيق ملفك! ستظهر الشارة بجانب اسمك في نتائج البحث." : "❌ لم يتم قبول طلب التوثيق. رسم المراجعة غير قابل للاسترجاع."
+      )
+      .catch(() => null);
+    await bot.api.answerCallbackQuery(cq.id, { text: approve ? "✅ تم التوثيق" : "❌ تم الرفض" }).catch(() => null);
+    return;
+  }
   if (data.startsWith("madmin_approve|") || data.startsWith("madmin_reject|")) {
     const approve = data.startsWith("madmin_approve|");
     const userId = data.split("|")[1];
@@ -1296,7 +1470,11 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
     return;
   }
 
-  const user = await ensureMatchUser(botRow.id, tgUserId);
+  // Referral capture (owner spec, 2026-09-05) — only meaningful on a
+  // brand-new user's very first /start; ensureMatchUser only writes
+  // referredBy on creation, never overwrites an existing row.
+  const refMatch = typeof msg.text === "string" ? msg.text.match(/^\/start(?:@\w+)?\s+ref_(\d+)/) : null;
+  const user = await ensureMatchUser(botRow.id, tgUserId, refMatch?.[1]);
   await prisma.matchUser.update({ where: { id: tgUserId }, data: { lastActiveAt: new Date() } }).catch(() => null);
 
   if (user.isBanned) {
@@ -1352,6 +1530,35 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
       await setPending(tgUserId, { mode: "profile_wizard", step: next, data: pending.data });
       await askProfileStep(bot, chatId, next);
     }
+    return;
+  }
+  if (msg.photo && pending?.mode === "verify_badge_photo") {
+    const charge = await chargeMatchUser(tgUserId, PRICE_VERIFIED_BADGE, "VERIFIED_BADGE");
+    if (!charge.ok) {
+      await setPending(tgUserId, null);
+      await bot.api.sendMessage(chatId, insufficientBalanceText(tgUserId, PRICE_VERIFIED_BADGE, charge.balance), { reply_markup: upgradesMenu() });
+      return;
+    }
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    await prisma.matchProfile.update({ where: { userId: tgUserId }, data: { verificationStatus: "PENDING", verificationPhotoFileId: fileId } });
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "✅ تم استلام طلب التوثيق، سيصلك إشعار خلال 48 ساعة.", { reply_markup: mainMenu() });
+    if (SUPER_ADMIN_ID) {
+      await bot.api
+        .sendPhoto(Number(SUPER_ADMIN_ID), fileId, {
+          caption: `☑️ طلب توثيق من #${shortId(tgUserId)}`,
+          reply_markup: new InlineKeyboard().text("✅ توثيق", `mverify_yes|${tgUserId}`).text("❌ رفض", `mverify_no|${tgUserId}`),
+        })
+        .catch(() => null);
+    }
+    return;
+  }
+  if (msg.photo && pending?.mode === "extra_photo_upload") {
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    const field = pending.slot === 2 ? "photoFileId2" : "photoFileId3";
+    await prisma.matchProfile.update({ where: { userId: tgUserId }, data: { [field]: fileId } });
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "✅ تم إضافة الصورة.", { reply_markup: upgradesMenu() });
     return;
   }
 
@@ -1520,9 +1727,167 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
   }
   if (text === "🔗 دعوة رابط البوت") {
     const me = await bot.api.getMe();
-    await bot.api.sendMessage(chatId, `🔗 شارك هذا الرابط مع أصدقائك لدعوتهم لاستخدام البوت:\n\nhttps://t.me/${me.username}`, { reply_markup: infoMenu() });
+    await bot.api.sendMessage(
+      chatId,
+      `🔗 شارك هذا الرابط مع أصدقائك لدعوتهم لاستخدام البوت:\n\nhttps://t.me/${me.username}?start=ref_${tgUserId}\n\n🎁 عند اعتماد الإدارة لملف أي صديق دعوته عبر هذا الرابط، تحصل تلقائياً على رفع مجاني لملفك لمدة 24 ساعة.`,
+      { reply_markup: infoMenu() }
+    );
     return;
   }
+  // ---------------------------------------------------------------------
+  // Paid features menu (owner spec, 2026-09-05)
+  // ---------------------------------------------------------------------
+  if (text === "⭐ الترقيات والمزايا") {
+    await bot.api.sendMessage(chatId, "⭐ الترقيات والمزايا المدفوعة — اختر ما يناسبك:", { reply_markup: upgradesMenu() });
+    return;
+  }
+  if (text === "💰 رصيدي وإيداع") {
+    const u = await prisma.matchUser.findUnique({ where: { id: tgUserId } });
+    const balance = Number(u?.balance || 0);
+    await bot.api.sendMessage(chatId, `💰 رصيدك الحالي: $${balance.toFixed(2)}\n\nللإيداع، افتح الرابط التالي:\n${depositLink(tgUserId)}`, { reply_markup: upgradesMenu() });
+    return;
+  }
+  if (text === `🚀 رفع ملفي ($${PRICE_BOOST_24H}/24س)`) {
+    const profile = await prisma.matchProfile.findUnique({ where: { userId: tgUserId } });
+    if (!profile) {
+      await bot.api.sendMessage(chatId, "⚠️ يجب إنشاء ملفك الشخصي أولاً.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    const charge = await chargeMatchUser(tgUserId, PRICE_BOOST_24H, "BOOST");
+    if (!charge.ok) {
+      await bot.api.sendMessage(chatId, insufficientBalanceText(tgUserId, PRICE_BOOST_24H, charge.balance), { reply_markup: upgradesMenu() });
+      return;
+    }
+    const boostedUntil = new Date(Date.now() + 24 * 3600 * 1000);
+    await prisma.matchProfile.update({ where: { userId: tgUserId }, data: { boostedUntil } });
+    await bot.api.sendMessage(chatId, `🚀 تم رفع ملفك! سيظهر أولاً في نتائج البحث حتى ${boostedUntil.toLocaleString("ar")}.`, { reply_markup: upgradesMenu() });
+    return;
+  }
+  if (text === `☑️ طلب التوثيق ($${PRICE_VERIFIED_BADGE})`) {
+    const profile = await prisma.matchProfile.findUnique({ where: { userId: tgUserId } });
+    if (!profile) {
+      await bot.api.sendMessage(chatId, "⚠️ يجب إنشاء ملفك الشخصي أولاً.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    if (profile.verificationStatus === "VERIFIED") {
+      await bot.api.sendMessage(chatId, "✅ ملفك موثّق بالفعل.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    if (profile.verificationStatus === "PENDING") {
+      await bot.api.sendMessage(chatId, "⏳ طلب التوثيق الخاص بك قيد المراجعة.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    await setPending(tgUserId, { mode: "verify_badge_photo" });
+    await bot.api.sendMessage(
+      chatId,
+      `☑️ أرسل صورة واضحة لهويتك الرسمية (سيُخصم $${PRICE_VERIFIED_BADGE} عند الإرسال، رسم مراجعة غير قابل للاسترجاع — لن تُعرض الصورة لأي مستخدم آخر، للمراجعة الإدارية فقط):`,
+      { reply_markup: plainBackMenu() }
+    );
+    return;
+  }
+  if (text === `🖼 صور إضافية ($${PRICE_EXTRA_PHOTOS})`) {
+    const profile = await prisma.matchProfile.findUnique({ where: { userId: tgUserId } });
+    if (!profile) {
+      await bot.api.sendMessage(chatId, "⚠️ يجب إنشاء ملفك الشخصي أولاً.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    const dbUser = await prisma.matchUser.findUnique({ where: { id: tgUserId } });
+    if (!dbUser?.extraPhotosUnlocked && !(dbUser && isVipActive(dbUser))) {
+      const charge = await chargeMatchUser(tgUserId, PRICE_EXTRA_PHOTOS, "EXTRA_PHOTOS");
+      if (!charge.ok) {
+        await bot.api.sendMessage(chatId, insufficientBalanceText(tgUserId, PRICE_EXTRA_PHOTOS, charge.balance), { reply_markup: upgradesMenu() });
+        return;
+      }
+      await prisma.matchUser.update({ where: { id: tgUserId }, data: { extraPhotosUnlocked: true } });
+    }
+    const slot: 2 | 3 | null = !profile.photoFileId2 ? 2 : !profile.photoFileId3 ? 3 : null;
+    if (!slot) {
+      await bot.api.sendMessage(chatId, "لديك بالفعل الحد الأقصى من الصور (3).", { reply_markup: upgradesMenu() });
+      return;
+    }
+    await setPending(tgUserId, { mode: "extra_photo_upload", slot });
+    await bot.api.sendMessage(chatId, "🖼 أرسل الصورة الإضافية الآن:", { reply_markup: plainBackMenu() });
+    return;
+  }
+  if (text === `👀 من زار ملفي ($${PRICE_PROFILE_VISITORS})`) {
+    const dbUser = await prisma.matchUser.findUnique({ where: { id: tgUserId } });
+    if (!dbUser) return;
+    if (!hasProfileVisitors(dbUser)) {
+      const charge = await chargeMatchUser(tgUserId, PRICE_PROFILE_VISITORS, "PROFILE_VISITORS");
+      if (!charge.ok) {
+        await bot.api.sendMessage(chatId, insufficientBalanceText(tgUserId, PRICE_PROFILE_VISITORS, charge.balance), { reply_markup: upgradesMenu() });
+        return;
+      }
+      await prisma.matchUser.update({ where: { id: tgUserId }, data: { profileVisitorsUnlocked: true } });
+    }
+    const visits = await prisma.matchProfileVisit.findMany({ where: { ownerId: tgUserId }, orderBy: { visitedAt: "desc" }, take: 20 });
+    if (visits.length === 0) {
+      await bot.api.sendMessage(chatId, "😔 لا يوجد زوار لملفك حتى الآن.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    const lines = await Promise.all(
+      visits.map(async (v) => {
+        const p = await prisma.matchProfile.findUnique({ where: { userId: v.viewerId } });
+        return `👤 ${p?.name || "بلا ملف"} (#${shortId(v.viewerId)}) — ${relativeTime(v.visitedAt)}`;
+      })
+    );
+    await bot.api.sendMessage(chatId, `👀 آخر زوار ملفك:\n\n${lines.join("\n")}`, { reply_markup: upgradesMenu() });
+    return;
+  }
+  if (text === `🎯 فلاتر متقدمة ($${PRICE_ADVANCED_FILTERS})`) {
+    const pref = await prisma.partnerPreference.findUnique({ where: { userId: tgUserId } });
+    if (!pref) {
+      await bot.api.sendMessage(chatId, "⚠️ يجب تحديد «💍 مواصفات الشريك» الأساسية أولاً.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    const dbUser = await prisma.matchUser.findUnique({ where: { id: tgUserId } });
+    if (!dbUser) return;
+    if (!hasAdvancedFilters(dbUser)) {
+      const charge = await chargeMatchUser(tgUserId, PRICE_ADVANCED_FILTERS, "ADVANCED_FILTERS");
+      if (!charge.ok) {
+        await bot.api.sendMessage(chatId, insufficientBalanceText(tgUserId, PRICE_ADVANCED_FILTERS, charge.balance), { reply_markup: upgradesMenu() });
+        return;
+      }
+      await prisma.matchUser.update({ where: { id: tgUserId }, data: { advancedFiltersUnlocked: true } });
+    }
+    await setPending(tgUserId, { mode: "advanced_filter_wizard", step: "city", data: {} });
+    await bot.api.sendMessage(chatId, "🎯 المدينة المطلوبة للشريك:", { reply_markup: skipMenu() });
+    return;
+  }
+  if (text === `👑 العضوية الذهبية ($${PRICE_VIP_30D}/شهر)`) {
+    const charge = await chargeMatchUser(tgUserId, PRICE_VIP_30D, "VIP_MEMBERSHIP");
+    if (!charge.ok) {
+      await bot.api.sendMessage(chatId, insufficientBalanceText(tgUserId, PRICE_VIP_30D, charge.balance), { reply_markup: upgradesMenu() });
+      return;
+    }
+    const dbUser = await prisma.matchUser.findUnique({ where: { id: tgUserId } });
+    const base = dbUser?.vipUntil && dbUser.vipUntil > new Date() ? dbUser.vipUntil : new Date();
+    const vipUntil = new Date(base.getTime() + VIP_DAYS * 24 * 3600 * 1000);
+    await prisma.matchUser.update({ where: { id: tgUserId }, data: { vipUntil } });
+    await bot.api.sendMessage(
+      chatId,
+      `👑 تم تفعيل العضوية الذهبية حتى ${vipUntil.toLocaleString("ar")}!\nتشمل: رفع مستمر للملف، فلاتر متقدمة، من زار ملفي، ووضع التخفي.`,
+      { reply_markup: upgradesMenu() }
+    );
+    return;
+  }
+  if (text === "🕶 وضع التخفي (ضمن الذهبية)") {
+    const dbUser = await prisma.matchUser.findUnique({ where: { id: tgUserId } });
+    if (!dbUser || !isVipActive(dbUser)) {
+      await bot.api.sendMessage(chatId, "🕶 وضع التخفي متاح فقط للأعضاء الذهبيين. فعّل «👑 العضوية الذهبية» أولاً.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    const profile = await prisma.matchProfile.findUnique({ where: { userId: tgUserId } });
+    if (!profile) {
+      await bot.api.sendMessage(chatId, "⚠️ يجب إنشاء ملفك الشخصي أولاً.", { reply_markup: upgradesMenu() });
+      return;
+    }
+    const newState = !profile.isIncognito;
+    await prisma.matchProfile.update({ where: { userId: tgUserId }, data: { isIncognito: newState } });
+    await bot.api.sendMessage(chatId, newState ? "🕶 تم تفعيل وضع التخفي." : "👁 تم إيقاف وضع التخفي.", { reply_markup: upgradesMenu() });
+    return;
+  }
+
   if (text === CONTACT_ADMIN_CONFIRM_LABEL) {
     await setPending(tgUserId, { mode: "contact_admin_compose" });
     await bot.api.sendMessage(chatId, "✍️ اكتب رسالتك للإدارة الآن وأرسلها في رسالة واحدة:", { reply_markup: plainBackMenu() });
@@ -1552,6 +1917,51 @@ export async function handleMarriageBotUpdate(bot: TelegramBot, botRow: BotRow, 
   if (pending?.mode === "pref_wizard") {
     const profile = await prisma.matchProfile.findUnique({ where: { userId: tgUserId } });
     await consumePrefStep(bot, chatId, tgUserId, pending, text, profile?.gender as Gender | undefined);
+    return;
+  }
+
+  if (pending?.mode === "advanced_filter_wizard") {
+    if (pending.step === "city") {
+      pending.data.city = isSkip(text) ? null : text;
+      await setPending(tgUserId, { mode: "advanced_filter_wizard", step: "maritalStatus", data: pending.data });
+      await bot.api.sendMessage(chatId, "🎯 الحالة الاجتماعية المطلوبة (أعزب/مطلق/أرمل...):", { reply_markup: skipMenu() });
+      return;
+    }
+    await prisma.partnerPreference.update({
+      where: { userId: tgUserId },
+      data: { city: pending.data.city ?? null, maritalStatus: isSkip(text) ? null : text },
+    });
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "✅ تم حفظ الفلاتر المتقدمة.", { reply_markup: mainMenu() });
+    return;
+  }
+
+  if (pending?.mode === "superlike_note") {
+    const target = await prisma.matchProfile.findUnique({ where: { userId: pending.targetUserId } });
+    if (!target) {
+      await setPending(tgUserId, null);
+      await bot.api.sendMessage(chatId, "لم يعد هذا الملف متاحاً.", { reply_markup: mainMenu() });
+      return;
+    }
+    if (containsMatchBannedWords(text)) {
+      await bot.api.sendMessage(chatId, "⚠️ هذه الرسالة تحتوي على محتوى غير مسموح به.");
+      return;
+    }
+    const charge = await chargeMatchUser(tgUserId, PRICE_SUPER_LIKE, "SUPER_LIKE");
+    if (!charge.ok) {
+      await setPending(tgUserId, null);
+      await bot.api.sendMessage(chatId, insufficientBalanceText(tgUserId, PRICE_SUPER_LIKE, charge.balance), { reply_markup: mainMenu() });
+      return;
+    }
+    await prisma.matchLike
+      .upsert({
+        where: { fromUserId_toUserId: { fromUserId: tgUserId, toUserId: pending.targetUserId } },
+        update: { note: text },
+        create: { fromUserId: tgUserId, toUserId: pending.targetUserId, note: text },
+      })
+      .catch(() => null);
+    await setPending(tgUserId, null);
+    await bot.api.sendMessage(chatId, "⭐ تم إرسال إعجابك المميز مع رسالتك.", { reply_markup: mainMenu() });
     return;
   }
 
