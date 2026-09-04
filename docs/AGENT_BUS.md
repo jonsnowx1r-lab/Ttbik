@@ -37,16 +37,18 @@ migration file ends with the same `GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLE "X" TO service_role;` line the others do, and always name the
 file explicitly in the completion report — every time, no exceptions.
 
-## Ownership (updated 2026-09-05 — JOBS_BOT added, supersedes the block below)
+## Ownership (updated 2026-09-04 — MEDICAL_BOT added, supersedes the block below)
 - Claude owns and is the sole editor of the whole bot engine: `prisma/schema.prisma`
-  (AD_BOT + MARRIAGE_BOT + JOBS_BOT models), `src/lib/adBotLogic.ts`,
-  `src/lib/matchBotLogic.ts`, `src/lib/jobsBotLogic.ts`, `src/services/ton-service.ts`,
-  `src/services/marriageTonService.ts`, `src/services/jobsTonService.ts`,
-  `src/app/api/telegram/[botId]/route.ts`, `src/app/api/bots/deploy/route.ts`,
-  `src/app/bots/page.tsx`, every AD_BOT/MARRIAGE_BOT/JOBS_BOT `prisma/migration_*.sql`
-  — plus site shell, admin, orders, migrations, env/Vercel as before. JOBS_BOT is a
-  second owner-only private bot (like MARRIAGE_BOT — see Product rules below):
-  never sold, never activated for anyone but the platform owner.
+  (AD_BOT + MARRIAGE_BOT + JOBS_BOT + MEDICAL_BOT models), `src/lib/adBotLogic.ts`,
+  `src/lib/matchBotLogic.ts`, `src/lib/jobsBotLogic.ts`, `src/lib/medicalBotLogic.ts`,
+  `src/services/ton-service.ts`, `src/services/marriageTonService.ts`,
+  `src/services/jobsTonService.ts`, `src/app/api/telegram/[botId]/route.ts`,
+  `src/app/api/bots/deploy/route.ts`, `src/app/bots/page.tsx`, `src/app/bots/BotsDeployForm.tsx`,
+  `src/app/api/cron/medical-reminders/route.ts`, every
+  AD_BOT/MARRIAGE_BOT/JOBS_BOT/MEDICAL_BOT `prisma/migration_*.sql`
+  — plus site shell, admin, orders, migrations, env/Vercel as before. JOBS_BOT and
+  MEDICAL_BOT are both owner-only private bots (like MARRIAGE_BOT — see Product
+  rules below): never sold, never activated for anyone but the platform owner.
 - Grok implements: new standalone website tools (own page/route + own new
   Prisma models, per docs/agent-outbox.md task O1), or a brand-new bot
   template that only ADDS a sibling branch to the shared dispatcher files
