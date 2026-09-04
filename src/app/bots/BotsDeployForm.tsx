@@ -122,17 +122,19 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
           <label className="mb-1 block text-sm font-medium">اختر قالب البوت</label>
           <select value={template} onChange={(e) => setTemplate(e.target.value)} className="w-full rounded border bg-white p-2 text-black">
             <option value="AD_BOT">بوت الإعلانات والمهام</option>
-            {/* بوت التعارف والزواج الشرعي وبوت فرص العمل/المتجر مخفيان عن أي
-                زائر عادي عمداً — كلاهما خاص بمالك المنصة فقط وليسا متاحين
-                للتفعيل أو البيع لأي طرف آخر إطلاقاً (راجع docs/AGENT_BUS.md،
-                توضيح المالك 2026-09-03 و2026-09-05)؛ الخياران يظهران فقط لك
-                أنت (isOwner). STORE و HOSPITAL أُخفيا أيضاً — القالبان لا
-                يزالان قيد الإعداد فعلياً (راجع docs/claude-feature-backlog.md). */}
+            {/* بوت التعارف والزواج الشرعي، بوت فرص العمل/المتجر، والبوت
+                الطبي مخفية عن أي زائر عادي عمداً — كلها خاصة بمالك المنصة
+                فقط وليست متاحة للتفعيل أو البيع لأي طرف آخر إطلاقاً (راجع
+                docs/AGENT_BUS.md، توضيح المالك 2026-09-03 و2026-09-05
+                و2026-09-04)؛ الخيارات تظهر فقط لك أنت (isOwner). STORE و
+                HOSPITAL أُخفيا أيضاً — القالبان لا يزالان قيد الإعداد فعلياً
+                (راجع docs/claude-feature-backlog.md). */}
             {isOwner && <option value="MARRIAGE_BOT">بوت التعارف والزواج الشرعي</option>}
             {isOwner && <option value="JOBS_BOT">بوت فرص العمل والمتجر</option>}
+            {isOwner && <option value="MEDICAL_BOT">البوت الطبي (عيادات ومشافي وصيدليات)</option>}
           </select>
         </div>
-        {template === "MARRIAGE_BOT" || template === "JOBS_BOT" ? (
+        {template === "MARRIAGE_BOT" || template === "JOBS_BOT" || template === "MEDICAL_BOT" ? (
           <div>
             <label className="mb-1 block text-sm font-medium">كلمة السر</label>
             <input

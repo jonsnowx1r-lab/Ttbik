@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
       if (!expected || String(password || "") !== expected) {
         return NextResponse.json({ success: false, error: "كلمة السر غير صحيحة." }, { status: 400 });
       }
+    } else if (template === "MEDICAL_BOT") {
+      // Same private, owner-only gate as MARRIAGE_BOT/JOBS_BOT (owner
+      // spec, 2026-09-04) — this template isn't sold to third parties.
+      const expected = process.env.MEDICAL_BOT_CREATOR_PASSWORD;
+      if (!expected || String(password || "") !== expected) {
+        return NextResponse.json({ success: false, error: "كلمة السر غير صحيحة." }, { status: 400 });
+      }
     } else {
       // Gate on a paid, admin-approved activation code (owner spec,
       // 2026-08-31) — /bots was previously open to anyone with a token and

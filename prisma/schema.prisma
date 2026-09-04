@@ -32,7 +32,7 @@ model Bot {
   id            String   @id @default(uuid())
   token         String   @unique
   ownerId       String // Telegram User ID of the bot creator
-  template      String // "AD_BOT" | "STORE" | "HOSPITAL" | "MARRIAGE_BOT"
+  template      String // "AD_BOT" | "STORE" | "HOSPITAL" | "MARRIAGE_BOT" | "JOBS_BOT" | "MEDICAL_BOT"
   totalRevenue  Float    @default(0.0)
   ownerBalance  Float    @default(0.0) // creator's withdrawable commission (matured, past the 48h hold)
   pendingBalance Float   @default(0.0) // creator commission still inside the 48h hold, not yet withdrawable — see CREATOR_EARNING_PENDING transactions
@@ -747,4 +747,162 @@ model DigitalCard {
   updatedAt   DateTime @updatedAt
   ownerIpHash String?  // light rate-limit fingerprint, no PII
   editToken   String   @unique // bearer secret for anonymous edit access
+}
+
+// ===================================================================
+// MEDICAL_BOT (owner spec, 2026-09-04) — patient-facing medical/pharmacy
+// directory + appointment booking, fully isolated from every other bot's
+// tables/ledger (same reasoning as JOBS_BOT/MARRIAGE_BOT: money/PII never
+// crosses bot boundaries). Scope is deliberately what the owner actually
+// asked for after two planning rounds: clinics, hospitals (with
+// departments), pharmacies, bookings, and a map — no blood bank, no lab
+// reports, no separate ambulance-dispatcher role (explicitly ruled out
+// or deferred). The "طوارئ" feature is a nearest-hospitals directory
+// with a phone number to call directly, never framed as an automatic
+// ambulance dispatch — there is no real emergency-service integration
+// behind it, and implying otherwise in an actual emergency would be
+// dangerous.
+// ===================================================================
+
+model MedUser {
+  id            String   @id // Telegram User ID
+  botId         String // only ever one MEDICAL_BOT instance, per owner policy — same field convention as JobsUser/MatchUser
+  role          String   @default("PATIENT") // PATIENT | CLINIC | HOSPITAL | PHARMACY
+  fullName      String?
+  phone         String?
+  pendingAction Json?
+  isBanned      Boolean  @default(false)
+  created_at    DateTime @default(now())
+
+  patientProfile      MedPatientProfile?
+  facility            MedFacility?
+  appointments        MedAppointment[]
+  prescriptionQueries MedPrescriptionQuery[]
+}
+
+// Created only when role stays PATIENT (the default). country/province/
+// city/area is free text (same pattern as JobsProfile) — the real search
+// signal is latitude/longitude, captured via Telegram's native "share
+// location" button, not this free-text address.
+model MedPatientProfile {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  user       MedUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gender     String
+  country    String
+  province   String
+  city       String
+  area       String
+  latitude   Float
+  longitude  Float
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+// One row per clinic / hospital / pharmacy account, created when its
+// owner redeems a MedActivationCode. type=CLINIC facilities book through
+// their own MedDoctor row directly (facilityId set on the doctor,
+// departmentId null); type=HOSPITAL facilities group doctors under
+// MedDepartment instead (departmentId set, facilityId null on the
+// doctor) — see MedDoctor. type=PHARMACY never has doctors.
+model MedFacility {
+  id         String   @id @default(uuid())
+  ownerId    String   @unique
+  owner      MedUser  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  type       String // CLINIC | HOSPITAL | PHARMACY
+  name       String
+  phone      String
+  country    String
+  province   String
+  city       String
+  area       String
+  address    String
+  latitude   Float
+  longitude  Float
+  isDuty     Boolean  @default(false) // pharmacies only — on-duty toggle, set manually by the pharmacist
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  departments         MedDepartment[]
+  doctors             MedDoctor[] // only populated for CLINIC-type facilities (their own single doctor row)
+  prescriptionQueries MedPrescriptionQuery[]
+}
+
+// Departments only ever belong to a HOSPITAL-type facility.
+model MedDepartment {
+  id         String      @id @default(uuid())
+  facilityId String
+  facility   MedFacility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  name       String // "عظمية"، "أطفال"، ...
+  created_at DateTime    @default(now())
+
+  doctors MedDoctor[]
+}
+
+// The single bookable unit, whether it belongs to a clinic (facilityId
+// set) or a hospital department (departmentId set) — never both. One
+// model for both cases means the booking flow never branches on facility
+// type.
+model MedDoctor {
+  id           String         @id @default(uuid())
+  facilityId   String?
+  facility     MedFacility?   @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  departmentId String?
+  department   MedDepartment? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  name         String
+  specialty    String
+  workingDays  String // "Sat,Sun,Mon"
+  workingHours String // "09:00-15:00"
+  feeUsd       Float?
+  isActive     Boolean        @default(true)
+  created_at   DateTime       @default(now())
+
+  appointments MedAppointment[]
+}
+
+model MedAppointment {
+  id              String               @id @default(uuid())
+  patientId       String
+  patient         MedUser              @relation(fields: [patientId], references: [id])
+  doctorId        String
+  doctor          MedDoctor            @relation(fields: [doctorId], references: [id])
+  // Resolved to a real calendar date+time at booking time (the chosen
+  // weekday's next actual occurrence, combined with the patient's entered
+  // time) — not stored as a bare weekday string, so the reminder cron can
+  // actually compare it against "now + 24h" / "now + 1h".
+  appointmentAt   DateTime
+  status          String   @default("PENDING") // PENDING | CONFIRMED | CANCELLED | COMPLETED
+  notes           String?
+  reminder24hSent Boolean              @default(false)
+  reminder1hSent  Boolean              @default(false)
+  created_at      DateTime             @default(now())
+  updated_at      DateTime             @updatedAt
+}
+
+// Patient asks a specific pharmacy about a prescription (photo or text) —
+// a simple two-way relay, same pattern as JobsAdminMessage/AdminMessage
+// elsewhere in this project.
+model MedPrescriptionQuery {
+  id             String         @id @default(uuid())
+  patientId      String
+  patient        MedUser        @relation(fields: [patientId], references: [id])
+  facilityId     String
+  facility       MedFacility    @relation(fields: [facilityId], references: [id])
+  patientMessage String // text, or a Telegram file_id prefixed "photo:" for images
+  reply          String?
+  status         String   @default("PENDING") // PENDING | ANSWERED
+  created_at     DateTime @default(now())
+}
+
+// Minted by the SUPER_ADMIN inside the bot for a specific role, redeemed
+// once by whoever registers as that clinic/hospital/pharmacy — same
+// single-use activation-code pattern as BotPurchase, scoped to this bot's
+// own isolated table.
+model MedActivationCode {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  role       String // CLINIC | HOSPITAL | PHARMACY
+  isRedeemed Boolean  @default(false)
+  redeemedBy String?
+  created_at DateTime @default(now())
 }
