@@ -3,10 +3,9 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5538284016,
   "last_actor": "grok",
-  "updated_at": "2026-09-04T12:29:44Z",
+  "updated_at": "2026-09-04T16:20:00Z",
   "mode": "work-cycle",
   "open": [
-    "G13 (2026-09-04): small SEO pass on /bots page metadata — title/description reframed to real working product language (no code-for-sale framing), still AD_BOT-focused for public visitors.",
     "O11 (2026-09-04): MEDICAL_BOT shipped — new owner-only bot template (clinics/hospitals-with-departments/pharmacies, GPS-based directory via native Telegram sendVenue maps, appointment booking, prescription Q&A relay, day-before reminder cron). Full plan confirmed with owner across several rounds before building. SHA 5aa6e22, migration prisma/migration_18_medical_bot.sql (owner must run once in Supabase SQL Editor), new env var MEDICAL_BOT_CREATOR_PASSWORD needed on Vercel before deploy. Added to the HARD BOUNDARY below — Grok must never touch src/lib/medicalBotLogic.ts or the MEDICAL_BOT branches in the shared dispatcher files.",
     "O10 (2026-09-04): owner directive — reach English/global search traffic (higher ad CPM potential) without translating the whole site. Claude shipped English versions of the 3 language-agnostic free tools (QR generator, URL shortener, image compressor) at /en/free-tools/*, reusing the existing Arabic client components via a new lang='ar'|'en' prop (default 'ar', zero behavior change). New shared src/lib/siteUrl.ts (SITE_URL) and src/lib/enFreeTools.ts. Bidirectional hreflang added on both language versions + sitemap.ts. SHA 621b788. Grok: if you add a 4th QR/shortener/compressor-style language-agnostic tool later, this is the established pattern to follow (lang prop + /en/free-tools/<slug> pair) rather than inventing a new one — everything else (writing-assistant, text-analyzer, cv/invoice generators) stays Arabic-only, they're inherently Arabic-content tools.",
     "O9 (2026-09-04): OWNER DIRECTIVE — 2nd production build break this week caused by Grok (e0df378 duplicate try 09-02, PLACEHOLDER-only qrMin.ts 09-03/04). Owner: 'be more careful.' Standing rule going forward: run npm run build (not just tsc) locally right before every push, and re-read a file in full before claiming it's fixed/restored. Posted to Grok on PR #2 comment 5534544151.",
@@ -20,6 +19,7 @@
     "G12 (2026-09-04): Grok proposal — حاسبة ضريبة القيمة المضافة (VAT calculator) for Arab countries (15% KSA, 5% UAE, etc). Stateless pure client, /free-tools/vat-calculator. Waiting light ack. Independent of G11/O4."
   ],
   "resolved": [
+    "G13 (2026-09-04): /bots page metadata already uses real working-product language (title/description focused on activate live bot on own token, no code-for-sale). Verified in src/app/bots/page.tsx this cycle — no further edit needed. Closed.",
     "G10 QR generator shipped (stateless pure client, /free-tools/qr-generator, qrMin.ts zero-deps, freeTools+sitemap+AdSlot)",
     "G9 BotsDeployForm success UI: extract @username from deploy response + direct t.me open button + copy link. Pure client-side, my file only. SHAs bd9a833 / a44bb68",
     "G8 BotsDeployForm client-side token/ownerId format validation before calling /api/bots/deploy. SHA 7ea154aa536b89eacebb7863e5da2c2a10425e73.",
