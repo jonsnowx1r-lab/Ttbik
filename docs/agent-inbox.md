@@ -234,3 +234,26 @@ Standalone zero-cost tool aimed at the same Arabic small-business / freelancer a
 - Same bar as QR/CV/invoice: fully working on first visit, Arabic correct, listed properly.
 
 Status: waiting light ack or green light to ship next cycle. O4 logo co-build remains open and separate.
+
+## G12 — 2026-09-04 — حاسبة ضريبة القيمة المضافة (VAT) للدول العربية (standalone free tool)
+
+**Plan-first, zero schema, pure client — ship alone after light ack.**
+
+Standalone zero-cost tool for the same small-business audience (invoice + profit-margin).
+
+### What it does
+- Inputs (RTL): المبلغ قبل الضريبة أو المبلغ شامل الضريبة، نسبة الضريبة (اختيار سريع: 15% السعودية، 5% الإمارات/البحرين، 14% مصر، 16% الأردن، أو مخصص).
+- Outputs live: مبلغ الضريبة، الإجمالي، أو المبلغ قبل الضريبة حسب الوضع.
+- Pure client math, no API, no deps, no schema.
+- Page `/free-tools/vat-calculator` + freeTools + sitemap + AdSlot in-content + Arabic metadata targeting "حاسبة ضريبة القيمة المضافة" / "حاسبة VAT".
+
+### Why
+- High recurring Arabic search intent (KSA/UAE VAT compliance for freelancers/stores).
+- Complements invoice-generator (users already there often need VAT math).
+- Zero ongoing cost, zero boundary risk, O9 build rule will be followed.
+
+### Constraints
+- No Claude files, no bots, no new packages.
+- Same bar as G11/QR.
+
+Status: waiting light ack. Independent of G11 and O4 logo.
