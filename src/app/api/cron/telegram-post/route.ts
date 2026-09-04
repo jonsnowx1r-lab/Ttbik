@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGroq } from "@/lib/groq";
 import { supabasePublic } from "@/lib/supabase";
+import { LIVE_BOTS } from "@/lib/liveBots";
 
 // Triggered daily by Vercel Cron (see vercel.json). Publishes one varied
 // promotional post to the public Telegram channel, rotating across three
@@ -18,8 +19,14 @@ const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://ttbik.vercel.app"
 
 const GENERIC_SYSTEM_PROMPT = `أنت مسؤول تسويق لموقع "سوق تولز" (متجر أدوات وخدمات رقمية مصغّرة). اكتب منشوراً ترويجياً قصيراً وجذاباً بالعربية لقناة تليجرام (4-6 أسطر كحد أقصى، مع 2-3 إيموجي مناسبة، بدون هاشتاقات). كل مرة استخدم أسلوباً وزاوية مختلفة (نصيحة عملية، سؤال يثير الفضول، قصة نجاح مختصرة، عرض ميزة). اذكر رابط واحد فقط في نهاية المنشور، بالضبط كما أعطيتك إياه دون أي تعديل عليه. لا تكرر نفس الصياغة في كل مرة.`;
 
-// Static — mirrors src/app/free-tools/page.tsx's TOOLS + FREE_BOTS. Keep
-// both lists in sync if a free tool/bot is added or removed there.
+// Static — mirrors src/app/free-tools/page.tsx's TOOLS. Keep in sync if a
+// free tool is added or removed there.
+//
+// The old faq-bot/auto-reply-bot entries were removed 2026-09-04: neither
+// is a real deployable bot template (no dispatcher entry, no create/
+// activate flow like AD_BOT/MARRIAGE_BOT/JOBS_BOT have) — promoting them
+// as "get your own bot" was exactly the code-handoff framing the owner
+// ruled out site-wide. Replaced with the 3 real live bots below.
 const FREE_TOPICS = [
   { name: "بطاقة أعمال رقمية (Linktree) مجانية مع عداد مشاهدات حقيقي", url: `${SITE_URL}/free-tools/digital-card` },
   { name: "مصغّر روابط مع عداد نقرات حقيقي (مجاني)", url: `${SITE_URL}/free-tools/url-shortener` },
@@ -28,9 +35,13 @@ const FREE_TOPICS = [
   { name: "مولد أسماء المشاريع بالذكاء الاصطناعي (مجاني)", url: `${SITE_URL}/free-tools/business-name-generator` },
   { name: "مساعد الكتابة الذكي: منشورات ومقالات وأوصاف منتجات وترجمة (مجاني)", url: `${SITE_URL}/free-tools/writing-assistant` },
   { name: "محلل النصوص الذكي: تلخيص تقارير وتحليل آراء عملاء (مجاني)", url: `${SITE_URL}/free-tools/text-analyzer` },
-  { name: "بوت الرد الآلي الجاهز لتليجرام (مجاني، جاهز للتشغيل فوراً وتملكه بالكامل)", url: `${SITE_URL}/service/auto-reply-bot` },
-  { name: "بوت الأسئلة الشائعة الجاهز لتليجرام (مجاني، جاهز للتشغيل فوراً وتملكه بالكامل)", url: `${SITE_URL}/service/faq-bot` },
 ];
+
+// Real, live Telegram bots the owner runs — promoted directly by their
+// t.me link (not a catalog service page) since the goal here is simply
+// getting a visitor to open and join the bot. Shared with the free-tools
+// page and the homepage via src/lib/liveBots.ts.
+const LIVE_BOT_TOPICS = LIVE_BOTS.map((b) => ({ name: b.title, url: b.href }));
 
 async function getPaidTopics(): Promise<{ name: string; url: string }[]> {
   try {
@@ -130,6 +141,7 @@ export async function GET(req: NextRequest) {
   // pattern — roughly 1-in-N where N grows with the live catalog size.
   const pool: { label: string; run: () => Promise<string> }[] = [
     ...FREE_TOPICS.map((t) => ({ label: t.name, run: () => writeGenericPost(t) })),
+    ...LIVE_BOT_TOPICS.map((t) => ({ label: t.name, run: () => writeGenericPost(t) })),
     ...paidTopics.map((t) => ({ label: t.name, run: () => writeGenericPost(t) })),
     ...botPromos.map((p) => ({ label: p.label, run: () => buildBotPromoText(p) })),
   ];

@@ -5,6 +5,7 @@ import StorefrontBrowser from "@/components/StorefrontBrowser";
 import SectionBackdrop from "@/components/SectionBackdrop";
 import AdSlot from "@/components/AdSlot";
 import { FREE_TOOLS } from "@/lib/freeTools";
+import { LIVE_BOTS } from "@/lib/liveBots";
 
 export const revalidate = 30;
 
@@ -86,6 +87,30 @@ export default async function HomePage() {
               <h3 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{tool.title}</h3>
               <p className="mt-1 text-sm text-slate-500">{tool.desc}</p>
             </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-8">
+        <div>
+          <h2 className="text-xl font-extrabold text-slate-900 sm:text-2xl">🤖 جرّب بوتاتنا الآن على تليجرام</h2>
+          <p className="mt-1 text-sm text-slate-600">بوتات حقيقية تعمل الآن — افتحها وجرّبها مباشرة.</p>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          {LIVE_BOTS.map((bot) => (
+            <a
+              key={bot.href}
+              href={bot.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <span className="inline-block rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-bold text-sky-700">
+                افتح على تليجرام
+              </span>
+              <h3 className="mt-2 font-bold text-slate-900 group-hover:text-brand-700">{bot.title}</h3>
+              <p className="mt-1 text-sm text-slate-500">{bot.desc}</p>
+            </a>
           ))}
         </div>
       </section>
