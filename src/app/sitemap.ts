@@ -20,6 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
       alternates: { languages: { ar: `${base}/free-tools/qr-generator`, en: `${base}/en/free-tools/qr-generator` } },
     },
+    { url: `${base}/free-tools/profit-margin`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/crypto-converter`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/invoice-generator`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/cv-generator`, changeFrequency: "monthly", priority: 0.9 },
