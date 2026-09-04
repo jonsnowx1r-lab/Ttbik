@@ -5,7 +5,33 @@ import QR from "@/lib/qrMin";
 
 const SIZES = [128, 256, 384, 512] as const;
 
-export default function QrGenerator() {
+const T = {
+  ar: {
+    label: "النص أو الرابط",
+    placeholder: "https://... أو أي نص",
+    size: "الحجم:",
+    fgColor: "لون الرمز",
+    bgColor: "لون الخلفية",
+    errorTooLong: "تعذر إنشاء رمز QR — النص طويل جداً",
+    download: "تنزيل PNG",
+    copy: "نسخ الصورة",
+    footer: "يعمل بالكامل داخل المتصفح — بلا رفع بيانات لأي خادم.",
+  },
+  en: {
+    label: "Text or link",
+    placeholder: "https://... or any text",
+    size: "Size:",
+    fgColor: "Code color",
+    bgColor: "Background color",
+    errorTooLong: "Couldn't generate the QR code — text is too long",
+    download: "Download PNG",
+    copy: "Copy image",
+    footer: "Runs entirely in your browser — no data is ever uploaded.",
+  },
+} as const;
+
+export default function QrGenerator({ lang = "ar" }: { lang?: "ar" | "en" }) {
+  const t = T[lang];
   const [text, setText] = useState("https://ttbik.vercel.app");
   const [size, setSize] = useState<(typeof SIZES)[number]>(256);
   const [fg, setFg] = useState("#0f172a");
@@ -55,10 +81,13 @@ export default function QrGenerator() {
       }
       setDataUrl(canvas.toDataURL("image/png"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر إنشاء رمز QR — النص طويل جداً");
+      // qrMin.ts's own thrown message is Arabic-only — for the English UI,
+      // always show the English translation rather than a mixed-language
+      // string, regardless of what the encoder threw.
+      setError(lang === "en" ? t.errorTooLong : e instanceof Error ? e.message : t.errorTooLong);
       setDataUrl(null);
     }
-  }, [text, size, fg, bg]);
+  }, [text, size, fg, bg, lang, t.errorTooLong]);
 
   useEffect(() => {
     draw();
@@ -86,21 +115,21 @@ export default function QrGenerator() {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6" dir={lang === "en" ? "ltr" : "rtl"}>
       <label className="block text-sm font-semibold text-slate-700">
-        النص أو الرابط
+        {t.label}
       </label>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
         dir="auto"
-        placeholder="https://... أو أي نص"
+        placeholder={t.placeholder}
         className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
       />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span className="text-sm text-slate-500">الحجم:</span>
+        <span className="text-sm text-slate-500">{t.size}</span>
         {SIZES.map((s) => (
           <button
             key={s}
@@ -119,7 +148,7 @@ export default function QrGenerator() {
 
       <div className="mt-4 flex flex-wrap gap-4">
         <label className="flex items-center gap-2 text-sm text-slate-600">
-          لون الرمز
+          {t.fgColor}
           <input
             type="color"
             value={fg}
@@ -128,7 +157,7 @@ export default function QrGenerator() {
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-slate-600">
-          لون الخلفية
+          {t.bgColor}
           <input
             type="color"
             value={bg}
@@ -159,7 +188,7 @@ export default function QrGenerator() {
             disabled={!dataUrl}
             className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
           >
-            تنزيل PNG
+            {t.download}
           </button>
           <button
             type="button"
@@ -167,13 +196,13 @@ export default function QrGenerator() {
             disabled={!dataUrl}
             className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
-            نسخ الصورة
+            {t.copy}
           </button>
         </div>
       </div>
 
       <p className="mt-4 text-center text-xs text-slate-400">
-        يعمل بالكامل داخل المتصفح — بلا رفع بيانات لأي خادم.
+        {t.footer}
       </p>
     </div>
   );

@@ -14,17 +14,38 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/terms`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${base}/privacy`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${base}/free-tools`, changeFrequency: "monthly", priority: 0.9 },
-    { url: `${base}/free-tools/qr-generator`, changeFrequency: "monthly", priority: 0.9 },
+    {
+      url: `${base}/free-tools/qr-generator`,
+      changeFrequency: "monthly",
+      priority: 0.9,
+      alternates: { languages: { ar: `${base}/free-tools/qr-generator`, en: `${base}/en/free-tools/qr-generator` } },
+    },
     { url: `${base}/free-tools/crypto-converter`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/invoice-generator`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/cv-generator`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/digital-card`, changeFrequency: "monthly", priority: 0.9 },
-    { url: `${base}/free-tools/url-shortener`, changeFrequency: "monthly", priority: 0.9 },
+    {
+      url: `${base}/free-tools/url-shortener`,
+      changeFrequency: "monthly",
+      priority: 0.9,
+      alternates: { languages: { ar: `${base}/free-tools/url-shortener`, en: `${base}/en/free-tools/url-shortener` } },
+    },
     { url: `${base}/free-tools/whatsapp-link`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/business-name-generator`, changeFrequency: "monthly", priority: 0.9 },
-    { url: `${base}/free-tools/image-optimizer`, changeFrequency: "monthly", priority: 0.9 },
+    {
+      url: `${base}/free-tools/image-optimizer`,
+      changeFrequency: "monthly",
+      priority: 0.9,
+      alternates: { languages: { ar: `${base}/free-tools/image-optimizer`, en: `${base}/en/free-tools/image-optimizer` } },
+    },
     { url: `${base}/free-tools/text-analyzer`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/free-tools/writing-assistant`, changeFrequency: "monthly", priority: 0.9 },
+    // English versions of the 3 language-agnostic tools (owner directive
+    // 2026-09-04: reach English/global search demand for QR/URL-shortener/
+    // image-compression queries, without translating the whole site).
+    { url: `${base}/en/free-tools/qr-generator`, changeFrequency: "monthly", priority: 0.85 },
+    { url: `${base}/en/free-tools/url-shortener`, changeFrequency: "monthly", priority: 0.85 },
+    { url: `${base}/en/free-tools/image-optimizer`, changeFrequency: "monthly", priority: 0.85 },
   ];
 
   const serviceRoutes: MetadataRoute.Sitemap = (services ?? []).map((s) => ({

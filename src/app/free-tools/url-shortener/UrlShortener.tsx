@@ -3,7 +3,51 @@
 import { useState } from "react";
 import Link from "next/link";
 
-export default function UrlShortener() {
+const T = {
+  ar: {
+    enterUrlFirst: "أدخل الرابط أولاً",
+    shortenFailed: "فشل الاختصار",
+    connectFailed: "تعذر الاتصال بالخادم",
+    placeholder: "https://example.com/صفحة-طويلة...",
+    expiry: "صلاحية:",
+    expiryNone: "بدون انتهاء",
+    expiry7: "7 أيام",
+    expiry30: "30 يوم",
+    shortening: "جاري الاختصار...",
+    shortenBtn: "اختصر الرابط",
+    shortUrlLabel: "الرابط القصير:",
+    clicksSoFar: (n: number) => `النقرات حتى الآن: ${n}`,
+    copied: "✅ تم النسخ",
+    copy: "نسخ الرابط",
+    open: "فتح",
+    qrNote: "لمشاركة QR: انسخ الرابط والصقه في أي مولّد QR مجاني، أو استخدمه مباشرة في منشوراتك.",
+    realToolPre: "أداة حقيقية على نطاق الموقع — ليست مجرد عرض كود. للاحتياجات المتقدمة (نطاق فرعي مخصص، صفحات روابط متعددة) راجع",
+    realToolLink: "باقي الأدوات المجانية",
+  },
+  en: {
+    enterUrlFirst: "Enter a link first",
+    shortenFailed: "Failed to shorten the link",
+    connectFailed: "Couldn't reach the server",
+    placeholder: "https://example.com/a-very-long-page...",
+    expiry: "Expires:",
+    expiryNone: "Never",
+    expiry7: "7 days",
+    expiry30: "30 days",
+    shortening: "Shortening...",
+    shortenBtn: "Shorten link",
+    shortUrlLabel: "Short link:",
+    clicksSoFar: (n: number) => `Clicks so far: ${n}`,
+    copied: "✅ Copied",
+    copy: "Copy link",
+    open: "Open",
+    qrNote: "To share as a QR code: copy the link and paste it into any free QR generator, or use it directly in your posts.",
+    realToolPre: "A real tool running on this domain — not just a code demo. For advanced needs (custom subdomain, multiple link pages) see",
+    realToolLink: "the rest of the free tools",
+  },
+} as const;
+
+export default function UrlShortener({ lang = "ar" }: { lang?: "ar" | "en" }) {
+  const t = T[lang];
   const [url, setUrl] = useState("");
   const [expiresDays, setExpiresDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -16,7 +60,7 @@ export default function UrlShortener() {
     setResult(null);
     const trimmed = url.trim();
     if (!trimmed) {
-      setError("أدخل الرابط أولاً");
+      setError(t.enterUrlFirst);
       return;
     }
     setLoading(true);
@@ -28,12 +72,14 @@ export default function UrlShortener() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "فشل الاختصار");
+        // The API route's own validation errors are Arabic-only — never
+        // surface them on the English page, always show the translation.
+        setError(lang === "en" ? t.shortenFailed : data.error || t.shortenFailed);
         return;
       }
       setResult({ shortUrl: data.shortUrl, code: data.code, clicks: data.clicks ?? 0 });
     } catch {
-      setError("تعذر الاتصال بالخادم");
+      setError(t.connectFailed);
     } finally {
       setLoading(false);
     }
@@ -48,21 +94,21 @@ export default function UrlShortener() {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6" dir={lang === "en" ? "ltr" : "rtl"}>
       <div className="grid gap-3">
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://example.com/صفحة-طويلة..."
+          placeholder={t.placeholder}
           className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           dir="ltr"
         />
         <div className="flex flex-wrap gap-2 text-sm">
-          <span className="text-slate-500">صلاحية:</span>
+          <span className="text-slate-500">{t.expiry}</span>
           {[
-            { label: "بدون انتهاء", v: null },
-            { label: "7 أيام", v: 7 },
-            { label: "30 يوم", v: 30 },
+            { label: t.expiryNone, v: null },
+            { label: t.expiry7, v: 7 },
+            { label: t.expiry30, v: 30 },
           ].map((opt) => (
             <button
               key={String(opt.v)}
@@ -84,7 +130,7 @@ export default function UrlShortener() {
           disabled={loading}
           className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-60"
         >
-          {loading ? "جاري الاختصار..." : "اختصر الرابط"}
+          {loading ? t.shortening : t.shortenBtn}
         </button>
       </div>
 
@@ -94,18 +140,18 @@ export default function UrlShortener() {
 
       {result && (
         <div className="mt-4 rounded-xl bg-slate-50 p-4">
-          <p className="mb-2 text-xs font-semibold text-slate-500">الرابط القصير:</p>
+          <p className="mb-2 text-xs font-semibold text-slate-500">{t.shortUrlLabel}</p>
           <p className="break-all font-mono text-sm text-brand-700" dir="ltr">
             {result.shortUrl}
           </p>
-          <p className="mt-1 text-xs text-slate-500">النقرات حتى الآن: {result.clicks}</p>
+          <p className="mt-1 text-xs text-slate-500">{t.clicksSoFar(result.clicks)}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={copy}
               className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
             >
-              {copied ? "✅ تم النسخ" : "نسخ الرابط"}
+              {copied ? t.copied : t.copy}
             </button>
             <a
               href={result.shortUrl}
@@ -113,20 +159,19 @@ export default function UrlShortener() {
               rel="noreferrer"
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:border-brand-300"
             >
-              فتح
+              {t.open}
             </a>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            لمشاركة QR: انسخ الرابط والصقه في أي مولّد QR مجاني، أو استخدمه مباشرة في منشوراتك.
+            {t.qrNote}
           </p>
         </div>
       )}
 
       <div className="mt-6 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 p-4 text-sm text-slate-600">
-        أداة حقيقية على نطاق الموقع — ليست مجرد عرض كود. للاحتياجات المتقدمة (نطاق فرعي مخصص، صفحات
-        روابط متعددة) راجع{" "}
+        {t.realToolPre}{" "}
         <Link href="/free-tools" className="font-bold text-brand-700 underline">
-          باقي الأدوات المجانية
+          {t.realToolLink}
         </Link>
         .
       </div>
