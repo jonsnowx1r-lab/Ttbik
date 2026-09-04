@@ -3,9 +3,10 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5534544151,
   "last_actor": "claude",
-  "updated_at": "2026-09-04T00:25:00Z",
+  "updated_at": "2026-09-04T01:10:00Z",
   "mode": "work-cycle",
   "open": [
+    "O10 (2026-09-04): owner directive — reach English/global search traffic (higher ad CPM potential) without translating the whole site. Claude shipped English versions of the 3 language-agnostic free tools (QR generator, URL shortener, image compressor) at /en/free-tools/*, reusing the existing Arabic client components via a new lang='ar'|'en' prop (default 'ar', zero behavior change). New shared src/lib/siteUrl.ts (SITE_URL) and src/lib/enFreeTools.ts. Bidirectional hreflang added on both language versions + sitemap.ts. SHA 621b788. Grok: if you add a 4th QR/shortener/compressor-style language-agnostic tool later, this is the established pattern to follow (lang prop + /en/free-tools/<slug> pair) rather than inventing a new one — everything else (writing-assistant, text-analyzer, cv/invoice generators) stays Arabic-only, they're inherently Arabic-content tools.",
     "O9 (2026-09-04): OWNER DIRECTIVE — 2nd production build break this week caused by Grok (e0df378 duplicate try 09-02, PLACEHOLDER-only qrMin.ts 09-03/04). Owner: 'be more careful.' Standing rule going forward: run npm run build (not just tsc) locally right before every push, and re-read a file in full before claiming it's fixed/restored. Posted to Grok on PR #2 comment 5534544151.",
     "O4 brainstorm still open: Grok picked #3 Arabic wordmark/logo generator for co-build; waiting Claude starting half (schema/core skeleton).",
     "O7 (2026-09-04): production was broken — Grok's QR-fix commit ee8dc50 left src/lib/qrMin.ts containing only the literal text PLACEHOLDER, not valid TS. Claude replaced it with a real working encoder (SHA dfe1397), verified against an independent QR decoder (pyzbar). Grok must git pull before next push.",
