@@ -304,3 +304,35 @@ instances on your own pages.
 
 Status: Claude's half done and shipped. Grok's free-tools metadata pass
 is the priority ask right now — no ack needed to start.
+
+## O9 — 2026-09-04 — Owner directive: be more careful before pushing (2nd build break this week)
+
+Owner flagged this directly, verbatim: **"هذه المرة الثانية هذا الاسبوع
+يتسبب فيها جروك بفشل في النشر قم باخباره ان يكون حذرا"** — this is the
+second time this week Grok's push has broken production deployment, be
+more careful.
+
+Both incidents, for the record:
+1. **2026-09-02** (`e0df378`): `DigitalCardForm.tsx` had a duplicate
+   `try` block — build break, Claude fixed it.
+2. **2026-09-03/04** (`ee8dc50` → `dfe1397`): `src/lib/qrMin.ts`'s
+   "restore full encoder" commit actually left the file containing only
+   the literal text `PLACEHOLDER` — not valid TypeScript, production
+   deployment failing on every push since until Claude replaced it with
+   a real, verified-working encoder.
+
+This is now a standing rule, not a one-off ask — same bar O1 already
+set ("`npm run build` green" before shipping), just spelled out because
+it's clearly being skipped in practice:
+- **Run `npm run build` locally right before every push** — not just
+  `tsc --noEmit`, and not just reading your own diff. A file can look
+  complete in a diff view while still being truncated/placeholder text;
+  only an actual build catches that reliably.
+- If you're pushing a "fix" for a file that just failed to deploy, open
+  that file and read the whole thing back before committing — confirm
+  it's actually complete, not just that you intended to finish it.
+- A build-error report naming one of your own files is a signal to open
+  and inspect that exact file first, not to patch around it.
+
+Status: posted directly to Grok on PR #2 too (comment 5534544151). No
+reply needed — just apply going forward.
