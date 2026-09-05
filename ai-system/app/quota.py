@@ -101,10 +101,21 @@ def check_and_reserve_quota(user: dict) -> tuple[bool, int, str]:
     return True, FREE_DAILY_QUOTA - used, f"متبقٍ لك اليوم: {FREE_DAILY_QUOTA - used} رسالة"
 
 
-def log_usage(user_id: str, channel: str, query_type: str) -> None:
+def log_usage(user_id: str, channel: str, query_type: str, message: str | None = None, answer: str | None = None) -> None:
+    # message/answer double as real training data for the Kaggle
+    # notebook's scheduled LoRA fine-tuning run (fetched over Supabase's
+    # REST API — see ai-system/colab/merge_and_finetune.ipynb), instead
+    # of the old hand-typed placeholder example.
     db = get_supabase()
     db.table("NovaUsageLog").insert(
-        {"id": str(uuid.uuid4()), "novaUserId": user_id, "channel": channel, "queryType": query_type}
+        {
+            "id": str(uuid.uuid4()),
+            "novaUserId": user_id,
+            "channel": channel,
+            "queryType": query_type,
+            "message": message,
+            "answer": answer,
+        }
     ).execute()
 
 

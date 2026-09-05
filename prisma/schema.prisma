@@ -956,6 +956,9 @@ model NovaUsageLog {
   novaUser   NovaUser @relation(fields: [novaUserId], references: [id])
   channel    String // TELEGRAM | WEB | API
   queryType  String // CODE | GENERAL | LIVE_INFO — set by the MoE router, for cost/usage visibility only
+  message    String? // the user's message — nullable so old rows stay valid; also doubles as real LoRA fine-tuning
+  answer     String? // Nova's final answer — data for ai-system/colab/merge_and_finetune.ipynb's scheduled Kaggle run,
+  // fetched over Supabase's REST API (never stored in the notebook itself) instead of the old hand-typed placeholder.
   created_at DateTime @default(now())
 }
 

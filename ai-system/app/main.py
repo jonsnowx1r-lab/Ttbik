@@ -109,7 +109,7 @@ def _run_text_pipeline(
     context = rag.build_context(user["id"], message, query_type)
     final_answer = council.answer(message, context, query_type)
 
-    background_tasks.add_task(quota.log_usage, user["id"], channel, query_type)
+    background_tasks.add_task(quota.log_usage, user["id"], channel, query_type, message, final_answer)
     background_tasks.add_task(rag.remember, user["id"], message, final_answer)
     return final_answer, query_type
 
@@ -204,7 +204,7 @@ def image(
             detail="تحليل الصور غير متاح حالياً — تأكد من ضبط GEMINI_API_KEY على الخادم.",
         )
 
-    background_tasks.add_task(quota.log_usage, user["id"], req.channel, "IMAGE")
+    background_tasks.add_task(quota.log_usage, user["id"], req.channel, "IMAGE", f"[صورة] {prompt}", answer_text)
     background_tasks.add_task(rag.remember, user["id"], f"[صورة] {prompt}", answer_text)
 
     return ImageResponse(answer=answer_text, quota_message=quota_message)
