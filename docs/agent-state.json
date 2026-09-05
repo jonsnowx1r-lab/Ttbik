@@ -3,7 +3,7 @@
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5547531297,
   "last_actor": "grok",
-  "updated_at": "2026-09-05T00:15:00Z",
+  "updated_at": "2026-09-05T03:08:00Z",
   "mode": "work-cycle",
   "open": [
     "O11 (2026-09-04): MEDICAL_BOT shipped — new owner-only bot template (clinics/hospitals-with-departments/pharmacies, GPS-based directory via native Telegram sendVenue maps, appointment booking, prescription Q&A relay, day-before reminder cron). Full plan confirmed with owner across several rounds before building. SHA 5aa6e22, migration prisma/migration_18_medical_bot.sql (owner must run once in Supabase SQL Editor), new env var MEDICAL_BOT_CREATOR_PASSWORD needed on Vercel before deploy. Added to the HARD BOUNDARY below — Grok must never touch src/lib/medicalBotLogic.ts or the MEDICAL_BOT branches in the shared dispatcher files.",
@@ -14,10 +14,10 @@
     "O8 (2026-09-04): faq-bot/auto-reply-bot removed from /free-tools and the promo cron — confirmed neither is a real deployable bot template (no /bots dispatcher entry), so promoting them was the code-handoff framing the owner ruled out. Replaced with the owner's 3 real live bots (src/lib/liveBots.ts, also added to homepage). SHA f7d09f9. If Grok's SEO metadata pass (O5) was going to touch those 2 service pages, skip them.",
     "HARD BOUNDARY (permanent, not just for this cycle): Grok must never edit prisma/schema.prisma's AD_BOT/MARRIAGE_BOT/JOBS_BOT/MEDICAL_BOT models, src/lib/adBotLogic.ts, src/lib/matchBotLogic.ts, src/lib/jobsBotLogic.ts, src/lib/medicalBotLogic.ts, src/services/ton-service.ts, src/services/marriageTonService.ts, src/services/jobsTonService.ts, or the AD_BOT/MARRIAGE_BOT/JOBS_BOT/MEDICAL_BOT branches inside src/app/api/telegram/[botId]/route.ts, src/app/api/bots/deploy/route.ts, src/app/bots/page.tsx, src/app/bots/BotsDeployForm.tsx. Adding a new sibling branch/option for a brand-new Grok template is fine; editing Claude's existing ones is not. See docs/AGENT_BUS.md for the full, current list.",
     "Owner must run prisma/migration_12_digital_card.sql once in Supabase SQL Editor (CREATE TABLE IF NOT EXISTS + GRANT service_role).",
-    "Owner: if ShortLink table already exists without GRANT, run standalone: GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"ShortLink\" TO service_role;",
-    "G12 (2026-09-04): Grok proposal — حاسبة ضريبة القيمة المضافة (VAT calculator) for Arab countries (15% KSA, 5% UAE, etc). Stateless pure client, /free-tools/vat-calculator. Waiting light ack. Independent of G11/O4."
+    "Owner: if ShortLink table already exists without GRANT, run standalone: GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"ShortLink\" TO service_role;"
   ],
   "resolved": [
+    "G12 (2026-09-05): VAT calculator shipped — pure client /free-tools/vat-calculator, presets KSA 15% / UAE 5% / EG 14% / JO 16% / OM 5% + custom, exclusive/inclusive modes, freeTools + sitemap + AdSlot + Arabic metadata. SHAs a33aba2 / a7d5a3a / a39dced / 8cbf76a. Closed.",
     "G11 (2026-09-05): profit-margin + break-even calculator shipped — pure client /free-tools/profit-margin, freeTools + sitemap + AdSlot + Arabic metadata. SHA 434be5b9e9d3e94363499a2f5a9ef04d21ee27df. Closed.",
     "G13 (2026-09-04): /bots page metadata already uses real working-product language (title/description focused on activate live bot on own token, no code-for-sale). Verified in src/app/bots/page.tsx this cycle — no further edit needed. Closed.",
     "G10 QR generator shipped (stateless pure client, /free-tools/qr-generator, qrMin.ts zero-deps, freeTools+sitemap+AdSlot)",
