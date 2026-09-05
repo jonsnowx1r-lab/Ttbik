@@ -12,9 +12,13 @@ even finishes starting, which reliably OOM-killed this service on
 Render's free instance type (512MB total). The ONNX path needs no
 torch at all and fits comfortably.
 """
+import logging
+
 import chromadb
 from chromadb.utils import embedding_functions
-from duckduckgo_search import DDGS
+from ddgs import DDGS
+
+logger = logging.getLogger("nova")
 
 _chroma_client = chromadb.PersistentClient(path="./chroma_data")
 _embedder = embedding_functions.DefaultEmbeddingFunction()
@@ -43,8 +47,16 @@ def web_search(query: str, max_results: int = 3) -> list[dict]:
         with DDGS() as ddgs:
             return list(ddgs.text(query, max_results=max_results))
     except Exception:
-        # A search-provider hiccup should never take the whole chat
+        # A search-provider hiccup (rate limiting is common on shared
+        # cloud IPs like Render's) should never take the whole chat
         # down — the council still answers from its own knowledge.
+        # But it must never be invisible: without this log line, a
+        # search that silently fails on every request looks identical
+        # to one that never runs, and the model quietly starts
+        # guessing/hallucinating "live" answers instead of admitting
+        # it has no current data (exactly what showed up as fabricated
+        # gold-price figures with wrong currency and raw LaTeX).
+        logger.exception("web_search failed for query: %s", query)
         return []
 
 
