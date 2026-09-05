@@ -5,13 +5,16 @@ import { handleAdBotUpdate } from "@/lib/adBotLogic";
 import { handleMarriageBotUpdate } from "@/lib/matchBotLogic";
 import { handleJobsBotUpdate } from "@/lib/jobsBotLogic";
 import { handleMedicalBotUpdate } from "@/lib/medicalBotLogic";
+import { handleNovaBotUpdate } from "@/lib/novaBotLogic";
 
 // Default Vercel Hobby function timeout is 10s — raised for headroom since
 // MARRIAGE_BOT's random-chat search now does a brief (~3s) animated
 // "searching" message sequence (see startRandomChat in matchBotLogic.ts)
-// on top of its usual DB work. Doesn't affect any other update — this is
-// just a higher ceiling, not a forced wait.
-export const maxDuration = 20;
+// on top of its usual DB work, and NOVA_BOT's /chat forward can involve
+// two sequential Groq calls (primary answer + mixture-of-agents
+// synthesis) plus a Gemini call. Doesn't affect any other update — this
+// is just a higher ceiling, not a forced wait.
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest, { params }: { params: { botId: string } }) {
   try {
@@ -36,6 +39,8 @@ export async function POST(req: NextRequest, { params }: { params: { botId: stri
         await handleJobsBotUpdate(bot, botRow, body);
       } else if (botRow.template === "MEDICAL_BOT") {
         await handleMedicalBotUpdate(bot, botRow, body);
+      } else if (botRow.template === "NOVA_BOT") {
+        await handleNovaBotUpdate(bot, botRow, body);
       } else {
         // STORE / HOSPITAL: the owner's blueprint only ever specified AD_BOT
         // logic in detail — these templates get a minimal working /start so

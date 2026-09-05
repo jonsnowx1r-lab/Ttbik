@@ -128,13 +128,16 @@ export default function BotsDeployForm({ isOwner, adSlot }: { isOwner: boolean; 
                 docs/AGENT_BUS.md، توضيح المالك 2026-09-03 و2026-09-05
                 و2026-09-04)؛ الخيارات تظهر فقط لك أنت (isOwner). STORE و
                 HOSPITAL أُخفيا أيضاً — القالبان لا يزالان قيد الإعداد فعلياً
-                (راجع docs/claude-feature-backlog.md). */}
+                (راجع docs/claude-feature-backlog.md). NOVA_BOT (2026-09-05)
+                نفس القيد على التفعيل (نشر المالك فقط)، لكن البوت بعد نشره
+                منتج عام لمستخدمين خارجيين حقيقيين — راجع novaBotLogic.ts. */}
             {isOwner && <option value="MARRIAGE_BOT">بوت التعارف والزواج الشرعي</option>}
             {isOwner && <option value="JOBS_BOT">بوت فرص العمل والمتجر</option>}
             {isOwner && <option value="MEDICAL_BOT">البوت الطبي (عيادات ومشافي وصيدليات)</option>}
+            {isOwner && <option value="NOVA_BOT">Nova AI (مساعد ذكاء اصطناعي مجاني)</option>}
           </select>
         </div>
-        {template === "MARRIAGE_BOT" || template === "JOBS_BOT" || template === "MEDICAL_BOT" ? (
+        {template === "MARRIAGE_BOT" || template === "JOBS_BOT" || template === "MEDICAL_BOT" || template === "NOVA_BOT" ? (
           <div>
             <label className="mb-1 block text-sm font-medium">كلمة السر</label>
             <input

@@ -32,7 +32,7 @@ model Bot {
   id            String   @id @default(uuid())
   token         String   @unique
   ownerId       String // Telegram User ID of the bot creator
-  template      String // "AD_BOT" | "STORE" | "HOSPITAL" | "MARRIAGE_BOT" | "JOBS_BOT" | "MEDICAL_BOT"
+  template      String // "AD_BOT" | "STORE" | "HOSPITAL" | "MARRIAGE_BOT" | "JOBS_BOT" | "MEDICAL_BOT" | "NOVA_BOT"
   totalRevenue  Float    @default(0.0)
   ownerBalance  Float    @default(0.0) // creator's withdrawable commission (matured, past the 48h hold)
   pendingBalance Float   @default(0.0) // creator commission still inside the 48h hold, not yet withdrawable — see CREATOR_EARNING_PENDING transactions
@@ -905,4 +905,69 @@ model MedActivationCode {
   isRedeemed Boolean  @default(false)
   redeemedBy String?
   created_at DateTime @default(now())
+}
+
+// ===================================================================
+// NOVA AI — the owner's $0-cost AI assistant product (owner spec,
+// 2026-09-05). Fully isolated tables/ledger, same reasoning as every
+// other bot here: money/identity never crosses bot boundaries.
+//
+// Architecture: this Prisma/Supabase layer is ONLY the shared identity
+// + quota/subscription ledger. The actual AI logic (model council,
+// RAG, MoE routing) lives in a separate Python FastAPI service under
+// ai-system/ in this same repo — Next.js never calls the model APIs
+// directly. Three client channels share one NovaUser record:
+//   - Telegram (NOVA_BOT template, src/lib/novaBotLogic.ts — a thin
+//     HTTP client that forwards each message to the FastAPI /chat
+//     endpoint and relays the answer)
+//   - Streamlit web UI (ai-system/streamlit_app.py)
+//   - External API consumers (apiKey-authenticated FastAPI callers)
+// All three check/increment quota against the SAME NovaUser row via
+// the FastAPI backend (which holds the Supabase service-role key
+// itself, independent of Prisma) — Prisma/this schema is the source
+// of truth for the table shape and for anything Next.js needs to read
+// (e.g. an admin view), the FastAPI service talks to the same table
+// directly via supabase-py.
+//
+// No automated checkout: subscriptions start PENDING_APPROVAL and are
+// flipped to ACTIVE by the owner manually (same "أريد ترقية" ->
+// owner-approves pattern already used for BotPurchase/withdrawals in
+// this project) — never an automatic payment path, consistent with
+// this project's standing product rule against auto-checkout.
+// ===================================================================
+
+model NovaUser {
+  id                    String    @id @default(uuid())
+  telegramId            String?   @unique // set when the user first talks via NOVA_BOT
+  email                 String?   @unique // set when the user first logs into the Streamlit web UI
+  apiKey                String?   @unique // issued on request for external API access
+  plan                  String    @default("FREE") // FREE | PRO
+  subscriptionExpiresAt DateTime?
+  dailyUsed             Int       @default(0)
+  dailyResetAt          DateTime  @default(now())
+  created_at            DateTime  @default(now())
+  usageLogs             NovaUsageLog[]
+  subscriptions         NovaSubscription[]
+}
+
+model NovaUsageLog {
+  id         String   @id @default(uuid())
+  novaUserId String
+  novaUser   NovaUser @relation(fields: [novaUserId], references: [id])
+  channel    String // TELEGRAM | WEB | API
+  queryType  String // CODE | GENERAL | LIVE_INFO — set by the MoE router, for cost/usage visibility only
+  created_at DateTime @default(now())
+}
+
+model NovaSubscription {
+  id         String    @id @default(uuid())
+  novaUserId String
+  novaUser   NovaUser  @relation(fields: [novaUserId], references: [id])
+  plan       String // PRO_MONTHLY
+  amountUsd  Float
+  status     String    @default("PENDING_APPROVAL") // PENDING_APPROVAL | ACTIVE | EXPIRED
+  approvedBy String? // owner's Telegram ID who approved manually
+  startedAt  DateTime?
+  expiresAt  DateTime?
+  created_at DateTime  @default(now())
 }

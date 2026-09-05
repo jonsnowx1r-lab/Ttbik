@@ -37,18 +37,23 @@ migration file ends with the same `GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLE "X" TO service_role;` line the others do, and always name the
 file explicitly in the completion report — every time, no exceptions.
 
-## Ownership (updated 2026-09-04 — MEDICAL_BOT added, supersedes the block below)
+## Ownership (updated 2026-09-05 — NOVA_BOT added, supersedes the block below)
 - Claude owns and is the sole editor of the whole bot engine: `prisma/schema.prisma`
-  (AD_BOT + MARRIAGE_BOT + JOBS_BOT + MEDICAL_BOT models), `src/lib/adBotLogic.ts`,
+  (AD_BOT + MARRIAGE_BOT + JOBS_BOT + MEDICAL_BOT + NOVA_BOT models), `src/lib/adBotLogic.ts`,
   `src/lib/matchBotLogic.ts`, `src/lib/jobsBotLogic.ts`, `src/lib/medicalBotLogic.ts`,
+  `src/lib/novaBotLogic.ts`, the entire `ai-system/` directory (separate Python
+  FastAPI service — Nova AI's actual brain, deployed to Hugging Face Spaces, not Vercel),
   `src/services/ton-service.ts`, `src/services/marriageTonService.ts`,
   `src/services/jobsTonService.ts`, `src/app/api/telegram/[botId]/route.ts`,
   `src/app/api/bots/deploy/route.ts`, `src/app/bots/page.tsx`, `src/app/bots/BotsDeployForm.tsx`,
   `src/app/api/cron/medical-reminders/route.ts`, every
-  AD_BOT/MARRIAGE_BOT/JOBS_BOT/MEDICAL_BOT `prisma/migration_*.sql`
+  AD_BOT/MARRIAGE_BOT/JOBS_BOT/MEDICAL_BOT/NOVA_BOT `prisma/migration_*.sql`
   — plus site shell, admin, orders, migrations, env/Vercel as before. JOBS_BOT and
   MEDICAL_BOT are both owner-only private bots (like MARRIAGE_BOT — see Product
   rules below): never sold, never activated for anyone but the platform owner.
+  NOVA_BOT is owner-only to DEPLOY (same password-gate pattern) but, once
+  deployed, is a genuine public-facing product with real external end-users
+  and paid subscriptions — see the NOVA AI product rule below.
 - Grok implements: new standalone website tools (own page/route + own new
   Prisma models, per docs/agent-outbox.md task O1), or a brand-new bot
   template that only ADDS a sibling branch to the shared dispatcher files
@@ -103,6 +108,24 @@ file explicitly in the completion report — every time, no exceptions.
   `JobsTransaction`) — never shares a table with AD_BOT's or MARRIAGE_BOT's
   money, same reasoning as MARRIAGE_BOT's own ledger split (see
   MatchTransaction's schema comment).
+- **NOVA_BOT (owner spec, 2026-09-05) is different in kind from the three
+  above: it IS meant to be a genuine public-facing product with real
+  external end-users and paid subscriptions** — deploy is still gated
+  owner-only (`NOVA_BOT_CREATOR_PASSWORD`, one instance, owned by the
+  platform owner), but unlike MARRIAGE_BOT/JOBS_BOT/MEDICAL_BOT the bot
+  itself is explicitly built to serve many outside users and monetize
+  them (same commercial shape AD_BOT already has). Its actual AI logic
+  is NOT in this Next.js codebase at all — it lives in a separate Python
+  FastAPI service under `ai-system/`, deployed independently (Hugging
+  Face Spaces free tier), talking to the same Supabase project via
+  isolated `Nova*` tables. Never wire Claude's or Grok's real (paid)
+  APIs into its live request path, and never claim it "merges" closed
+  models (Claude/Grok/Gemini) into one network — both are false and the
+  first breaks the product's $0-cost requirement; see `ai-system/README.md`
+  and the honest, corrected architecture in `docs/agent-state.json` (O14).
+  No automated subscription checkout — `NovaSubscription` rows start
+  `PENDING_APPROVAL` and the owner flips them to `ACTIVE` manually, same
+  as every other payment-adjacent flow in this project.
 - Neither AD_BOT's, MARRIAGE_BOT's, nor JOBS_BOT's source/build is exposed
   anywhere for download/copy — keep it that way (unlike the free
   FAQ/auto-reply bots, which deliberately ship full source). Before
