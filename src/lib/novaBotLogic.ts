@@ -40,7 +40,11 @@ async function callNovaBackend(path: string, body: Record<string, unknown>): Pro
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Internal-Secret": INTERNAL_SECRET },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(25000),
+      // Render's free instance type spins down after ~15 minutes idle and
+      // takes 30-50s to wake on the next request — a 25s timeout was
+      // aborting the very first message after any idle gap, every time.
+      // Matches maxDuration=60 on the telegram route below.
+      signal: AbortSignal.timeout(55000),
     });
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, data };

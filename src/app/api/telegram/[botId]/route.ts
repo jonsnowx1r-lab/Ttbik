@@ -10,11 +10,14 @@ import { handleNovaBotUpdate } from "@/lib/novaBotLogic";
 // Default Vercel Hobby function timeout is 10s — raised for headroom since
 // MARRIAGE_BOT's random-chat search now does a brief (~3s) animated
 // "searching" message sequence (see startRandomChat in matchBotLogic.ts)
-// on top of its usual DB work, and NOVA_BOT's /chat forward can involve
-// two sequential Groq calls (primary answer + mixture-of-agents
-// synthesis) plus a Gemini call. Doesn't affect any other update — this
-// is just a higher ceiling, not a forced wait.
-export const maxDuration = 30;
+// on top of its usual DB work. Raised further to 60 (Vercel Hobby's max)
+// for NOVA_BOT specifically: its FastAPI backend runs on Render's free
+// tier, which spins the service down after ~15 min idle and takes
+// 30-50s to wake on the next request — the first message after any gap
+// needs that much headroom, on top of the actual Groq/Gemini calls.
+// Doesn't affect any other update — this is just a higher ceiling, not
+// a forced wait.
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest, { params }: { params: { botId: string } }) {
   try {
