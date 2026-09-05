@@ -10,9 +10,13 @@ $0 pipeline. Instead:
     openai/gpt-oss-120b on this account; Groq's hosted catalog changes
     over time, check console.groq.com/playground for what's actually
     live before assuming any specific name still works) is the primary
-    voice AND the final synthesizer.
-  - Gemini's free tier is a second, independent opinion for
-    cross-checking.
+    voice AND the final synthesizer. It answers GENERAL/LIVE_INFO
+    queries alone — Groq's whole value proposition is speed, and
+    calling Gemini plus a second Groq synthesis pass on every "hi"
+    made every reply noticeably slower for no real quality gain.
+  - Gemini's free tier is a second, independent opinion, consulted
+    only for CODE queries (run in parallel with Groq, not after it —
+    see answer() below) where the extra opinion is worth the wait.
   - An optional self-merged open-weight specialist model (produced by
     ai-system/colab/merge_and_finetune.py, served for free via
     Hugging Face Inference) is consulted for CODE queries specifically
@@ -23,6 +27,8 @@ If only Groq is configured (HF_SPECIALIST_MODEL_ID / GEMINI_API_KEY
 left empty), the system still works end-to-end on Groq alone — every
 other council seat is a bonus, not a hard dependency.
 """
+from concurrent.futures import ThreadPoolExecutor
+
 from groq import Groq
 from huggingface_hub import InferenceClient
 
@@ -116,7 +122,21 @@ def synthesize(message: str, groq_answer: str, gemini_answer: str | None, specia
 
 
 def answer(message: str, context: str, query_type: str) -> str:
-    groq_answer = call_groq(message, context)
-    gemini_answer = call_gemini(message, context)
-    specialist_answer = call_hf_specialist(message) if query_type == "CODE" else None
+    """GENERAL/LIVE_INFO: Groq alone — this is the whole point of using
+    Groq, near-instant. Calling Gemini + a second Groq synthesis pass on
+    every single "hi" made every reply 2-3x slower for no real quality
+    gain. The full council (parallelized so it costs one round-trip's
+    worth of latency, not three sequential ones) only kicks in for CODE
+    queries, where the extra opinions are actually worth the wait."""
+    if query_type != "CODE":
+        return call_groq(message, context)
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        groq_future = pool.submit(call_groq, message, context)
+        gemini_future = pool.submit(call_gemini, message, context)
+        specialist_future = pool.submit(call_hf_specialist, message)
+        groq_answer = groq_future.result()
+        gemini_answer = gemini_future.result()
+        specialist_answer = specialist_future.result()
+
     return synthesize(message, groq_answer, gemini_answer, specialist_answer)
