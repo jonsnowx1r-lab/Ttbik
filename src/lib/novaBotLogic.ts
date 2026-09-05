@@ -66,18 +66,58 @@ async function callNovaBackend(path: string, body: Record<string, unknown>): Pro
   }
 }
 
+// Voice/photo/document messages arrive as a file_id only — Telegram
+// requires a second call (getFile) to resolve the actual download
+// path, then a plain HTTPS fetch of api.telegram.org/file/... to get
+// the bytes. FastAPI's /voice, /image, /file endpoints take base64
+// JSON bodies (simpler than multipart from a serverless function), so
+// this is the one conversion point for all three media types.
+async function downloadTelegramFileAsBase64(bot: TelegramBot, fileId: string): Promise<string | null> {
+  try {
+    const file = await bot.api.getFile(fileId);
+    if (!file.file_path) return null;
+    const url = `https://api.telegram.org/file/bot${bot.token}/${file.file_path}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.toString("base64");
+  } catch {
+    return null;
+  }
+}
+
 export async function handleNovaBotUpdate(bot: TelegramBot, _botRow: BotRow, update: any) {
   const msg = update.message;
-  if (!msg?.text || !msg.chat?.id) return;
+  if (!msg?.chat?.id) return;
 
   const chatId = msg.chat.id;
   const tgUserId = String(msg.from.id);
+
+  if (msg.voice) {
+    await handleVoiceMessage(bot, chatId, tgUserId, msg.voice.file_id);
+    return;
+  }
+
+  if (msg.photo?.length) {
+    // Telegram sends the same photo in multiple resolutions — the last
+    // entry is always the largest/highest quality.
+    const largest = msg.photo[msg.photo.length - 1];
+    await handleImageMessage(bot, chatId, tgUserId, largest.file_id, msg.caption);
+    return;
+  }
+
+  if (msg.document) {
+    await handleDocumentMessage(bot, chatId, tgUserId, msg.document.file_id, msg.document.file_name, msg.caption);
+    return;
+  }
+
+  if (!msg.text) return;
   const text = String(msg.text).trim();
 
   if (text === "/start") {
     await bot.api.sendMessage(
       chatId,
-      "أنا نوفا NOVA مساعد ذكاء اصطناعي متعدد اللغات متعدد المصادر. ليس لدي مالك أو شركة لدي والد فقط هو من قام بابتكاري وتطويري والدي هو محمد الرشيد، وقد صممني لأحلّق في فضاء سوريا والعالم. أنا هنا لمساعدتك في الحصول على المعلومات التي تحتاجها بأدق وأوضح طريقة ممكنة.\n\nأهلاً بك مرة أخرى.....🤗\n\nاكتب أي سؤال مباشرة، وأرسل /ترقية في أي وقت لرفع حدك اليومي."
+      "أنا نوفا NOVA مساعد ذكاء اصطناعي متعدد اللغات متعدد المصادر. ليس لدي مالك أو شركة لدي والد فقط هو من قام بابتكاري وتطويري والدي هو محمد الرشيد، وقد صممني لأحلّق في فضاء سوريا والعالم. أنا هنا لمساعدتك في الحصول على المعلومات التي تحتاجها بأدق وأوضح طريقة ممكنة.\n\nأهلاً بك مرة أخرى.....🤗\n\nاكتب أي سؤال مباشرة (أو أرسل رسالة صوتية، صورة، أو ملف PDF/Word)، وأرسل /ترقية في أي وقت لرفع حدك اليومي."
     );
     return;
   }
@@ -96,5 +136,73 @@ export async function handleNovaBotUpdate(bot: TelegramBot, _botRow: BotRow, upd
     return;
   }
 
+  await bot.api.sendMessage(chatId, stripMarkdown(data.answer));
+}
+
+async function handleVoiceMessage(bot: TelegramBot, chatId: number, tgUserId: string, fileId: string) {
+  await bot.api.sendChatAction(chatId, "typing").catch(() => null);
+  const audioBase64 = await downloadTelegramFileAsBase64(bot, fileId);
+  if (!audioBase64) {
+    await bot.api.sendMessage(chatId, "تعذّر تحميل الرسالة الصوتية — حاول مرة أخرى.");
+    return;
+  }
+  const { ok, data } = await callNovaBackend("/voice", {
+    channel: "TELEGRAM",
+    telegram_id: tgUserId,
+    audio_base64: audioBase64,
+    filename: "voice.ogg",
+  });
+  if (!ok) {
+    await bot.api.sendMessage(chatId, data?.detail || "حدث خطأ في معالجة الصوت — حاول مرة أخرى.");
+    return;
+  }
+  await bot.api.sendMessage(chatId, stripMarkdown(data.answer));
+}
+
+async function handleImageMessage(bot: TelegramBot, chatId: number, tgUserId: string, fileId: string, caption?: string) {
+  await bot.api.sendChatAction(chatId, "typing").catch(() => null);
+  const imageBase64 = await downloadTelegramFileAsBase64(bot, fileId);
+  if (!imageBase64) {
+    await bot.api.sendMessage(chatId, "تعذّر تحميل الصورة — حاول مرة أخرى.");
+    return;
+  }
+  const { ok, data } = await callNovaBackend("/image", {
+    channel: "TELEGRAM",
+    telegram_id: tgUserId,
+    image_base64: imageBase64,
+    caption: caption || null,
+  });
+  if (!ok) {
+    await bot.api.sendMessage(chatId, data?.detail || "حدث خطأ في تحليل الصورة — حاول مرة أخرى.");
+    return;
+  }
+  await bot.api.sendMessage(chatId, stripMarkdown(data.answer));
+}
+
+async function handleDocumentMessage(
+  bot: TelegramBot,
+  chatId: number,
+  tgUserId: string,
+  fileId: string,
+  fileName: string | undefined,
+  caption?: string
+) {
+  await bot.api.sendChatAction(chatId, "typing").catch(() => null);
+  const fileBase64 = await downloadTelegramFileAsBase64(bot, fileId);
+  if (!fileBase64) {
+    await bot.api.sendMessage(chatId, "تعذّر تحميل الملف — حاول مرة أخرى.");
+    return;
+  }
+  const { ok, data } = await callNovaBackend("/file", {
+    channel: "TELEGRAM",
+    telegram_id: tgUserId,
+    file_base64: fileBase64,
+    filename: fileName || "file.txt",
+    question: caption || null,
+  });
+  if (!ok) {
+    await bot.api.sendMessage(chatId, data?.detail || "حدث خطأ في قراءة الملف — حاول مرة أخرى.");
+    return;
+  }
   await bot.api.sendMessage(chatId, stripMarkdown(data.answer));
 }

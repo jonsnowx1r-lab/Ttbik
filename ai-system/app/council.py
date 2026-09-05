@@ -96,6 +96,42 @@ def call_gemini(message: str, context: str) -> str | None:
         return None
 
 
+def transcribe_voice(audio_bytes: bytes, filename: str = "voice.ogg") -> str:
+    """Groq also hosts Whisper for free (same account, same API key) —
+    this is the $0 path for voice-message support: transcribe to text,
+    then run that text through the exact same council/RAG pipeline as
+    any typed message. No separate voice-specific logic downstream.
+    Uses whisper-large-v3 (not the -turbo variant) — the only model id
+    this project's pinned groq SDK version (0.13.1) type-hints as
+    supported; Groq's hosted catalog changes over time like the chat
+    models do, so re-check console.groq.com/playground if this stops
+    working."""
+    client = _groq_client()
+    transcription = client.audio.transcriptions.create(
+        file=(filename, audio_bytes),
+        model="whisper-large-v3",
+    )
+    return transcription.text or ""
+
+
+def call_gemini_vision(image_bytes: bytes, prompt: str, mime_type: str = "image/jpeg") -> str | None:
+    """Gemini's free tier supports multimodal (image) input — the $0
+    path for "what's in this picture" / reading a photo of text, a
+    receipt, a diagram, etc. Bypasses the text-only council entirely
+    since Groq/the HF specialist have no vision capability."""
+    if not GEMINI_API_KEY:
+        return None
+    import google.generativeai as genai
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=_SYSTEM_PROMPT)
+    try:
+        response = model.generate_content([prompt, {"mime_type": mime_type, "data": image_bytes}])
+        return response.text
+    except Exception:
+        return None
+
+
 def call_hf_specialist(message: str) -> str | None:
     if not HF_SPECIALIST_MODEL_ID or not HF_TOKEN:
         return None

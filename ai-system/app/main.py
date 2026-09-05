@@ -12,13 +12,14 @@ Deploy free:  Render.com (Docker web service, free instance type) — see
               still used for free model storage only, via the Colab
               notebook pushing to HF Hub.)
 """
+import base64
 import logging
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app import council, quota, rag, router
+from app import council, files, quota, rag, router
 from app.config import NOVA_INTERNAL_SECRET
 
 logger = logging.getLogger("nova")
@@ -75,6 +76,44 @@ def _authorize(channel: str, authorization: str | None, x_internal_secret: str |
     raise HTTPException(status_code=400, detail=f"unknown channel: {channel}")
 
 
+def _resolve_and_authorize(
+    channel: str,
+    telegram_id: str | None,
+    email: str | None,
+    authorization: str | None,
+    x_internal_secret: str | None,
+) -> dict:
+    api_key = _authorize(channel, authorization, x_internal_secret)
+    try:
+        return quota.resolve_or_create_user(channel, telegram_id=telegram_id, email=email, api_key=api_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _enforce_quota(user: dict) -> str:
+    allowed, _remaining, quota_message = quota.check_and_reserve_quota(user)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=quota_message)
+    return quota_message
+
+
+def _run_text_pipeline(
+    user: dict, channel: str, message: str, background_tasks: BackgroundTasks
+) -> tuple[str, str]:
+    """The one shared brain path: classify -> build context (memory +
+    live search/knowledge bank) -> council answer. Used by /chat
+    directly, and by /voice (after transcription) and /file (after
+    text extraction) so a transcribed or extracted message gets
+    exactly the same treatment as anything typed by hand."""
+    query_type = router.classify(message)
+    context = rag.build_context(user["id"], message, query_type)
+    final_answer = council.answer(message, context, query_type)
+
+    background_tasks.add_task(quota.log_usage, user["id"], channel, query_type)
+    background_tasks.add_task(rag.remember, user["id"], message, final_answer)
+    return final_answer, query_type
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(
     req: ChatRequest,
@@ -82,33 +121,133 @@ def chat(
     authorization: str | None = Header(default=None),
     x_internal_secret: str | None = Header(default=None),
 ):
-    api_key = _authorize(req.channel, authorization, x_internal_secret)
+    user = _resolve_and_authorize(req.channel, req.telegram_id, req.email, authorization, x_internal_secret)
+    quota_message = _enforce_quota(user)
 
-    try:
-        user = quota.resolve_or_create_user(
-            req.channel, telegram_id=req.telegram_id, email=req.email, api_key=api_key
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    allowed, _remaining, quota_message = quota.check_and_reserve_quota(user)
-    if not allowed:
-        raise HTTPException(status_code=429, detail=quota_message)
-
-    query_type = router.classify(req.message)
-    context = rag.build_context(user["id"], req.message, query_type)
-    final_answer = council.answer(req.message, context, query_type)
-
-    # Neither of these needs to finish before the user gets their
-    # answer — they're pure bookkeeping (a usage-log row, writing this
-    # turn into vector memory for next time). Deferring them to run
-    # after the response is sent shaves a Supabase round-trip and a
-    # local embedding computation off every single reply's latency,
-    # which matters a lot on Render's free-tier 0.1 CPU.
-    background_tasks.add_task(quota.log_usage, user["id"], req.channel, query_type)
-    background_tasks.add_task(rag.remember, user["id"], req.message, final_answer)
+    final_answer, query_type = _run_text_pipeline(user, req.channel, req.message, background_tasks)
 
     return ChatResponse(answer=final_answer, query_type=query_type, quota_message=quota_message)
+
+
+class VoiceRequest(BaseModel):
+    channel: str
+    audio_base64: str
+    filename: str = "voice.ogg"
+    telegram_id: str | None = None
+    email: str | None = None
+
+
+class VoiceResponse(BaseModel):
+    transcript: str
+    answer: str
+    query_type: str
+    quota_message: str
+
+
+@app.post("/voice", response_model=VoiceResponse)
+def voice(
+    req: VoiceRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+    x_internal_secret: str | None = Header(default=None),
+):
+    """Free voice-message support via Groq's own hosted Whisper (same
+    API key, no extra cost): transcribe, then run the transcript
+    through the exact same pipeline /chat uses."""
+    user = _resolve_and_authorize(req.channel, req.telegram_id, req.email, authorization, x_internal_secret)
+    quota_message = _enforce_quota(user)
+
+    audio_bytes = base64.b64decode(req.audio_base64)
+    transcript = council.transcribe_voice(audio_bytes, req.filename)
+    if not transcript.strip():
+        raise HTTPException(status_code=422, detail="تعذّر فهم الرسالة الصوتية — حاول مرة أخرى بوضوح أكبر.")
+
+    final_answer, query_type = _run_text_pipeline(user, req.channel, transcript, background_tasks)
+
+    return VoiceResponse(transcript=transcript, answer=final_answer, query_type=query_type, quota_message=quota_message)
+
+
+class ImageRequest(BaseModel):
+    channel: str
+    image_base64: str
+    caption: str | None = None
+    mime_type: str = "image/jpeg"
+    telegram_id: str | None = None
+    email: str | None = None
+
+
+class ImageResponse(BaseModel):
+    answer: str
+    quota_message: str
+
+
+@app.post("/image", response_model=ImageResponse)
+def image(
+    req: ImageRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+    x_internal_secret: str | None = Header(default=None),
+):
+    """Free image understanding via Gemini's multimodal free tier —
+    the council's other members (Groq's hosted model, the HF
+    specialist) have no vision capability, so images bypass the
+    council entirely and go straight to Gemini."""
+    user = _resolve_and_authorize(req.channel, req.telegram_id, req.email, authorization, x_internal_secret)
+    quota_message = _enforce_quota(user)
+
+    image_bytes = base64.b64decode(req.image_base64)
+    prompt = req.caption or "صف هذه الصورة بالتفصيل وأجب عن أي سؤال ضمني فيها."
+    answer_text = council.call_gemini_vision(image_bytes, prompt, req.mime_type)
+    if answer_text is None:
+        raise HTTPException(
+            status_code=503,
+            detail="تحليل الصور غير متاح حالياً — تأكد من ضبط GEMINI_API_KEY على الخادم.",
+        )
+
+    background_tasks.add_task(quota.log_usage, user["id"], req.channel, "IMAGE")
+    background_tasks.add_task(rag.remember, user["id"], f"[صورة] {prompt}", answer_text)
+
+    return ImageResponse(answer=answer_text, quota_message=quota_message)
+
+
+class FileRequest(BaseModel):
+    channel: str
+    file_base64: str
+    filename: str
+    question: str | None = None
+    telegram_id: str | None = None
+    email: str | None = None
+
+
+class FileResponse(BaseModel):
+    answer: str
+    quota_message: str
+
+
+@app.post("/file", response_model=FileResponse)
+def file_endpoint(
+    req: FileRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+    x_internal_secret: str | None = Header(default=None),
+):
+    """PDF/Word/plain-text support: extract text locally (pypdf /
+    python-docx, both pure-Python — no heavy ML dependency), then run
+    it through the exact same text pipeline as a typed message."""
+    user = _resolve_and_authorize(req.channel, req.telegram_id, req.email, authorization, x_internal_secret)
+    quota_message = _enforce_quota(user)
+
+    file_bytes = base64.b64decode(req.file_base64)
+    extracted = files.extract_text(req.filename, file_bytes)
+    if not extracted.strip():
+        raise HTTPException(status_code=422, detail="تعذّر استخراج نص من هذا الملف.")
+
+    question = req.question or "لخّص هذا الملف بإيجاز واذكر أهم النقاط فيه."
+    message = f"محتوى ملف ({req.filename}):\n{extracted}\n\nسؤال المستخدم: {question}"
+
+    final_answer, query_type = _run_text_pipeline(user, req.channel, message, background_tasks)
+
+    return FileResponse(answer=final_answer, quota_message=quota_message)
 
 
 class SubscribeRequest(BaseModel):
