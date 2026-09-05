@@ -31,6 +31,19 @@ import type { Bot as BotRow } from "@prisma/client";
 const FASTAPI_URL = process.env.NOVA_FASTAPI_URL || "";
 const INTERNAL_SECRET = process.env.NOVA_INTERNAL_SECRET || "";
 
+// The model council writes plain Markdown (**bold**, # headers, etc.),
+// but Telegram's own Markdown/MarkdownV2 parse modes require every
+// special character to be perfectly escaped — a single stray one from
+// model output throws and the message never arrives at all. Stripping
+// the common markers to plain text is less pretty but never fails.
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "$1");
+}
+
 async function callNovaBackend(path: string, body: Record<string, unknown>): Promise<{ ok: boolean; data: any }> {
   if (!FASTAPI_URL || !INTERNAL_SECRET) {
     return { ok: false, data: { detail: "NOVA_FASTAPI_URL / NOVA_INTERNAL_SECRET غير مُعدّين على Vercel." } };
@@ -83,5 +96,5 @@ export async function handleNovaBotUpdate(bot: TelegramBot, _botRow: BotRow, upd
     return;
   }
 
-  await bot.api.sendMessage(chatId, data.answer);
+  await bot.api.sendMessage(chatId, stripMarkdown(data.answer));
 }
