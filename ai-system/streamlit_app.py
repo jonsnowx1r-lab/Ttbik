@@ -4,9 +4,10 @@ call the FastAPI backend's /chat endpoint over HTTP with channel="WEB"
 — no AI logic lives here, so the web UI, the Telegram bot, and any
 external API caller always behave identically.
 
-Deploy free on Streamlit Community Cloud or Hugging Face Spaces
-(Streamlit SDK) — see ai-system/README.md for exact mobile-browser
-steps.
+Deploy free on Streamlit Community Cloud (share.streamlit.io) — see
+ai-system/README.md for exact mobile-browser steps. (Not Hugging Face
+Spaces — HF now gates any Python-running Space, Streamlit included,
+behind a paid PRO plan.)
 
 Run locally: streamlit run streamlit_app.py
 """

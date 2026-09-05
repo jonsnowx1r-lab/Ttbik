@@ -6,7 +6,11 @@ is duplicated anywhere else, so there is exactly one place to fix bugs
 or improve the council/RAG/routing.
 
 Run locally:  uvicorn app.main:app --reload --port 8000
-Deploy free:  Hugging Face Spaces (Docker SDK) — see ai-system/README.md
+Deploy free:  Render.com (Docker web service, free instance type) — see
+              ai-system/README.md. (Not Hugging Face Spaces — HF now
+              gates Docker/Gradio Spaces behind a paid PRO plan; HF is
+              still used for free model storage only, via the Colab
+              notebook pushing to HF Hub.)
 """
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel

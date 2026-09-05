@@ -30,33 +30,42 @@
 
 نفس مشروع Supabase الذي يستخدمه موقع سوق تولز أصلاً — افتح SQL Editor فيه، الصق محتوى `prisma/migration_19_nova_ai.sql`، وشغّله مرة واحدة.
 
-## الخطوة 3: انشر خادم FastAPI مجاناً (Hugging Face Spaces)
+## الخطوة 3: انشر خادم FastAPI مجاناً (Render.com)
+
+**تحديث 2026-09-05:** كانت الخطة الأصلية تستخدم Hugging Face Spaces لاستضافة الخادم، لكن HF غيّرت سياستها — أصبح Docker/Gradio (أي أي كود بايثون حقيقي) يتطلب اشتراك PRO مدفوعاً، ويبقى مجانياً فقط SDK "Static" (صفحات HTML/JS بلا خادم، لا يصلح لـ FastAPI). لذلك ننشر الخادم على **Render.com** بدلاً من ذلك — استضافة مجانية حقيقية بلا بطاقة ائتمان، تدعم Docker مباشرة. Hugging Face يبقى مستخدَماً فقط لتخزين النموذج المدموج (Model repo، ما زال مجانياً بالكامل) في الخطوة 4.
 
 من متصفح الهاتف:
-1. افتح https://huggingface.co/new-space
-2. اختر SDK = **Docker**، اسم المساحة مثلاً `nova-ai-backend`
-3. من تبويب **Files**، ارفع محتوى مجلد `ai-system/` بالكامل (أو اربط الـ Space بمستودع GitHub هذا مباشرة من إعدادات الـ Space — أسهل من الهاتف)
-4. أضف ملف `Dockerfile` بجذر الـ Space (انظر أسفل)
-5. من تبويب **Settings -> Repository secrets** أضف كل مفتاح من `.env.example` كسر منفصل (نفس الأسماء بالضبط)
-6. بعد اكتمال البناء، رابط الخادم يكون: `https://<username>-nova-ai-backend.hf.space`
+1. أنشئ حساباً مجانياً على https://render.com (يمكن التسجيل مباشرة بحساب GitHub — لا بطاقة ائتمان مطلوبة)
+2. اضغط **New +** ثم **Web Service**
+3. اربطه بمستودع GitHub هذا (`Ttbik`)، وحدد **Root Directory** = `ai-system`
+4. **Runtime**: اختر **Docker** (سيكتشف `ai-system/Dockerfile` تلقائياً)
+5. **Instance Type**: اختر **Free**
+6. من قسم **Environment Variables** أضف كل مفتاح من `.env.example` كمتغير منفصل (نفس الأسماء بالضبط)
+7. اضغط **Create Web Service** — بعد اكتمال البناء (بضع دقائق)، رابط الخادم يكون شيئاً مثل: `https://nova-ai-backend.onrender.com`
 
-**Dockerfile** (ضعه في `ai-system/Dockerfile`، هذا المشروع يحتويه بالفعل):
-```
-انظر ai-system/Dockerfile
-```
+**ملاحظة الخطة المجانية:** الخدمة "تنام" بعد 15 دقيقة خمول، وأول رسالة بعد نومها تأخذ حوالي 30-50 ثانية للاستيقاظ (طبيعي تماماً على الخطة المجانية) — الرسائل التالية سريعة كالمعتاد.
 
 ## الخطوة 4 (اختياري): دمج النماذج عبر Colab
 
 افتح `ai-system/colab/merge_and_finetune.ipynb` مباشرة عبر:
 `https://colab.research.google.com/github/<owner>/<repo>/blob/<branch>/ai-system/colab/merge_and_finetune.ipynb`
 
-شغّل الخلايا بالترتيب من الهاتف (Runtime -> Change runtime type -> T4 GPU، ثم ▷ على كل خلية). في النهاية ضع اسم النموذج الناتج في `HF_SPECIALIST_MODEL_ID` على HF Spaces (Repository secrets) وأعد تشغيل الـ Space.
+شغّل الخلايا بالترتيب من الهاتف (Runtime -> Change runtime type -> T4 GPU، ثم ▷ على كل خلية). في النهاية ضع اسم النموذج الناتج في `HF_SPECIALIST_MODEL_ID` ضمن **Environment Variables** على Render (وليس HF — الخادم نفسه على Render، الطراز فقط مخزَّن ومقروء من HF Hub) ثم اضغط **Manual Deploy** لإعادة تشغيل الخادم.
 
 هذه الجلسة مجانية وتنقطع بعد خمول — شغّلها دورياً (أسبوعياً مثلاً) لتحسين النموذج المتخصص، وليست جزءاً من مسار خدمة المستخدمين اللحظي (ذاك عمل Groq/Gemini الدائمين).
 
-## الخطوة 5: انشر واجهة Streamlit (اختياري، مجاني)
+## الخطوة 5: انشر واجهة Streamlit (اختياري، مجاني — Streamlit Community Cloud)
 
-نفس فكرة الخطوة 3، لكن SDK = **Streamlit** بدل Docker، والملف الرئيسي `streamlit_app.py`. أضف Secrets: `NOVA_FASTAPI_URL` (رابط الخطوة 3) و`NOVA_INTERNAL_SECRET` (نفس القيمة الموجودة على خادم FastAPI).
+هذه استضافة Streamlit الرسمية المجانية (منفصلة عن Hugging Face تماماً، ولم تتأثر بتغيير سياسة HF):
+1. من متصفح الهاتف افتح https://share.streamlit.io وسجّل دخول بحساب GitHub
+2. اضغط **Create app** ثم **From existing repo**
+3. اختر مستودع `Ttbik`، الفرع الصحيح، و**Main file path** = `ai-system/streamlit_app.py`
+4. من **Advanced settings -> Secrets** أضف بصيغة TOML:
+   ```
+   NOVA_FASTAPI_URL = "https://nova-ai-backend.onrender.com"
+   NOVA_INTERNAL_SECRET = "نفس القيمة الموجودة على Render"
+   ```
+5. اضغط **Deploy** — رابط تطبيقك يكون شيئاً مثل `https://nova-ai.streamlit.app`
 
 ## الخطوة 6: فعّل بوت Nova على تيليجرام من سوق تولز
 

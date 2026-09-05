@@ -42,7 +42,8 @@ file explicitly in the completion report — every time, no exceptions.
   (AD_BOT + MARRIAGE_BOT + JOBS_BOT + MEDICAL_BOT + NOVA_BOT models), `src/lib/adBotLogic.ts`,
   `src/lib/matchBotLogic.ts`, `src/lib/jobsBotLogic.ts`, `src/lib/medicalBotLogic.ts`,
   `src/lib/novaBotLogic.ts`, the entire `ai-system/` directory (separate Python
-  FastAPI service — Nova AI's actual brain, deployed to Hugging Face Spaces, not Vercel),
+  FastAPI service — Nova AI's actual brain, deployed to Render.com, not Vercel
+  and not Hugging Face Spaces — see O15 in docs/agent-state.json),
   `src/services/ton-service.ts`, `src/services/marriageTonService.ts`,
   `src/services/jobsTonService.ts`, `src/app/api/telegram/[botId]/route.ts`,
   `src/app/api/bots/deploy/route.ts`, `src/app/bots/page.tsx`, `src/app/bots/BotsDeployForm.tsx`,
