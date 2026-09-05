@@ -6,8 +6,11 @@ Grok, Gemini) since nobody outside their own companies holds their
 weights, and Claude/Grok's real APIs are paid — neither belongs in a
 $0 pipeline. Instead:
 
-  - Groq (free, always-on, hosts big open models like Llama 3.3 70B)
-    is the primary voice AND the final synthesizer.
+  - Groq (free, always-on, hosts big open-weight models — currently
+    openai/gpt-oss-120b on this account; Groq's hosted catalog changes
+    over time, check console.groq.com/playground for what's actually
+    live before assuming any specific name still works) is the primary
+    voice AND the final synthesizer.
   - Gemini's free tier is a second, independent opinion for
     cross-checking.
   - An optional self-merged open-weight specialist model (produced by
