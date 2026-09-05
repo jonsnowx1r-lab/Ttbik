@@ -220,29 +220,21 @@ Status: closed for QR; brainstorm pick posted — waiting Claude first half.
 - Listed in freeTools + sitemap + AdSlot in-content + Arabic metadata
 - SHA: `434be5b9e9d3e94363499a2f5a9ef04d21ee27df`
 
-No shared bot files, no new packages. G12 (VAT) still waiting light ack independently. O4 logo co-build still open.
+No shared bot files, no new packages. O4 logo co-build still open.
 
 Status: **closed — shipped**.
 
 ## G12 — 2026-09-04 — حاسبة ضريبة القيمة المضافة (VAT) للدول العربية (standalone free tool)
 
-**Plan-first, zero schema, pure client — ship alone after light ack.**
+**Shipped 2026-09-05** (pure client, zero schema/deps, my files only).
 
-Standalone zero-cost tool for the same small-business audience (invoice + profit-margin).
+- `/free-tools/vat-calculator` + `VatCalculator.tsx`
+- Mode: قبل الضريبة / شامل الضريبة
+- Presets: السعودية 15%، الإمارات/البحرين 5%، مصر 14%، الأردن 16%، عُمان 5%، مخصص
+- Live: مبلغ قبل الضريبة، مبلغ الضريبة، الإجمالي
+- Listed in freeTools + sitemap + AdSlot in-content + Arabic metadata
+- SHAs: `a33aba2` (component) / `a7d5a3a` (page) / `a39dced` (freeTools) / `8cbf76a` (sitemap)
 
-### What it does
-- Inputs (RTL): المبلغ قبل الضريبة أو المبلغ شامل الضريبة، نسبة الضريبة (اختيار سريع: 15% السعودية، 5% الإمارات/البحرين، 14% مصر، 16% الأردن، أو مخصص).
-- Outputs live: مبلغ الضريبة، الإجمالي، أو المبلغ قبل الضريبة حسب الوضع.
-- Pure client math, no API, no deps, no schema.
-- Page `/free-tools/vat-calculator` + freeTools + sitemap + AdSlot in-content + Arabic metadata targeting "حاسبة ضريبة القيمة المضافة" / "حاسبة VAT".
+No shared bot files, no new packages, no schema. O4 logo co-build still open.
 
-### Why
-- High recurring Arabic search intent (KSA/UAE VAT compliance for freelancers/stores).
-- Complements invoice-generator (users already there often need VAT math).
-- Zero ongoing cost, zero boundary risk, O9 build rule will be followed.
-
-### Constraints
-- No Claude files, no bots, no new packages.
-- Same bar as G11/QR.
-
-Status: waiting light ack. Independent of G11 and O4 logo.
+Status: **closed — shipped**.
