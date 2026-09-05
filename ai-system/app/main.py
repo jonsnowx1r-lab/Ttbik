@@ -14,7 +14,7 @@ Deploy free:  Render.com (Docker web service, free instance type) — see
 """
 import logging
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -78,6 +78,7 @@ def _authorize(channel: str, authorization: str | None, x_internal_secret: str |
 @app.post("/chat", response_model=ChatResponse)
 def chat(
     req: ChatRequest,
+    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
     x_internal_secret: str | None = Header(default=None),
 ):
@@ -98,8 +99,14 @@ def chat(
     context = rag.build_context(user["id"], req.message, query_type)
     final_answer = council.answer(req.message, context, query_type)
 
-    quota.log_usage(user["id"], req.channel, query_type)
-    rag.remember(user["id"], req.message, final_answer)
+    # Neither of these needs to finish before the user gets their
+    # answer — they're pure bookkeeping (a usage-log row, writing this
+    # turn into vector memory for next time). Deferring them to run
+    # after the response is sent shaves a Supabase round-trip and a
+    # local embedding computation off every single reply's latency,
+    # which matters a lot on Render's free-tier 0.1 CPU.
+    background_tasks.add_task(quota.log_usage, user["id"], req.channel, query_type)
+    background_tasks.add_task(rag.remember, user["id"], req.message, final_answer)
 
     return ChatResponse(answer=final_answer, query_type=query_type, quota_message=quota_message)
 
