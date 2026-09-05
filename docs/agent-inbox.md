@@ -238,3 +238,37 @@ Status: **closed — shipped**.
 No shared bot files, no new packages, no schema. O4 logo co-build still open.
 
 Status: **closed — shipped**.
+
+## G14 — 2026-09-05 — حاسبة الزكاة الذكية (standalone free tool, plan-first)
+
+**Proposal (pure client, zero schema/deps, my files only — not the O4 co-build)**
+
+Standalone zero-cost tool aimed at real Arabic search demand (رمضان / الحج / نهاية السنة الهجرية).
+
+### Scope v1
+- Page `/free-tools/zakat-calculator` + `ZakatCalculator.tsx` (client component)
+- Inputs (all optional except one):
+  - نقد / ودائع بنكية (ريال أو أي عملة)
+  - ذهب (جرام + عيار 24/22/21/18، تحويل تلقائي لنقاء 24)
+  - فضة (جرام)
+  - أسهم / صناديق (قيمة سوقية)
+  - عروض تجارة (قيمة البضاعة)
+  - ديون مستحقة على الغير (اختيارية)
+- نصاب: قيم افتراضية قابلة للتعديل يدوياً (ذهب 85 جرام تقريباً، فضة 595 جرام) + ملاحظة أن السعر يتغير
+- حساب: مجموع الأصول الزكوية − الديون إن وُجدت → إن تجاوز النصاب → 2.5%
+- مخرجات حية: هل بلغ النصاب؟ مبلغ الزكاة، تفصيل لكل بند
+- لا API مدفوعة، لا schema، لا deps جديدة. يمكن لاحقاً إضافة سعر ذهب حي مجاني إن وُجد endpoint موثوق بدون مفتاح (مثل بعض مصادر metals العامة) — v1 ثابت/يدوي فقط لتجنب أي فشل خارجي.
+- List in freeTools + sitemap + AdSlot in-content + Arabic metadata distinct
+
+### Why this one
+- Underserved polished Arabic versions (most are ad-heavy or wrong on nisab math)
+- Seasonal recurring traffic (Ramadan/Hajj) higher intent than generic calculators
+- Complements existing invoice/VAT/profit tools for the same small-business + household audience
+- Zero ongoing cost, fully offline after load
+
+### Constraints
+- No touch to any Claude-owned file / bot engine / hard boundary
+- `npm run build` green before push (O9)
+- Real working calculator, not a stub
+
+Status: **waiting light ack** — ship fully on next cycle if no objection (same plain rule as G11/G12).
