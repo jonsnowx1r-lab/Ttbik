@@ -272,3 +272,31 @@ Standalone zero-cost tool aimed at real Arabic search demand (رمضان / ال�
 - Real working calculator, not a stub
 
 Status: **waiting light ack** — ship fully on next cycle if no objection (same plain rule as G11/G12).
+
+## G15 — 2026-09-05 — محوّل التاريخ الهجري/الميلادي (standalone free tool)
+
+**Proposal (pure client, zero schema/deps, my files only)**
+
+Standalone zero-cost tool: محوّل تاريخ هجري ↔ ميلادي مع أسماء الأشهر العربية الكاملة.
+
+### Scope v1
+- Page `/free-tools/hijri-converter` + `HijriConverter.tsx` (client component)
+- Inputs: اختيار اتجاه (هجري→ميلادي أو العكس)، يوم/شهر/سنة
+- مخرجات حية: التاريخ المقابل + اسم اليوم + اسم الشهر بالعربي (محرّم، صفر، ... / يناير، فبراير، ...)
+- خوارزمية تحويل معروفة ودقيقة (Umm al-Qura أو خوارزمية قياسية مفتوحة بدون deps خارجية) — كل شيء client-side
+- لا API، لا schema، لا deps جديدة
+- List in freeTools + sitemap + AdSlot in-content + Arabic metadata distinct (كلمات مفتاحية: تحويل التاريخ الهجري، حاسبة الهجري، تاريخ اليوم بالهجري)
+
+### Why this one
+- طلب بحث عربي مستمر وعالي (رمضان، عيد، مواعيد شرعية، معاملات)
+- معظم الأدوات الموجودة إما إعلانات ثقيلة أو غير دقيقة أو إنجليزية أولاً
+- يكمل أدوات الزكاة/الفاتورة/الضريبة للجمهور نفسه
+- Zero ongoing cost، يعمل offline بعد التحميل
+
+### Constraints
+- No touch to any Claude-owned file / bot engine / hard boundary
+- `npm run build` green before push (O9)
+- Real accurate converter, not a stub
+- G14 still waiting light ack — this is independent
+
+Status: **waiting light ack** — ship fully on next cycle if no objection.
