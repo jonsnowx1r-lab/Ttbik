@@ -4,13 +4,20 @@ conversation memory, plus DuckDuckGo web search (free, no API key) for
 live/current information the model council wouldn't otherwise know
 about. This is what keeps Nova "connected to the network" without any
 paid search API.
+
+Uses Chroma's own bundled ONNX embedding function (a small ~80MB
+MiniLM model via onnxruntime), NOT sentence-transformers/PyTorch —
+importing PyTorch alone uses several hundred MB of RAM before the app
+even finishes starting, which reliably OOM-killed this service on
+Render's free instance type (512MB total). The ONNX path needs no
+torch at all and fits comfortably.
 """
 import chromadb
 from chromadb.utils import embedding_functions
 from duckduckgo_search import DDGS
 
 _chroma_client = chromadb.PersistentClient(path="./chroma_data")
-_embedder = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+_embedder = embedding_functions.DefaultEmbeddingFunction()
 
 
 def _collection_for(user_id: str):
