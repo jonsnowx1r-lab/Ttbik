@@ -89,6 +89,7 @@ export const STR: Dict = {
   adBudgetPrompt: { ar: "حدد ميزانية حملتك بالدولار (مثال: 100):", en: "Set your campaign budget in USD (example: 100):" },
   adCpcPrompt: { ar: "حدد السعر لكل نقرة/مهمة بالدولار (الحد الأدنى ${min}):", en: "Set the cost per click/task in USD (minimum ${min}):" },
   adDescriptionEmptyError: { ar: "أرسل وصفاً غير فارغ.", en: "Send a non-empty description." },
+  adTargetEmptyError: { ar: "أرسل رابطاً أو حساباً أو قناة فعلياً — لا يمكن ترك هذا الحقل فارغاً.", en: "Send an actual link, account, or channel — this field can't be empty." },
   adBudgetError: { ar: "أرسل رقماً صحيحاً أكبر من صفر بالدولار.", en: "Send a valid number greater than zero, in USD." },
   adCpcMinError: { ar: "السعر لكل نقرة على {platform} لا يقل عن ${min}.", en: "Cost per click on {platform} must be at least ${min}." },
   adCpcOverBudgetError: { ar: "السعر لكل نقرة أكبر من الميزانية الكلية.", en: "Cost per click is greater than the total budget." },

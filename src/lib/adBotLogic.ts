@@ -947,7 +947,11 @@ export async function handleAdBotUpdate(bot: TelegramBot, botRow: BotRow, update
     return;
   }
   if (pending?.mode === "admin_global_ad_target" && tgUserId === SUPER_ADMIN_ID) {
-    await createGlobalAd(bot, chatId, user, pending.type, text);
+    if (!text.trim()) {
+      await bot.api.sendMessage(chatId, "أرسل رابطاً أو حساباً فعلياً — لا يمكن ترك هذا الحقل فارغاً.");
+      return;
+    }
+    await createGlobalAd(bot, chatId, user, pending.type, text.trim());
     return;
   }
 
@@ -1029,7 +1033,11 @@ async function consumeCreateAdStep(bot: TelegramBot, chatId: number, user: any, 
     }
     updated.description = text;
   } else if (step === "target") {
-    updated.target = text;
+    if (!text.trim()) {
+      await bot.api.sendMessage(chatId, t(lang, "adTargetEmptyError"));
+      return;
+    }
+    updated.target = text.trim();
   } else if (step === "budget") {
     const budget = Number(text.replace(/[^0-9.]/g, ""));
     if (!Number.isFinite(budget) || budget <= 0) {
@@ -1211,6 +1219,10 @@ async function buildAdQueue(tgUserId: string, type: AdTypeStr, currentBotId: str
   return ads
     .filter((a) => !doneAdIds.has(a.id))
     .filter((a) => a.cpc === 0 || Number(a.remaining) >= Number(a.cpc))
+    // Defends against ads already saved with an empty/whitespace content
+    // before the target-step validation fix above existed — without this,
+    // those ads would still be served with a broken "https://" link forever.
+    .filter((a) => !!String(a.content || "").trim())
     .sort((a, b) => {
       const aOwn = a.botId === currentBotId ? 0 : 1;
       const bOwn = b.botId === currentBotId ? 0 : 1;
@@ -1249,8 +1261,13 @@ async function buildCarouselCard(ad: any, lang: Lang, tgUserId: string, currentB
   kb.text(t(lang, "carouselNext"), `wcn|${shortId(ad.id)}`).text(t(lang, "carouselReport"), `wcr|${shortId(ad.id)}`).row();
   kb.text(t(lang, "carouselExit"), "wcx");
 
+  // #<shortId> is included so every card's text is guaranteed to differ from
+  // the previous one shown in this chat (two forced/GLOBAL ads otherwise
+  // render byte-identical text — same generic label, no ad-specific
+  // content) — otherwise Telegram rejects the editMessageText call with
+  // "message is not modified" and the "next" button appears to do nothing.
   const lines = [
-    isForced ? t(lang, "watchForcedLabel") : t(lang, "carouselAdTitle", { platform: TYPE_LABEL[type][lang] }),
+    `${isForced ? t(lang, "watchForcedLabel") : t(lang, "carouselAdTitle", { platform: TYPE_LABEL[type][lang] })} #${shortId(ad.id)}`,
     !isForced ? t(lang, "carouselReward", { reward: fmt(Number(ad.workerCut)) }) : null,
     type !== "TELEGRAM" ? t(lang, "carouselTimerNotice", { seconds: String(WATCH_TIMER_SECONDS) }) : null,
   ].filter((l): l is string => !!l);
@@ -1523,7 +1540,17 @@ async function advanceCarousel(
   }
   const { text, keyboard } = await buildCarouselCard(ad, lang, tgUserId, currentBotId);
   await setPending(userId, { ...pending, index: nextIndex });
-  await bot.api.editMessageText(chatId, messageId, text, { reply_markup: keyboard }).catch(() => null);
+  // Never silently swallow a failed edit here — if Telegram rejects it for
+  // any reason (including "message is not modified"), the user must still
+  // see the next ad, so fall back to sending it as a fresh message instead
+  // of leaving the old card on screen with no visible change.
+  const edited = await bot.api
+    .editMessageText(chatId, messageId, text, { reply_markup: keyboard })
+    .then(() => true)
+    .catch(() => false);
+  if (!edited) {
+    await bot.api.sendMessage(chatId, text, { reply_markup: keyboard }).catch(() => null);
+  }
 }
 
 async function confirmAd(bot: TelegramBot, chatId: number, user: any, pending: Extract<PendingAction, { mode: "reviewing_ad" }>, lang: Lang) {
