@@ -17,6 +17,22 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _parse_ts(value: str) -> datetime:
+    """Parses a Postgres timestamp string from Supabase into a
+    timezone-AWARE datetime. NovaUser.dailyResetAt/subscriptionExpiresAt
+    are `TIMESTAMP(3)` columns (no time zone) — Supabase returns those
+    as naive ISO strings with no "Z"/offset at all, so the old
+    `.replace("Z", "+00:00")` was a no-op and datetime.fromisoformat()
+    silently produced a naive datetime. Subtracting/comparing that
+    against `_now()` (aware) then raised "can't subtract offset-naive
+    and offset-aware datetimes" on every single request. Assume UTC for
+    any naive value, since that's what CURRENT_TIMESTAMP stores."""
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def resolve_or_create_user(
     channel: str, telegram_id: str | None = None, email: str | None = None, api_key: str | None = None
 ) -> dict:
@@ -58,8 +74,7 @@ def has_active_subscription(user: dict) -> bool:
     expires_at = user.get("subscriptionExpiresAt")
     if not expires_at:
         return False
-    expires = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-    return expires > _now()
+    return _parse_ts(expires_at) > _now()
 
 
 def check_and_reserve_quota(user: dict) -> tuple[bool, int, str]:
@@ -69,7 +84,7 @@ def check_and_reserve_quota(user: dict) -> tuple[bool, int, str]:
         return True, -1, "PRO — بلا حد يومي"
 
     db = get_supabase()
-    reset_at = datetime.fromisoformat(user["dailyResetAt"].replace("Z", "+00:00"))
+    reset_at = _parse_ts(user["dailyResetAt"])
     used = user["dailyUsed"]
 
     if _now() - reset_at > timedelta(days=1):
