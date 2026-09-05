@@ -12,13 +12,30 @@ Deploy free:  Render.com (Docker web service, free instance type) — see
               still used for free model storage only, via the Colab
               notebook pushing to HF Hub.)
 """
-from fastapi import FastAPI, Header, HTTPException
+import logging
+
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app import council, quota, rag, router
 from app.config import NOVA_INTERNAL_SECRET
 
+logger = logging.getLogger("nova")
 app = FastAPI(title="Nova AI")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Without this, any unhandled exception (e.g. a missing env var like
+    # SUPABASE_URL) falls through to Starlette's default plain-text 500
+    # response, which isn't valid JSON — every client here (novaBotLogic.ts,
+    # streamlit_app.py) parses the body as JSON and reads `.detail`, so an
+    # unparseable body silently became a generic "حدث خطأ" with zero
+    # diagnostic info. This logs the real exception server-side (visible in
+    # Render's logs) and returns a JSON body every caller can actually read.
+    logger.exception("Unhandled exception on %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
 
 
 class ChatRequest(BaseModel):
