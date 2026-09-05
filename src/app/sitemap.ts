@@ -1,6 +1,10 @@
 import type { MetadataRoute } from "next";
 import { supabasePublic } from "@/lib/supabase";
 
+// Same ISR window as src/app/page.tsx / service/[slug] — without this the
+// service list baked in here would only refresh on the next deploy.
+export const revalidate = 30;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const db = supabasePublic();

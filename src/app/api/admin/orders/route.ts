@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+// force-dynamic: no request-scoped input here either, so without this
+// Next.js would statically bake the order list into the build output —
+// freezing the admin orders list at build/deploy time instead of live data.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const db = supabaseAdmin();
   const { data, error } = await db

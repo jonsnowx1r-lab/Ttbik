@@ -4,6 +4,13 @@ import { supabaseAdmin } from "@/lib/supabase";
 // Protected by src/middleware.ts (matches /api/admin/:path*) — same
 // pattern as the plain GET /api/admin/orders route, no extra per-route
 // check needed here since this is read-only and not customer PII.
+//
+// force-dynamic: this GET has no request-scoped input (no cookies/headers/
+// searchParams), so Next.js would otherwise treat it as a static route and
+// bake its response into the build output — freezing admin analytics at
+// whatever the DB returned at build/deploy time instead of live data.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const db = supabaseAdmin();
 
