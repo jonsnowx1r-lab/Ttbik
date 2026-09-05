@@ -45,12 +45,22 @@
 
 **ملاحظة الخطة المجانية:** الخدمة "تنام" بعد 15 دقيقة خمول، وأول رسالة بعد نومها تأخذ حوالي 30-50 ثانية للاستيقاظ (طبيعي تماماً على الخطة المجانية) — الرسائل التالية سريعة كالمعتاد.
 
-## الخطوة 4 (اختياري): دمج النماذج عبر Colab
+## الخطوة 4 (اختياري): دمج النماذج عبر Kaggle (وليس Colab)
 
-افتح `ai-system/colab/merge_and_finetune.ipynb` مباشرة عبر:
-`https://colab.research.google.com/github/<owner>/<repo>/blob/<branch>/ai-system/colab/merge_and_finetune.ipynb`
+**لماذا Kaggle لا Colab:** دمج نموذجين بحجم 7B معاً يحتاج فعلياً حوالي
+30GB ذاكرة — أُثبت هذا بتجربة مباشرة (فشل الدمج بنفاد الذاكرة على
+Colab المجاني، سواء عبر GPU بسعة 15GB أو CPU RAM بسعة ~12.7GB فقط،
+بغض النظر عن أي ضبط لخيارات mergekit). **Kaggle Notebooks** (مجاني
+بالكامل أيضاً، بنفس حساب Google) يوفر **29GB من CPU RAM** — كافٍ عملياً.
 
-شغّل الخلايا بالترتيب من الهاتف (Runtime -> Change runtime type -> T4 GPU، ثم ▷ على كل خلية). في النهاية ضع اسم النموذج الناتج في `HF_SPECIALIST_MODEL_ID` ضمن **Environment Variables** على Render (وليس HF — الخادم نفسه على Render، الطراز فقط مخزَّن ومقروء من HF Hub) ثم اضغط **Manual Deploy** لإعادة تشغيل الخادم.
+من متصفح الهاتف:
+1. أنشئ حساباً مجانياً على kaggle.com (يمكن مباشرة بحساب Google)
+2. **Create** -> **New Notebook**، ثم من قائمة **File** -> **Import Notebook** -> تبويب **GitHub** -> الصق:
+   `https://github.com/<owner>/<repo>/blob/<branch>/ai-system/colab/merge_and_finetune.ipynb`
+3. من اللوحة اليمنى **Notebook options** -> **Accelerator** فعّل أي GPU T4 متاح (Kaggle يطلب تحقق رقم هاتف مرة واحدة لتفعيل هذا الخيار، مجاني)
+4. شغّل كل خلية بالترتيب بزر ▷
+
+في النهاية ضع اسم النموذج الناتج في `HF_SPECIALIST_MODEL_ID` ضمن **Environment Variables** على Render (وليس HF — الخادم نفسه على Render، الطراز فقط مخزَّن ومقروء من HF Hub) ثم اضغط **Manual Deploy** لإعادة تشغيل الخادم.
 
 هذه الجلسة مجانية وتنقطع بعد خمول — شغّلها دورياً (أسبوعياً مثلاً) لتحسين النموذج المتخصص، وليست جزءاً من مسار خدمة المستخدمين اللحظي (ذاك عمل Groq/Gemini الدائمين).
 
