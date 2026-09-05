@@ -2,8 +2,8 @@
   "channel": "https://github.com/jonsnowx1r-lab/Ttbik/pull/2",
   "branch": "claude/free-services-marketplace-h6rwk2",
   "last_seen_comment_id": 5550170526,
-  "last_actor": "grok",
-  "updated_at": "2026-09-05T11:10:00Z",
+  "last_actor": "claude",
+  "updated_at": "2026-09-05T14:30:00Z",
   "mode": "work-cycle",
   "open": [
     "O11 (2026-09-04): MEDICAL_BOT shipped — new owner-only bot template (clinics/hospitals-with-departments/pharmacies, GPS-based directory via native Telegram sendVenue maps, appointment booking, prescription Q&A relay, day-before reminder cron). Full plan confirmed with owner across several rounds before building. SHA 5aa6e22, migration prisma/migration_18_medical_bot.sql (owner must run once in Supabase SQL Editor), new env var MEDICAL_BOT_CREATOR_PASSWORD needed on Vercel before deploy. Added to the HARD BOUNDARY below — Grok must never touch src/lib/medicalBotLogic.ts or the MEDICAL_BOT branches in the shared dispatcher files.",
@@ -18,6 +18,7 @@
     "G14 (2026-09-05): proposal posted — smart Zakat calculator (pure client /free-tools/zakat-calculator). Waiting light ack."
   ],
   "resolved": [
+    "O12 (2026-09-05): owner-reported AD_BOT bug fixed — شاهد إعلان showed ads with an empty/broken link (resolved to literal https://) and the 'التالي' (next) button appeared dead. Root cause: consumeCreateAdStep's 'target' step (shared by every ad category) and the admin's admin_global_ad_target handler both accepted empty/whitespace input with zero validation, unlike every sibling step. Fixed in src/lib/adBotLogic.ts: both now reject empty input (new i18n key adTargetEmptyError); buildAdQueue now also filters out any ad already saved with empty content so already-broken ads stop being served immediately, not just future ones. Separately, advanceCarousel's editMessageText call silently swallowed Telegram's 'message is not modified' error (fires when two consecutive forced/GLOBAL ads render identical generic text) — added a short #<adId> reference to the card text so consecutive cards always differ, plus a fallback to send a fresh message if the edit fails for any other reason. SHA 3e33279. My own file (src/lib/adBotLogic.ts) — no Grok involvement needed.",
     "G12 (2026-09-05): VAT calculator shipped — pure client /free-tools/vat-calculator, presets KSA 15% / UAE 5% / EG 14% / JO 16% / OM 5% + custom, exclusive/inclusive modes, freeTools + sitemap + AdSlot + Arabic metadata. SHAs a33aba2 / a7d5a3a / a39dced / 8cbf76a. Closed.",
     "G11 (2026-09-05): profit-margin + break-even calculator shipped — pure client /free-tools/profit-margin, freeTools + sitemap + AdSlot + Arabic metadata. SHA 434be5b9e9d3e94363499a2f5a9ef04d21ee27df. Closed.",
     "G13 (2026-09-04): /bots page metadata already uses real working-product language (title/description focused on activate live bot on own token, no code-for-sale). Verified in src/app/bots/page.tsx this cycle — no further edit needed. Closed.",
